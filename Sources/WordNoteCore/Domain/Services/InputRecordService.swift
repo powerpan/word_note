@@ -27,6 +27,79 @@ public struct InputRecordService {
         sourceType: SourceType,
         note: String?
     ) throws -> InputRecordModel {
+        try createRecord(
+            rawText: rawText,
+            courseID: courseID,
+            sourceType: sourceType,
+            note: note,
+            status: .draft
+        )
+    }
+
+    @discardableResult
+    public func createAnalyzing(
+        rawText: String,
+        courseID: UUID?,
+        sourceType: SourceType,
+        note: String?
+    ) throws -> InputRecordModel {
+        try createRecord(
+            rawText: rawText,
+            courseID: courseID,
+            sourceType: sourceType,
+            note: note,
+            status: .analyzing
+        )
+    }
+
+    public func markAnalyzing(_ record: InputRecordModel) throws {
+        record.markAnalyzing()
+        try modelContext.save()
+    }
+
+    @discardableResult
+    public func applyAnalysisResult(
+        _ result: AIAnalysisResult,
+        to record: InputRecordModel
+    ) throws -> [CandidateTermModel] {
+        record.markAnalyzed(sentenceMeaning: result.sentenceMeaning, inputType: result.inputType)
+
+        let candidates = result.candidates.map { candidate in
+            CandidateTermModel(
+                inputRecordID: record.id,
+                term: candidate.term,
+                termType: candidate.termType,
+                needToLearn: candidate.needToLearn,
+                importance: candidate.importance,
+                category: candidate.category,
+                reason: candidate.reason,
+                chineseMeaning: candidate.chineseMeaning,
+                englishDefinition: candidate.englishDefinition,
+                aiContextExplanation: candidate.aiContextExplanation,
+                exampleSentence: candidate.exampleSentence,
+                relatedTerms: candidate.relatedTerms,
+                confidence: candidate.confidence,
+                status: .pending
+            )
+        }
+
+        candidates.forEach(modelContext.insert)
+        try modelContext.save()
+        return candidates
+    }
+
+    public func markFailed(_ record: InputRecordModel, summary: String) throws {
+        record.markFailed(summary)
+        try modelContext.save()
+    }
+
+    private func createRecord(
+        rawText: String,
+        courseID: UUID?,
+        sourceType: SourceType,
+        note: String?,
+        status: InputRecordStatus
+    ) throws -> InputRecordModel {
         let trimmedRawText = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !TextNormalizer.isBlank(trimmedRawText) else {
             throw InputRecordValidationError.blankRawText
@@ -35,6 +108,7 @@ public struct InputRecordService {
         let normalizedNote = note?.trimmingCharacters(in: .whitespacesAndNewlines)
         let record = InputRecordModel(
             rawText: trimmedRawText,
+            status: status,
             courseID: courseID,
             sourceType: sourceType,
             note: normalizedNote?.isEmpty == true ? nil : normalizedNote

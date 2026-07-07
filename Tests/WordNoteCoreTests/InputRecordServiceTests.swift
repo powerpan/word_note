@@ -58,6 +58,45 @@ final class InputRecordServiceTests: XCTestCase {
         XCTAssertTrue(records.isEmpty)
     }
 
+    func testApplyAnalysisResultPersistsCandidatesAndMarksAnalyzed() throws {
+        let container = try makeInMemoryContainer()
+        let context = ModelContext(container)
+        let service = InputRecordService(modelContext: context)
+        let record = try service.createAnalyzing(
+            rawText: "The model learns a latent representation.",
+            courseID: nil,
+            sourceType: .slides,
+            note: nil
+        )
+        let result = AIAnalysisResult(
+            inputType: .sentence,
+            sentenceMeaning: "模型學習一種隱含表示。",
+            candidates: [
+                AIAnalysisCandidate(
+                    term: "latent representation",
+                    termType: .phrase,
+                    needToLearn: true,
+                    importance: .high,
+                    category: .aiML,
+                    chineseMeaning: "隱含表示"
+                )
+            ],
+            model: "test-model",
+            rawResponseID: "response-1"
+        )
+
+        let candidates = try service.applyAnalysisResult(result, to: record)
+
+        XCTAssertEqual(record.status, .analyzed)
+        XCTAssertEqual(record.inputType, .sentence)
+        XCTAssertEqual(record.sentenceMeaning, "模型學習一種隱含表示。")
+        XCTAssertEqual(candidates.count, 1)
+
+        let persistedCandidates = try context.fetch(FetchDescriptor<CandidateTermModel>())
+        XCTAssertEqual(persistedCandidates.map(\.normalizedTerm), ["latent representation"])
+        XCTAssertEqual(persistedCandidates.first?.inputRecordID, record.id)
+    }
+
     private func makeInMemoryContainer() throws -> ModelContainer {
         let schema = Schema([
             CourseModel.self,

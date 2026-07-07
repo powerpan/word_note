@@ -90,6 +90,17 @@ public enum Importance: String, Codable, CaseIterable, Identifiable, Comparable 
 
     public var id: String { rawValue }
 
+    public var displayTitle: String {
+        switch self {
+        case .low:
+            return "Low"
+        case .medium:
+            return "Medium"
+        case .high:
+            return "High"
+        }
+    }
+
     public static func < (lhs: Importance, rhs: Importance) -> Bool {
         lhs.rank < rhs.rank
     }
@@ -117,6 +128,27 @@ public enum TermCategory: String, Codable, CaseIterable, Identifiable {
     case programming
 
     public var id: String { rawValue }
+
+    public var displayTitle: String {
+        switch self {
+        case .general:
+            return "General"
+        case .academic:
+            return "Academic"
+        case .aiML:
+            return "AI/ML"
+        case .dl:
+            return "DL"
+        case .nlp:
+            return "NLP"
+        case .cv:
+            return "CV"
+        case .math:
+            return "Math"
+        case .programming:
+            return "Programming"
+        }
+    }
 }
 
 public enum MasteryLevel: String, Codable, CaseIterable, Identifiable {

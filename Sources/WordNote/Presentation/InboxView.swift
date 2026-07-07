@@ -6,9 +6,11 @@ struct InboxView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \InputRecordModel.createdAt, order: .reverse) private var records: [InputRecordModel]
     @Query(sort: \CourseModel.courseName) private var courses: [CourseModel]
+    @Query(sort: \CandidateTermModel.createdAt) private var candidates: [CandidateTermModel]
 
     @State private var selectedRecordID: UUID?
     @State private var errorMessage: String?
+    @State private var analyzingRecordID: UUID?
 
     private var visibleRecords: [InputRecordModel] {
         records.filter { $0.status != .ignored }
@@ -42,7 +44,10 @@ struct InboxView: View {
                 InputRecordDetailView(
                     record: selectedRecord,
                     courseName: courseName(for: selectedRecord.courseID),
+                    candidates: candidates.filter { $0.inputRecordID == selectedRecord.id },
+                    isAnalyzing: analyzingRecordID == selectedRecord.id,
                     errorMessage: $errorMessage,
+                    onAnalyze: analyze,
                     onIgnore: ignore,
                     onDelete: delete
                 )
@@ -81,6 +86,39 @@ struct InboxView: View {
             errorMessage = error.localizedDescription
         }
     }
+
+    private func analyze(_ record: InputRecordModel) {
+        analyzingRecordID = record.id
+        errorMessage = nil
+
+        Task { @MainActor in
+            let service = InputRecordService(modelContext: modelContext)
+
+            do {
+                guard let apiKey = DeepSeekAPIKeyResolver.resolve() else {
+                    try service.markFailed(record, summary: AIAnalysisError.missingAPIKey.localizedDescription)
+                    throw AIAnalysisError.missingAPIKey
+                }
+
+                try service.markAnalyzing(record)
+                let analysisService = AIAnalysisService(client: DeepSeekChatClient(apiKey: apiKey))
+                let result = try await analysisService.analyze(
+                    AIAnalysisRequest(
+                        rawText: record.rawText,
+                        courseName: courseName(for: record.courseID),
+                        sourceType: record.sourceType,
+                        userNote: record.note
+                    )
+                )
+                _ = try service.applyAnalysisResult(result, to: record)
+            } catch {
+                try? service.markFailed(record, summary: error.localizedDescription)
+                errorMessage = error.localizedDescription
+            }
+
+            analyzingRecordID = nil
+        }
+    }
 }
 
 private struct InboxRow: View {
@@ -110,7 +148,10 @@ private struct InboxRow: View {
 private struct InputRecordDetailView: View {
     let record: InputRecordModel
     let courseName: String?
+    let candidates: [CandidateTermModel]
+    let isAnalyzing: Bool
     @Binding var errorMessage: String?
+    let onAnalyze: (InputRecordModel) -> Void
     let onIgnore: (InputRecordModel) -> Void
     let onDelete: (InputRecordModel) -> Void
 
@@ -120,6 +161,10 @@ private struct InputRecordDetailView: View {
                 Text("Input Record")
                     .font(.largeTitle.bold())
                 Spacer()
+                Button(record.status == .failed ? "Retry Analysis" : "Analyze") {
+                    onAnalyze(record)
+                }
+                .disabled(isAnalyzing || record.status == .analyzing)
                 Button("Ignore") {
                     onIgnore(record)
                 }
@@ -131,6 +176,10 @@ private struct InputRecordDetailView: View {
             if let errorMessage {
                 Label(errorMessage, systemImage: "exclamationmark.triangle")
                     .foregroundStyle(.red)
+            }
+
+            if isAnalyzing || record.status == .analyzing {
+                ProgressView("Analyzing with DeepSeek...")
             }
 
             GroupBox("Raw Text") {
@@ -172,6 +221,28 @@ private struct InputRecordDetailView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .textSelection(.enabled)
                         .padding(.vertical, 4)
+                }
+            }
+
+            if !candidates.isEmpty {
+                GroupBox("Candidates") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        ForEach(candidates, id: \.id) { candidate in
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(candidate.term)
+                                    .font(.headline)
+                                Text("\(candidate.importance.displayTitle) · \(candidate.category.displayTitle)")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                if let chineseMeaning = candidate.chineseMeaning, !chineseMeaning.isEmpty {
+                                    Text(chineseMeaning)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.vertical, 4)
+                        }
+                    }
                 }
             }
 

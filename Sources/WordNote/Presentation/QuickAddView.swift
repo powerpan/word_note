@@ -12,6 +12,7 @@ struct QuickAddView: View {
     @State private var note = ""
     @State private var statusMessage: String?
     @State private var errorMessage: String?
+    @State private var isAnalyzing = false
 
     private var canSave: Bool {
         !TextNormalizer.isBlank(rawText)
@@ -68,9 +69,9 @@ struct QuickAddView: View {
                 .disabled(!canSave)
 
                 Button("Save & Analyze") {
-                    saveDraft(statusOverride: "Saved as draft. AI analysis starts in M3.")
+                    saveAndAnalyze()
                 }
-                .disabled(!canSave)
+                .disabled(!canSave || isAnalyzing)
 
                 Spacer()
             }
@@ -85,6 +86,10 @@ struct QuickAddView: View {
                     .foregroundStyle(.red)
             }
 
+            if isAnalyzing {
+                ProgressView("Analyzing with DeepSeek...")
+            }
+
             Spacer()
         }
         .padding(28)
@@ -94,7 +99,7 @@ struct QuickAddView: View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Quick Add")
                 .font(.largeTitle.bold())
-            Text("Save raw English input first. AI analysis and candidate review build on top of these records.")
+            Text("Save raw English input, or analyze it with DeepSeek to generate candidate terms.")
                 .foregroundStyle(.secondary)
         }
     }
@@ -116,6 +121,57 @@ struct QuickAddView: View {
         } catch {
             statusMessage = nil
             errorMessage = error.localizedDescription
+        }
+    }
+
+    private func saveAndAnalyze() {
+        isAnalyzing = true
+        statusMessage = nil
+        errorMessage = nil
+
+        Task { @MainActor in
+            let service = InputRecordService(modelContext: modelContext)
+            var record: InputRecordModel?
+
+            do {
+                let createdRecord = try service.createAnalyzing(
+                    rawText: rawText,
+                    courseID: selectedCourseID,
+                    sourceType: selectedSourceType,
+                    note: note
+                )
+                record = createdRecord
+
+                guard let apiKey = DeepSeekAPIKeyResolver.resolve() else {
+                    try service.markFailed(createdRecord, summary: AIAnalysisError.missingAPIKey.localizedDescription)
+                    throw AIAnalysisError.missingAPIKey
+                }
+
+                let courseName = courses.first { $0.id == selectedCourseID }?.courseName
+                let analysisService = AIAnalysisService(
+                    client: DeepSeekChatClient(apiKey: apiKey)
+                )
+                let result = try await analysisService.analyze(
+                    AIAnalysisRequest(
+                        rawText: createdRecord.rawText,
+                        courseName: courseName,
+                        sourceType: createdRecord.sourceType,
+                        userNote: createdRecord.note
+                    )
+                )
+                let candidates = try service.applyAnalysisResult(result, to: createdRecord)
+
+                rawText = ""
+                note = ""
+                statusMessage = "Analyzed \(createdRecord.rawText). Candidates: \(candidates.count)"
+            } catch {
+                if let record, record.status != .failed {
+                    try? service.markFailed(record, summary: error.localizedDescription)
+                }
+                errorMessage = error.localizedDescription
+            }
+
+            isAnalyzing = false
         }
     }
 }
