@@ -4,33 +4,298 @@ import WordNoteCore
 
 struct CoursesOverviewView: View {
     @Query(sort: \CourseModel.courseName) private var courses: [CourseModel]
+    @Query private var terms: [TermModel]
+    @Query private var records: [InputRecordModel]
+
+    @State private var selectedCourseID: UUID?
+    @State private var isCreating = false
+    @State private var errorMessage: String?
+
+    private var selectedCourse: CourseModel? {
+        guard let selectedCourseID else { return courses.first }
+        return courses.first { $0.id == selectedCourseID }
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            Text("Courses")
-                .font(.largeTitle.bold())
+        HSplitView {
+            VStack(spacing: 12) {
+                HStack {
+                    Text("Courses")
+                        .font(.largeTitle.bold())
+                    Spacer()
+                    Button {
+                        isCreating = true
+                        selectedCourseID = nil
+                    } label: {
+                        Label("Add", systemImage: "plus")
+                    }
+                }
+                .padding([.horizontal, .top], 18)
 
-            if courses.isEmpty {
-                ContentUnavailableView(
-                    "No Courses",
-                    systemImage: "graduationcap",
-                    description: Text("M5 will add course creation and editing.")
-                )
-            } else {
-                List(courses) { course in
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(course.courseName)
-                            .font(.headline)
-                        if let courseCode = course.courseCode {
-                            Text(courseCode)
-                                .foregroundStyle(.secondary)
-                        }
+                List(selection: $selectedCourseID) {
+                    ForEach(courses, id: \.id) { course in
+                        CourseRow(
+                            course: course,
+                            termCount: termCount(for: course.id),
+                            pendingRecordCount: pendingRecordCount(for: course.id)
+                        )
+                        .tag(course.id)
+                    }
+                }
+                .overlay {
+                    if courses.isEmpty {
+                        ContentUnavailableView(
+                            "No Courses",
+                            systemImage: "graduationcap",
+                            description: Text("Add courses to organize records and reviews.")
+                        )
                     }
                 }
             }
+            .frame(minWidth: 320, idealWidth: 380)
 
-            Spacer()
+            if isCreating {
+                CourseEditor(
+                    mode: .create,
+                    course: nil,
+                    termCount: 0,
+                    pendingRecordCount: 0,
+                    errorMessage: $errorMessage,
+                    onSaved: { course in
+                        selectedCourseID = course.id
+                        isCreating = false
+                    },
+                    onDeleted: {}
+                )
+            } else if let selectedCourse {
+                CourseEditor(
+                    mode: .edit,
+                    course: selectedCourse,
+                    termCount: termCount(for: selectedCourse.id),
+                    pendingRecordCount: pendingRecordCount(for: selectedCourse.id),
+                    errorMessage: $errorMessage,
+                    onSaved: { course in
+                        selectedCourseID = course.id
+                    },
+                    onDeleted: {
+                        selectedCourseID = courses.first?.id
+                    }
+                )
+            } else {
+                ContentUnavailableView("No Course Selected", systemImage: "graduationcap")
+                    .frame(minWidth: 560, maxWidth: .infinity, maxHeight: .infinity)
+            }
         }
-        .padding(28)
+        .frame(minWidth: 980, minHeight: 620)
+    }
+
+    private func termCount(for courseID: UUID) -> Int {
+        terms.filter { $0.courseID == courseID }.count
+    }
+
+    private func pendingRecordCount(for courseID: UUID) -> Int {
+        records.filter { record in
+            record.courseID == courseID && [.draft, .analyzed, .failed].contains(record.status)
+        }.count
+    }
+}
+
+private struct CourseRow: View {
+    let course: CourseModel
+    let termCount: Int
+    let pendingRecordCount: Int
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(course.courseName)
+                .font(.headline)
+                .lineLimit(1)
+            HStack(spacing: 8) {
+                if let courseCode = course.courseCode {
+                    Text(courseCode)
+                }
+                Text("\(termCount) terms")
+                Text("\(pendingRecordCount) pending")
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+private enum CourseEditorMode {
+    case create
+    case edit
+}
+
+private struct CourseEditor: View {
+    @Environment(\.modelContext) private var modelContext
+
+    let mode: CourseEditorMode
+    let course: CourseModel?
+    let termCount: Int
+    let pendingRecordCount: Int
+    @Binding var errorMessage: String?
+    let onSaved: (CourseModel) -> Void
+    let onDeleted: () -> Void
+
+    @State private var courseName = ""
+    @State private var courseCode = ""
+    @State private var instructor = ""
+    @State private var semester = ""
+    @State private var description = ""
+    @State private var statusMessage: String?
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                HStack {
+                    Text(mode == .create ? "New Course" : "Course Detail")
+                        .font(.largeTitle.bold())
+                    Spacer()
+                    Button("Save") {
+                        save()
+                    }
+                    if mode == .edit {
+                        Button("Delete", role: .destructive) {
+                            delete()
+                        }
+                    }
+                }
+
+                if let statusMessage {
+                    Label(statusMessage, systemImage: "checkmark.circle")
+                        .foregroundStyle(.green)
+                }
+
+                if let errorMessage {
+                    Label(errorMessage, systemImage: "exclamationmark.triangle")
+                        .foregroundStyle(.red)
+                }
+
+                if mode == .edit {
+                    HStack(spacing: 12) {
+                        CourseMetric(title: "Terms", value: termCount)
+                        CourseMetric(title: "Pending Records", value: pendingRecordCount)
+                    }
+                }
+
+                GroupBox("Course") {
+                    Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 10) {
+                        formRow("Name") {
+                            TextField("Course name", text: $courseName)
+                        }
+                        formRow("Code") {
+                            TextField("Course code", text: $courseCode)
+                        }
+                        formRow("Instructor") {
+                            TextField("Instructor", text: $instructor)
+                        }
+                        formRow("Semester") {
+                            TextField("Semester", text: $semester)
+                        }
+                        formRow("Description") {
+                            TextField("Description", text: $description, axis: .vertical)
+                                .lineLimit(2...6)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+            .padding(28)
+        }
+        .frame(minWidth: 560, maxWidth: .infinity, maxHeight: .infinity)
+        .onAppear(perform: load)
+        .onChange(of: course?.id) {
+            load()
+        }
+    }
+
+    @ViewBuilder
+    private func formRow<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        GridRow {
+            Text(title)
+                .foregroundStyle(.secondary)
+            content()
+        }
+    }
+
+    private func load() {
+        courseName = course?.courseName ?? ""
+        courseCode = course?.courseCode ?? ""
+        instructor = course?.instructor ?? ""
+        semester = course?.semester ?? ""
+        description = course?.courseDescription ?? ""
+        statusMessage = nil
+        errorMessage = nil
+    }
+
+    private func save() {
+        let service = CourseService(modelContext: modelContext)
+
+        do {
+            let savedCourse: CourseModel
+            if let course {
+                try service.update(
+                    course,
+                    courseName: courseName,
+                    courseCode: courseCode,
+                    instructor: instructor,
+                    semester: semester,
+                    description: description
+                )
+                savedCourse = course
+            } else {
+                savedCourse = try service.create(
+                    courseName: courseName,
+                    courseCode: courseCode,
+                    instructor: instructor,
+                    semester: semester,
+                    description: description
+                )
+            }
+            statusMessage = "Saved."
+            errorMessage = nil
+            onSaved(savedCourse)
+        } catch {
+            statusMessage = nil
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func delete() {
+        guard let course else { return }
+        let service = CourseService(modelContext: modelContext)
+
+        do {
+            try service.delete(course)
+            statusMessage = nil
+            errorMessage = nil
+            onDeleted()
+        } catch {
+            statusMessage = nil
+            errorMessage = error.localizedDescription
+        }
+    }
+}
+
+private struct CourseMetric: View {
+    let title: String
+    let value: Int
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(value, format: .number)
+                .font(.title2.bold())
+                .monospacedDigit()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(.regularMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }
