@@ -22,24 +22,40 @@ struct InboxView: View {
     }
 
     var body: some View {
-        NavigationSplitView {
+        HStack(spacing: 0) {
             List(selection: $selectedRecordID) {
                 ForEach(visibleRecords, id: \.id) { record in
                     InboxRow(record: record, courseName: courseName(for: record.courseID))
                         .tag(record.id)
                 }
             }
-            .navigationTitle("Inbox")
+            .safeAreaInset(edge: .top, spacing: 0) {
+                PageHeader(
+                    title: "Inbox",
+                    subtitle: "\(visibleRecords.count) record\(visibleRecords.count == 1 ? "" : "s")"
+                ) {
+                    EmptyView()
+                }
+                .padding(18)
+                .background(Color(nsColor: .controlBackgroundColor))
+            }
             .overlay {
                 if visibleRecords.isEmpty {
-                    ContentUnavailableView(
-                        "No Pending Records",
+                    EmptyStateView(
                         systemImage: "tray",
-                        description: Text("Use Quick Add to save a word, phrase, or sentence.")
-                    )
+                        title: "No Pending Records",
+                        message: "Use Quick Add to save a word, phrase, or sentence."
+                    ) {
+                        EmptyView()
+                    }
+                    .allowsHitTesting(false)
                 }
             }
-        } detail: {
+            .frame(width: 380)
+            .background(Color(nsColor: .controlBackgroundColor))
+
+            Divider()
+
             if let selectedRecord {
                 InputRecordDetailView(
                     record: selectedRecord,
@@ -52,10 +68,23 @@ struct InboxView: View {
                     onDelete: delete
                 )
             } else {
-                ContentUnavailableView("No Record Selected", systemImage: "doc.text")
+                EmptyStateView(
+                    systemImage: "doc.text",
+                    title: "No Record Selected",
+                    message: visibleRecords.isEmpty
+                        ? "Saved input records will appear here."
+                        : "Select a record to review source text and AI candidates."
+                ) {
+                    EmptyView()
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .frame(minWidth: 980, minHeight: 620)
+        .onAppear(perform: maintainSelection)
+        .onChange(of: visibleRecords.map(\.id)) {
+            maintainSelection()
+        }
     }
 
     private func courseName(for courseID: UUID?) -> String? {
@@ -119,6 +148,13 @@ struct InboxView: View {
             analyzingRecordID = nil
         }
     }
+
+    private func maintainSelection() {
+        if let selectedRecordID, visibleRecords.contains(where: { $0.id == selectedRecordID }) {
+            return
+        }
+        selectedRecordID = visibleRecords.first?.id
+    }
 }
 
 private struct InboxRow: View {
@@ -156,81 +192,91 @@ private struct InputRecordDetailView: View {
     let onDelete: (InputRecordModel) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack {
-                Text("Input Record")
-                    .font(.largeTitle.bold())
-                Spacer()
-                Button(record.status == .failed ? "Retry Analysis" : "Analyze") {
-                    onAnalyze(record)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                PageHeader(
+                    title: "Input Record",
+                    subtitle: record.sourceType.displayTitle
+                ) {
+                    Button {
+                        onAnalyze(record)
+                    } label: {
+                        Label(record.status == .failed ? "Retry" : "Analyze", systemImage: "sparkles")
+                    }
+                    .disabled(isAnalyzing || record.status == .analyzing)
+
+                    Button {
+                        onIgnore(record)
+                    } label: {
+                        Label("Ignore", systemImage: "archivebox")
+                    }
+
+                    Button(role: .destructive) {
+                        onDelete(record)
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
                 }
-                .disabled(isAnalyzing || record.status == .analyzing)
-                Button("Ignore") {
-                    onIgnore(record)
+
+                if let errorMessage {
+                    StatusBanner(message: errorMessage, kind: .warning)
                 }
-                Button("Delete", role: .destructive) {
-                    onDelete(record)
+
+                if isAnalyzing || record.status == .analyzing {
+                    ProgressView("Analyzing with DeepSeek...")
                 }
-            }
 
-            if let errorMessage {
-                Label(errorMessage, systemImage: "exclamationmark.triangle")
-                    .foregroundStyle(.red)
-            }
-
-            if isAnalyzing || record.status == .analyzing {
-                ProgressView("Analyzing with DeepSeek...")
-            }
-
-            GroupBox("Raw Text") {
-                Text(record.rawText)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .textSelection(.enabled)
-                    .padding(.vertical, 4)
-            }
-
-            Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 10) {
-                detailRow("Status", record.status.displayTitle)
-                detailRow("Source", record.sourceType.displayTitle)
-                detailRow("Course", courseName ?? "No Course")
-                detailRow("Created", record.createdAt.formatted(date: .abbreviated, time: .shortened))
-                detailRow("Updated", record.updatedAt.formatted(date: .abbreviated, time: .shortened))
-            }
-
-            if let note = record.note, !note.isEmpty {
-                GroupBox("Note") {
-                    Text(note)
+                GroupBox("Raw Text") {
+                    Text(record.rawText)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .textSelection(.enabled)
                         .padding(.vertical, 4)
                 }
-            }
 
-            if let sentenceMeaning = record.sentenceMeaning, !sentenceMeaning.isEmpty {
-                GroupBox("Sentence Meaning") {
-                    Text(sentenceMeaning)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .textSelection(.enabled)
-                        .padding(.vertical, 4)
+                Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 10) {
+                    detailRow("Status", record.status.displayTitle)
+                    detailRow("Source", record.sourceType.displayTitle)
+                    detailRow("Course", courseName ?? "No Course")
+                    detailRow("Created", record.createdAt.formatted(date: .abbreviated, time: .shortened))
+                    detailRow("Updated", record.updatedAt.formatted(date: .abbreviated, time: .shortened))
                 }
-            }
 
-            if let aiErrorSummary = record.aiErrorSummary, !aiErrorSummary.isEmpty {
-                GroupBox("AI Error") {
-                    Text(aiErrorSummary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .textSelection(.enabled)
-                        .padding(.vertical, 4)
+                if let note = record.note, !note.isEmpty {
+                    GroupBox("Note") {
+                        Text(note)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .textSelection(.enabled)
+                            .padding(.vertical, 4)
+                    }
                 }
-            }
 
-            if !candidates.isEmpty {
-                CandidateReviewView(record: record, candidates: candidates)
-            }
+                if let sentenceMeaning = record.sentenceMeaning, !sentenceMeaning.isEmpty {
+                    GroupBox("Sentence Meaning") {
+                        Text(sentenceMeaning)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .textSelection(.enabled)
+                            .padding(.vertical, 4)
+                    }
+                }
 
-            Spacer()
+                if let aiErrorSummary = record.aiErrorSummary, !aiErrorSummary.isEmpty {
+                    GroupBox("AI Error") {
+                        Text(aiErrorSummary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .textSelection(.enabled)
+                            .padding(.vertical, 4)
+                    }
+                }
+
+                if !candidates.isEmpty {
+                    CandidateReviewView(record: record, candidates: candidates)
+                }
+
+                Spacer(minLength: 0)
+            }
+            .padding(28)
         }
-        .padding(28)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     @ViewBuilder

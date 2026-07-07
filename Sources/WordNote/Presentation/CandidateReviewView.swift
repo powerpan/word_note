@@ -40,18 +40,24 @@ struct CandidateReviewView: View {
                     }
 
                     HStack {
-                        Button("Save Selected") {
+                        Button {
                             saveSelected()
+                        } label: {
+                            Label("Save Selected", systemImage: "checkmark.circle")
                         }
                         .disabled(selectedCandidateIDs.isEmpty)
 
-                        Button("Ignore Selected") {
+                        Button {
                             ignoreSelected()
+                        } label: {
+                            Label("Ignore Selected", systemImage: "archivebox")
                         }
                         .disabled(selectedCandidateIDs.isEmpty)
 
-                        Button("Ignore All") {
+                        Button {
                             ignoreAll()
+                        } label: {
+                            Label("Ignore All", systemImage: "xmark.circle")
                         }
 
                         Spacer()
@@ -59,13 +65,11 @@ struct CandidateReviewView: View {
                 }
 
                 if let statusMessage {
-                    Label(statusMessage, systemImage: "checkmark.circle")
-                        .foregroundStyle(.green)
+                    StatusBanner(message: statusMessage, kind: .success)
                 }
 
                 if let errorMessage {
-                    Label(errorMessage, systemImage: "exclamationmark.triangle")
-                        .foregroundStyle(.red)
+                    StatusBanner(message: errorMessage, kind: .warning)
                 }
             }
         }

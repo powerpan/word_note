@@ -29,7 +29,7 @@ struct VocabularyView: View {
     }
 
     var body: some View {
-        HSplitView {
+        HStack(spacing: 0) {
             VStack(spacing: 12) {
                 filterBar
 
@@ -41,42 +41,67 @@ struct VocabularyView: View {
                 }
                 .overlay {
                     if filteredTerms.isEmpty {
-                        ContentUnavailableView(
-                            "No Terms",
+                        EmptyStateView(
                             systemImage: "books.vertical",
-                            description: Text("Save candidates from Inbox to build your vocabulary.")
-                        )
+                            title: terms.isEmpty ? "No Terms Yet" : "No Matches",
+                            message: terms.isEmpty
+                                ? "Analyze a record in Quick Add, then save candidates from Inbox."
+                                : "Try a different search, course, or mastery filter."
+                        ) {
+                            EmptyView()
+                        }
+                        .allowsHitTesting(false)
                     }
                 }
             }
-            .frame(minWidth: 320, idealWidth: 380)
+            .frame(width: 430)
+            .background(Color(nsColor: .controlBackgroundColor))
+
+            Divider()
 
             if let selectedTerm {
                 TermDetailEditor(term: selectedTerm, courses: courses)
-                    .frame(minWidth: 560, maxWidth: .infinity, maxHeight: .infinity)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                ContentUnavailableView("No Term Selected", systemImage: "book")
-                    .frame(minWidth: 560, maxWidth: .infinity, maxHeight: .infinity)
+                EmptyStateView(
+                    systemImage: "book",
+                    title: "No Term Selected",
+                    message: filteredTerms.isEmpty
+                        ? "Your saved terms will appear here after candidate review."
+                        : "Select a term to edit definitions, context, course, and review state."
+                ) {
+                    EmptyView()
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .frame(minWidth: 980, minHeight: 620)
+        .frame(minWidth: 860, minHeight: 620)
+        .onAppear(perform: maintainSelection)
+        .onChange(of: filteredTerms.map(\.id)) {
+            maintainSelection()
+        }
     }
 
     private var filterBar: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Vocabulary")
-                .font(.largeTitle.bold())
+            PageHeader(
+                title: "Vocabulary",
+                subtitle: "\(filteredTerms.count) / \(terms.count) terms"
+            ) {
+                EmptyView()
+            }
 
             TextField("Search terms", text: $searchText)
                 .textFieldStyle(.roundedBorder)
 
-            HStack {
+            HStack(spacing: 8) {
                 Picker("Course", selection: $selectedCourseID) {
                     Text("All Courses").tag(UUID?.none)
                     ForEach(courses, id: \.id) { course in
                         Text(course.courseName).tag(Optional(course.id))
                     }
                 }
+                .frame(maxWidth: 170)
 
                 Picker("Mastery", selection: $selectedMasteryRaw) {
                     Text("All Mastery").tag("all")
@@ -84,6 +109,7 @@ struct VocabularyView: View {
                         Text(masteryLevel.displayTitle).tag(masteryLevel.rawValue)
                     }
                 }
+                .frame(maxWidth: 170)
             }
         }
         .padding([.horizontal, .top], 18)
@@ -93,6 +119,13 @@ struct VocabularyView: View {
         guard let courseID else { return nil }
         return courses.first { $0.id == courseID }?.courseName
     }
+
+    private func maintainSelection() {
+        if let selectedTermID, filteredTerms.contains(where: { $0.id == selectedTermID }) {
+            return
+        }
+        selectedTermID = filteredTerms.first?.id
+    }
 }
 
 private struct VocabularyRow: View {
@@ -100,21 +133,22 @@ private struct VocabularyRow: View {
     let courseName: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 7) {
             Text(term.term)
                 .font(.headline)
                 .lineLimit(1)
             HStack(spacing: 8) {
-                Text(term.masteryLevel.displayTitle)
-                Text(term.importance.displayTitle)
+                TagChip(title: term.masteryLevel.displayTitle, tint: .blue)
+                TagChip(title: term.importance.displayTitle, tint: .orange)
                 if let courseName {
                     Text(courseName)
+                        .lineLimit(1)
                 }
             }
             .font(.caption)
             .foregroundStyle(.secondary)
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 7)
     }
 }
 
@@ -142,10 +176,10 @@ private struct TermDetailEditor: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                HStack {
-                    Text("Term Detail")
-                        .font(.largeTitle.bold())
-                    Spacer()
+                PageHeader(
+                    title: "Term Detail",
+                    subtitle: "Edit definitions, context, metadata, and review state."
+                ) {
                     Button("Save") {
                         save()
                     }
@@ -155,13 +189,11 @@ private struct TermDetailEditor: View {
                 }
 
                 if let statusMessage {
-                    Label(statusMessage, systemImage: "checkmark.circle")
-                        .foregroundStyle(.green)
+                    StatusBanner(message: statusMessage, kind: .success)
                 }
 
                 if let errorMessage {
-                    Label(errorMessage, systemImage: "exclamationmark.triangle")
-                        .foregroundStyle(.red)
+                    StatusBanner(message: errorMessage, kind: .warning)
                 }
 
                 GroupBox("Core") {

@@ -17,12 +17,12 @@ struct CoursesOverviewView: View {
     }
 
     var body: some View {
-        HSplitView {
+        HStack(spacing: 0) {
             VStack(spacing: 12) {
-                HStack {
-                    Text("Courses")
-                        .font(.largeTitle.bold())
-                    Spacer()
+                PageHeader(
+                    title: "Courses",
+                    subtitle: "\(courses.count) course\(courses.count == 1 ? "" : "s")"
+                ) {
                     Button {
                         isCreating = true
                         selectedCourseID = nil
@@ -49,10 +49,14 @@ struct CoursesOverviewView: View {
                             systemImage: "graduationcap",
                             description: Text("Add courses to organize records and reviews.")
                         )
+                        .allowsHitTesting(false)
                     }
                 }
             }
-            .frame(minWidth: 320, idealWidth: 380)
+            .frame(width: 380)
+            .background(Color(nsColor: .controlBackgroundColor))
+
+            Divider()
 
             if isCreating {
                 CourseEditor(
@@ -83,10 +87,14 @@ struct CoursesOverviewView: View {
                 )
             } else {
                 ContentUnavailableView("No Course Selected", systemImage: "graduationcap")
-                    .frame(minWidth: 560, maxWidth: .infinity, maxHeight: .infinity)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .frame(minWidth: 980, minHeight: 620)
+        .onAppear(perform: maintainSelection)
+        .onChange(of: courses.map(\.id)) {
+            maintainSelection()
+        }
     }
 
     private func termCount(for courseID: UUID) -> Int {
@@ -97,6 +105,14 @@ struct CoursesOverviewView: View {
         records.filter { record in
             record.courseID == courseID && [.draft, .analyzed, .failed].contains(record.status)
         }.count
+    }
+
+    private func maintainSelection() {
+        guard !isCreating else { return }
+        if let selectedCourseID, courses.contains(where: { $0.id == selectedCourseID }) {
+            return
+        }
+        selectedCourseID = courses.first?.id
     }
 }
 
@@ -165,13 +181,11 @@ private struct CourseEditor: View {
                 }
 
                 if let statusMessage {
-                    Label(statusMessage, systemImage: "checkmark.circle")
-                        .foregroundStyle(.green)
+                    StatusBanner(message: statusMessage, kind: .success)
                 }
 
                 if let errorMessage {
-                    Label(errorMessage, systemImage: "exclamationmark.triangle")
-                        .foregroundStyle(.red)
+                    StatusBanner(message: errorMessage, kind: .warning)
                 }
 
                 if mode == .edit {

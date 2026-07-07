@@ -23,12 +23,16 @@ struct WordNoteApp: App {
             ContentView()
                 .modelContainer(modelContainer)
         }
+        .defaultSize(width: 1200, height: 760)
+        .windowResizability(.contentMinSize)
         .windowStyle(.titleBar)
 
         Settings {
             SettingsView()
                 .modelContainer(modelContainer)
         }
+        .defaultSize(width: 760, height: 560)
+        .windowResizability(.contentMinSize)
     }
 
     private static var modelTypes: [any PersistentModel.Type] {

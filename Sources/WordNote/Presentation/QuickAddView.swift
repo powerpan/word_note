@@ -4,6 +4,7 @@ import WordNoteCore
 
 struct QuickAddView: View {
     @Environment(\.modelContext) private var modelContext
+    @AppStorage("defaultSourceType") private var defaultSourceType = SourceType.other.rawValue
     @Query(sort: \CourseModel.courseName) private var courses: [CourseModel]
 
     @State private var rawText = ""
@@ -19,88 +20,108 @@ struct QuickAddView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            header
+        ScrollView {
+            VStack(alignment: .leading, spacing: 22) {
+                PageHeader(
+                    title: "Quick Add",
+                    subtitle: "Capture a phrase, lecture sentence, slide excerpt, or paper term before turning it into candidates."
+                ) {
+                    EmptyView()
+                }
 
-            VStack(alignment: .leading, spacing: 14) {
-                TextEditor(text: $rawText)
-                    .font(.body)
-                    .scrollContentBackground(.hidden)
-                    .frame(minHeight: 180)
-                    .padding(10)
-                    .background(.regularMaterial)
+                HStack(alignment: .top, spacing: 18) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Input")
+                            .font(.headline)
+
+                        TextEditor(text: $rawText)
+                            .font(.body)
+                            .scrollContentBackground(.hidden)
+                            .frame(minHeight: 300)
+                            .padding(12)
+                            .background(Color(nsColor: .textBackgroundColor))
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(Color.secondary.opacity(0.18), lineWidth: 1)
+                            }
+                            .overlay(alignment: .topLeading) {
+                                if rawText.isEmpty {
+                                    Text("Paste English text from class, papers, slides, or assignments")
+                                        .foregroundStyle(.tertiary)
+                                        .padding(.horizontal, 18)
+                                        .padding(.vertical, 20)
+                                        .allowsHitTesting(false)
+                                }
+                            }
+
+                        TextField("Optional note", text: $note, axis: .vertical)
+                            .lineLimit(2...4)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("Context")
+                            .font(.headline)
+
+                        Picker("Course", selection: $selectedCourseID) {
+                            Text("No Course").tag(UUID?.none)
+                            ForEach(courses, id: \.id) { course in
+                                Text(course.courseName).tag(Optional(course.id))
+                            }
+                        }
+
+                        Picker("Source", selection: $selectedSourceType) {
+                            ForEach(SourceType.allCases) { sourceType in
+                                Text(sourceType.displayTitle).tag(sourceType)
+                            }
+                        }
+
+                        Divider()
+
+                        Button {
+                            saveAndAnalyze()
+                        } label: {
+                            Label("Save & Analyze", systemImage: "sparkles")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .controlSize(.large)
+                        .buttonStyle(.borderedProminent)
+                        .disabled(!canSave || isAnalyzing)
+
+                        Button {
+                            saveDraft()
+                        } label: {
+                            Label("Save Draft", systemImage: "tray.and.arrow.down")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .keyboardShortcut(.return, modifiers: [.command])
+                        .disabled(!canSave)
+
+                        if isAnalyzing {
+                            ProgressView("Analyzing with DeepSeek...")
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                    .padding(16)
+                    .frame(width: 280, alignment: .topLeading)
+                    .background(Color(nsColor: .controlBackgroundColor))
                     .clipShape(RoundedRectangle(cornerRadius: 8))
-                    .overlay(alignment: .topLeading) {
-                        if rawText.isEmpty {
-                            Text("Paste a word, phrase, or sentence from class, paper, or slides")
-                                .foregroundStyle(.tertiary)
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 18)
-                                .allowsHitTesting(false)
-                        }
-                    }
-
-                HStack(spacing: 12) {
-                    Picker("Course", selection: $selectedCourseID) {
-                        Text("No Course").tag(UUID?.none)
-                        ForEach(courses, id: \.id) { course in
-                            Text(course.courseName).tag(Optional(course.id))
-                        }
-                    }
-                    .frame(maxWidth: 260)
-
-                    Picker("Source", selection: $selectedSourceType) {
-                        ForEach(SourceType.allCases) { sourceType in
-                            Text(sourceType.displayTitle).tag(sourceType)
-                        }
-                    }
-                    .frame(maxWidth: 220)
                 }
 
-                TextField("Note", text: $note, axis: .vertical)
-                    .lineLimit(2...4)
-            }
-
-            HStack {
-                Button("Save") {
-                    saveDraft()
+                if let statusMessage {
+                    StatusBanner(message: statusMessage, kind: .success)
                 }
-                .keyboardShortcut(.return, modifiers: [.command])
-                .disabled(!canSave)
 
-                Button("Save & Analyze") {
-                    saveAndAnalyze()
+                if let errorMessage {
+                    StatusBanner(message: errorMessage, kind: .warning)
                 }
-                .disabled(!canSave || isAnalyzing)
-
-                Spacer()
             }
-
-            if let statusMessage {
-                Label(statusMessage, systemImage: "checkmark.circle")
-                    .foregroundStyle(.green)
-            }
-
-            if let errorMessage {
-                Label(errorMessage, systemImage: "exclamationmark.triangle")
-                    .foregroundStyle(.red)
-            }
-
-            if isAnalyzing {
-                ProgressView("Analyzing with DeepSeek...")
-            }
-
-            Spacer()
+            .padding(28)
         }
-        .padding(28)
-    }
-
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Quick Add")
-                .font(.largeTitle.bold())
-            Text("Save raw English input, or analyze it with DeepSeek to generate candidate terms.")
-                .foregroundStyle(.secondary)
+        .onAppear(perform: applyDefaultSourceType)
+        .onChange(of: defaultSourceType) {
+            applyDefaultSourceType()
         }
     }
 
@@ -173,5 +194,9 @@ struct QuickAddView: View {
 
             isAnalyzing = false
         }
+    }
+
+    private func applyDefaultSourceType() {
+        selectedSourceType = SourceType(rawValue: defaultSourceType) ?? .other
     }
 }

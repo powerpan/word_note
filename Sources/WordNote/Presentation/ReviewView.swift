@@ -45,7 +45,12 @@ struct ReviewView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            header
+            PageHeader(
+                title: "Review",
+                subtitle: "Review due terms and update the next review date with simple feedback."
+            ) {
+                EmptyView()
+            }
 
             HStack {
                 Picker("Course", selection: $selectedCourseID) {
@@ -63,13 +68,11 @@ struct ReviewView: View {
             }
 
             if let statusMessage {
-                Label(statusMessage, systemImage: "checkmark.circle")
-                    .foregroundStyle(.green)
+                StatusBanner(message: statusMessage, kind: .success)
             }
 
             if let errorMessage {
-                Label(errorMessage, systemImage: "exclamationmark.triangle")
-                    .foregroundStyle(.red)
+                StatusBanner(message: errorMessage, kind: .warning)
             }
 
             if let activeTerm {
@@ -83,11 +86,13 @@ struct ReviewView: View {
                     onFeedback: recordFeedback
                 )
             } else {
-                ContentUnavailableView(
-                    "No Terms Due",
+                EmptyStateView(
                     systemImage: "checkmark.circle",
-                    description: Text(reviewedCount == 0 ? "There are no terms scheduled for review today." : "Review complete for this queue.")
-                )
+                    title: "No Terms Due",
+                    message: reviewedCount == 0 ? "There are no terms scheduled for review today." : "Review complete for this queue."
+                ) {
+                    EmptyView()
+                }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
 
@@ -97,15 +102,6 @@ struct ReviewView: View {
         .onChange(of: selectedCourseID) {
             selectedTermID = nil
             isAnswerVisible = false
-        }
-    }
-
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Review")
-                .font(.largeTitle.bold())
-            Text("Review due terms and update the next review date with simple feedback.")
-                .foregroundStyle(.secondary)
         }
     }
 
@@ -151,8 +147,8 @@ private struct ReviewCard: View {
                 }
 
                 HStack(spacing: 10) {
-                    Text(term.termType.displayTitle)
-                    Text(term.masteryLevel.displayTitle)
+                    TagChip(title: term.termType.displayTitle, tint: .blue)
+                    TagChip(title: term.masteryLevel.displayTitle, tint: .purple)
                     if let courseName {
                         Text(courseName)
                     }
@@ -186,8 +182,10 @@ private struct ReviewCard: View {
                     Spacer()
                 }
             } else {
-                Button("Show Answer") {
+                Button {
                     onShowAnswer()
+                } label: {
+                    Label("Show Answer", systemImage: "eye")
                 }
                 .keyboardShortcut(.space, modifiers: [])
             }

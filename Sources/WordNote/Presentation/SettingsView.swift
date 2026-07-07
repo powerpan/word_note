@@ -8,51 +8,68 @@ struct SettingsView: View {
     @State private var keyErrorMessage: String?
 
     var body: some View {
-        Form {
-            Section("Defaults") {
-                Picker("Default source", selection: $defaultSourceType) {
-                    Text("Class").tag("class")
-                    Text("Paper").tag("paper")
-                    Text("Slides").tag("slides")
-                    Text("Assignment").tag("assignment")
-                    Text("Book").tag("book")
-                    Text("Other").tag("other")
+        ScrollView {
+            VStack(alignment: .leading, spacing: 22) {
+                PageHeader(
+                    title: "Settings",
+                    subtitle: "Configure capture defaults and the DeepSeek credential used by analysis."
+                ) {
+                    EmptyView()
                 }
-                .pickerStyle(.menu)
-            }
 
-            Section("DeepSeek") {
-                SecureField("API Key", text: $apiKey)
-                    .textContentType(.password)
-
-                HStack {
-                    Button("Save Key") {
-                        saveAPIKey()
+                GroupBox("Defaults") {
+                    Picker("Default source", selection: $defaultSourceType) {
+                        Text("Class").tag("class")
+                        Text("Paper").tag("paper")
+                        Text("Slides").tag("slides")
+                        Text("Assignment").tag("assignment")
+                        Text("Book").tag("book")
+                        Text("Other").tag("other")
                     }
-                    .disabled(TextNormalizer.isBlank(apiKey))
+                    .pickerStyle(.menu)
+                    .frame(maxWidth: 420, alignment: .leading)
+                    .padding(.vertical, 4)
+                }
 
-                    Button("Delete Key", role: .destructive) {
-                        deleteAPIKey()
+                GroupBox("DeepSeek") {
+                    VStack(alignment: .leading, spacing: 14) {
+                        SecureField("API Key", text: $apiKey)
+                            .textContentType(.password)
+                            .frame(maxWidth: 520)
+
+                        HStack {
+                            Button {
+                                saveAPIKey()
+                            } label: {
+                                Label("Save Key", systemImage: "key")
+                            }
+                            .disabled(TextNormalizer.isBlank(apiKey))
+
+                            Button(role: .destructive) {
+                                deleteAPIKey()
+                            } label: {
+                                Label("Delete Key", systemImage: "trash")
+                            }
+                        }
+
+                        if let keyStatusMessage {
+                            StatusBanner(message: keyStatusMessage, kind: .success)
+                        }
+
+                        if let keyErrorMessage {
+                            StatusBanner(message: keyErrorMessage, kind: .warning)
+                        }
+
+                        Text("The app also reads DEEPSEEK_API_KEY from the process environment when Keychain is empty.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
+                    .padding(.vertical, 4)
                 }
-
-                if let keyStatusMessage {
-                    Label(keyStatusMessage, systemImage: "checkmark.circle")
-                        .foregroundStyle(.green)
-                }
-
-                if let keyErrorMessage {
-                    Label(keyErrorMessage, systemImage: "exclamationmark.triangle")
-                        .foregroundStyle(.red)
-                }
-
-                Text("The app also reads DEEPSEEK_API_KEY from the process environment when Keychain is empty.")
-                    .foregroundStyle(.secondary)
             }
+            .padding(28)
+            .frame(maxWidth: 760, alignment: .leading)
         }
-        .formStyle(.grouped)
-        .padding(20)
-        .frame(width: 460)
         .onAppear(perform: loadKeyStatus)
     }
 
