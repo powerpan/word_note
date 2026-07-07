@@ -52,11 +52,7 @@ private struct DetailRouter: View {
         case .vocabulary:
             VocabularyView()
         case .review:
-            PlaceholderFeatureView(
-                title: "Review",
-                systemImage: "rectangle.stack",
-                message: "M6 will add due cards and feedback scheduling."
-            )
+            ReviewView()
         case .courses:
             CoursesOverviewView()
         case .settings:

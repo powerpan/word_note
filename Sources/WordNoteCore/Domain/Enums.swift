@@ -201,4 +201,17 @@ public enum ReviewFeedback: String, Codable, CaseIterable, Identifiable {
     case easy
 
     public var id: String { rawValue }
+
+    public var displayTitle: String {
+        switch self {
+        case .again:
+            return "Again"
+        case .hard:
+            return "Hard"
+        case .good:
+            return "Good"
+        case .easy:
+            return "Easy"
+        }
+    }
 }
