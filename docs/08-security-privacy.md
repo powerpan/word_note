@@ -4,7 +4,7 @@
 
 | 類型 | 敏感度 | 存儲位置 |
 |---|---|---|
-| DeepSeek API Key | 高 | Keychain |
+| DeepSeek API Key | 高 | 本機 env 文件 |
 | 原始輸入 rawText | 中 | 本地資料庫 |
 | AI 解釋和詞條 | 中 | 本地資料庫 |
 | 課程信息 | 中 | 本地資料庫 |
@@ -139,9 +139,8 @@ P1 如果做全局快捷鍵或剪貼板增強，需要單獨評估權限。
 
 緩解：
 
-- Keychain。
+- 本機 env 文件。
 - 日誌脫敏。
 - JSON schema validation。
 - AI 候選必須經用戶確認。
 - 錯誤狀態可重試，不覆蓋原始輸入。
-

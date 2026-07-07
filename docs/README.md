@@ -39,9 +39,8 @@ Word Note 是一個面向 AI / CS 英文授課場景的 macOS 個人詞彙與術
 - App: native macOS SwiftUI
 - Persistence: SwiftData, 最低 macOS 14
 - Networking: URLSession + async/await
-- Secrets: Keychain
+- Secrets: 本機 env 文件
 - State: Observable view models / services with dependency injection
 - Tests: XCTest, Swift Testing 可在後續評估
 
 如果需要支持 macOS 13 或更早版本，資料層應改用 SQLite/GRDB 或 Core Data，並在實施前新增 ADR。
-

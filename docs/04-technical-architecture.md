@@ -18,7 +18,7 @@
 | App lifecycle | SwiftUI App |
 | Persistence | SwiftData |
 | Networking | URLSession + async/await |
-| Secrets | Keychain |
+| Secrets | 本機 env 文件 |
 | State | ViewModel + service protocols |
 | Tests | XCTest |
 | Platform | macOS 14+ |
@@ -43,7 +43,7 @@ WordNoteApp
       -> Migrations
   -> Infrastructure
       -> DeepSeek Client
-      -> Keychain Store
+      -> Environment File Store
       -> Exporter
       -> Logger
 ```
@@ -58,7 +58,7 @@ WordNoteApp
 - 接收用戶操作。
 - 展示 loading、empty、error、success states。
 - 不直接拼接 AI prompt。
-- 不直接操作 Keychain。
+- 不直接操作 env 文件。
 - 不直接寫 SwiftData，通過 use case 或 repository。
 
 ### Domain
@@ -87,7 +87,7 @@ WordNoteApp
 
 - DeepSeek API 請求。
 - JSON decode 和容錯。
-- Keychain 存取。
+- env 文件存取。
 - 日誌。
 - 文件導出。
 
@@ -146,7 +146,7 @@ WordNoteApp
 
 職責：
 
-- Keychain API Key 存取。
+- env 文件 API Key 存取。
 - default course/source。
 - test API connectivity。
 
@@ -158,7 +158,7 @@ WordNoteApp
 Views -> ViewModels -> UseCases/Services -> Repositories/Clients
 ```
 
-Domain 不依賴 SwiftUI、SwiftData、URLSession 或 Keychain。
+Domain 不依賴 SwiftUI、SwiftData、URLSession 或 env 文件。
 
 ## 資料流：Save & Analyze
 
@@ -239,7 +239,7 @@ UI 不應直接顯示底層錯誤原文。應映射成可理解、可行動的�
 - default course id。
 - default source type。
 
-API Key 僅存在 Keychain。
+API Key 存在本機 env 文件或進程環境變量，不進入 SwiftData、日誌或導出文件。
 
 ## 後續可擴展點
 
@@ -258,4 +258,3 @@ P1 可從 VocabularyService 和 CourseService 導出 JSON/CSV，不應直接讀 
 ### Sync
 
 P2 若做 iCloud，需要先制定資料衝突策略，不能直接把本地模型簡單同步。
-

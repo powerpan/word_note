@@ -52,7 +52,7 @@
 任務：
 
 - Settings API Key UI。
-- KeychainStore。
+- DeepSeekEnvironmentFileStore。
 - DeepSeekClient。
 - AIAnalysisService。
 - prompt builder。
@@ -173,7 +173,7 @@ WordNote/
     Migrations/
   Infrastructure/
     AI/
-    Keychain/
+    Configuration/
     Logging/
     Export/
   Shared/
@@ -191,7 +191,7 @@ WordNoteUITests/
 3. 再接入真實 DeepSeek。
 4. 最後補 Review 和 polish。
 
-這樣可以避免一開始被 API 不穩定或 Keychain 細節拖慢。
+這樣可以避免一開始被 API 不穩定或本機 secrets 文件細節拖慢。
 
 ## 分支策略
 
@@ -224,7 +224,7 @@ WordNoteUITests/
 | AI JSON 不穩定 | 候選無法保存 | parser 容錯、schema validation、retry |
 | P0 範圍膨脹 | 延期 | 嚴格按 MVP 文檔執行 |
 | SwiftData 遷移問題 | 用戶資料風險 | 早期保守模型、遷移前導出 |
-| API Key 泄漏 | 安全問題 | Keychain、日誌脫敏、測試 |
+| API Key 泄漏 | 安全問題 | env 文件忽略、日誌脫敏、測試 |
 | UI 過度設計 | 延誤核心閉環 | 先做密集、清楚的工作台式界面 |
 
 ## P1 啟動條件
@@ -235,4 +235,3 @@ WordNoteUITests/
 - AI 失敗和重試穩定。
 - 用戶已累積至少一批真實詞條。
 - 已確認最常用入口確實需要菜單欄或全局快捷鍵。
-

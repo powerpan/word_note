@@ -82,19 +82,26 @@ MVP 不實作完整 spaced repetition algorithm，只用固定間隔：
 - 固定規則可預測、可測試、易調整。
 - 等用戶有真實使用資料後再優化更合理。
 
-## Decision 006: 本地優先，API Key 使用 Keychain
+## Decision 006: 本地優先，API Key 使用本機 env 文件
 
 日期：2026-07-07
 
 決策：
 
-首版所有學習資料保存在本地。DeepSeek API Key 存入 Keychain，不進入 SwiftData 或導出文件。
+首版所有學習資料保存在本地。DeepSeek API Key 存入本機 env 文件，不進入 SwiftData、日誌、導出文件或 Git 倉庫。App 不讀寫 macOS Keychain，避免頻繁觸發系統密碼授權彈窗。
 
 原因：
 
 - 詞庫和課程資料屬於個人學習資料。
 - 首版不需要後端。
-- Keychain 是 macOS 保存密鑰的標準方案。
+- 用戶希望避免 Keychain 密碼彈窗。
+- env 文件便於本地調試、遷移和命令行測試。
+
+實施：
+
+- Settings 寫入 `~/Library/Application Support/WordNote/deepseek.env`。
+- 可用 `WORD_NOTE_ENV_FILE` 指定其他 env 文件。
+- 倉庫內 `.env*` 和 `key.md` 必須保持忽略。
 
 ## Decision 007: 推薦 SwiftUI + SwiftData，最低 macOS 14
 
@@ -113,4 +120,3 @@ MVP 不實作完整 spaced repetition algorithm，只用固定間隔：
 備註：
 
 如果需要支持 macOS 13 或更早版本，應新增 ADR，評估 Core Data 或 SQLite/GRDB。
-

@@ -75,7 +75,7 @@ MVP 只驗證一件事：
 
 - 本地持久化 InputRecord、CandidateTerm、Term、Course、ReviewEvent。
 - 關閉 App 後再次打開資料不丟失。
-- API Key 存入 Keychain，不存入明文資料庫。
+- API Key 存入本機 env 文件，不存入 SwiftData 或提交到 Git。
 
 ### Settings
 
@@ -166,4 +166,3 @@ P2 只在 P0/P1 穩定後評估：
 | M4 | Candidate review | 可編輯、勾選、保存候選到詞庫 |
 | M5 | Review loop | 可完成今日復習和排程更新 |
 | M6 | Polish + QA | 完成錯誤處理、空狀態、基礎測試和驗收清單 |
-

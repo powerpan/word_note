@@ -7,6 +7,8 @@ struct SettingsView: View {
     @State private var keyStatusMessage: String?
     @State private var keyErrorMessage: String?
 
+    private let environmentFileStore = DeepSeekEnvironmentFileStore()
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
@@ -41,14 +43,14 @@ struct SettingsView: View {
                             Button {
                                 saveAPIKey()
                             } label: {
-                                Label("Save Key", systemImage: "key")
+                                Label("Save to Env File", systemImage: "doc.badge.gearshape")
                             }
                             .disabled(TextNormalizer.isBlank(apiKey))
 
                             Button(role: .destructive) {
                                 deleteAPIKey()
                             } label: {
-                                Label("Delete Key", systemImage: "trash")
+                                Label("Delete Env File", systemImage: "trash")
                             }
                         }
 
@@ -60,7 +62,12 @@ struct SettingsView: View {
                             StatusBanner(message: keyErrorMessage, kind: .warning)
                         }
 
-                        Text("The app also reads DEEPSEEK_API_KEY from the process environment when Keychain is empty.")
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text("The app reads DEEPSEEK_API_KEY from this environment file first, then falls back to the process environment.")
+                            Text(environmentFileStore.fileURL.path)
+                                .monospaced()
+                                .textSelection(.enabled)
+                        }
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -74,19 +81,23 @@ struct SettingsView: View {
     }
 
     private func loadKeyStatus() {
-        if let key = try? KeychainStore.deepSeekAPIKey.load(), !TextNormalizer.isBlank(key) {
-            keyStatusMessage = "A DeepSeek key is saved in Keychain."
+        keyErrorMessage = nil
+
+        if environmentFileStore.load() != nil {
+            keyStatusMessage = "DeepSeek key is saved in the environment file."
         } else if DeepSeekAPIKeyResolver.resolve() != nil {
-            keyStatusMessage = "Using DEEPSEEK_API_KEY from environment."
+            keyStatusMessage = "Using DEEPSEEK_API_KEY from the process environment."
+        } else {
+            keyStatusMessage = nil
         }
     }
 
     private func saveAPIKey() {
         do {
-            try KeychainStore.deepSeekAPIKey.save(apiKey.trimmingCharacters(in: .whitespacesAndNewlines))
+            try environmentFileStore.save(apiKey)
             apiKey = ""
             keyErrorMessage = nil
-            keyStatusMessage = "DeepSeek key saved to Keychain."
+            keyStatusMessage = "DeepSeek key saved to the environment file."
         } catch {
             keyStatusMessage = nil
             keyErrorMessage = error.localizedDescription
@@ -95,8 +106,8 @@ struct SettingsView: View {
 
     private func deleteAPIKey() {
         do {
-            try KeychainStore.deepSeekAPIKey.delete()
-            keyStatusMessage = "DeepSeek key removed from Keychain."
+            try environmentFileStore.delete()
+            keyStatusMessage = "DeepSeek environment file removed."
             keyErrorMessage = nil
         } catch {
             keyStatusMessage = nil

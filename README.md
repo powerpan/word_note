@@ -14,7 +14,7 @@ The current implementation follows the engineering plan in [docs](docs/README.md
 - Vocabulary list, search, filters, detail editing, and deletion.
 - Course creation, editing, deletion guard, and course statistics.
 - Basic review queue with `Again`, `Hard`, `Good`, and `Easy` feedback.
-- Keychain storage for DeepSeek API key, with `DEEPSEEK_API_KEY` environment fallback.
+- Environment-file storage for DeepSeek API key, with `DEEPSEEK_API_KEY` process environment fallback.
 
 ## Requirements
 
@@ -58,10 +58,12 @@ The live test calls DeepSeek with `latent representation` and verifies that a st
 
 The app resolves the DeepSeek key in this order:
 
-1. macOS Keychain item managed from Settings.
-2. `DEEPSEEK_API_KEY` process environment variable.
+1. Environment file managed from Settings: `~/Library/Application Support/WordNote/deepseek.env`.
+2. Optional override file from `WORD_NOTE_ENV_FILE`.
+3. Local development files: `.env.local`, then `.env`.
+4. `DEEPSEEK_API_KEY` process environment variable.
 
-The API key must not be committed to the repository. Local key files such as `key.md` are ignored by `.gitignore`.
+The API key must not be committed to the repository. Local key files such as `.env`, `.env.local`, `.env.*`, and `key.md` are ignored by `.gitignore`.
 
 ## Development Milestones
 

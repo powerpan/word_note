@@ -7,7 +7,7 @@ AI 集成的目標是把用戶輸入的英文內容轉換成可確認、可編�
 ## DeepSeek 集成原則
 
 - 使用服務抽象，不把 DeepSeek API 細節散落在 UI。
-- API Key 存在 Keychain。
+- API Key 存在本機 env 文件，並可從進程環境變量兜底讀取。
 - 請求超時必須可配置。
 - 所有 response 必須經過 schema validation。
 - JSON 解析失敗時不丟失 InputRecord。
@@ -253,4 +253,3 @@ Expected:
 - sentence_meaning 非空。
 - items 包含 latent representation。
 - 不包含 the、a、of。
-

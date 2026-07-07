@@ -33,7 +33,7 @@ MVP 的質量重點：
 - Candidate save to Term。
 - Term delete。
 - Review feedback update。
-- Settings API Key 存取可用 mock Keychain。
+- Settings API Key 存取可用臨時 env 文件。
 
 ### UI Tests
 
