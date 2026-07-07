@@ -11,30 +11,78 @@ struct InboxView: View {
     @State private var selectedRecordID: UUID?
     @State private var errorMessage: String?
     @State private var analyzingRecordID: UUID?
+    @SceneStorage("inboxConfirmedRecordsExpanded") private var confirmedRecordsExpanded = false
 
-    private var visibleRecords: [InputRecordModel] {
+    private var activeRecords: [InputRecordModel] {
         records.filter { record in
-            record.status != .ignored && record.status != .analyzing
+            record.status != .ignored && record.status != .analyzing && record.status != .completed
         }
     }
 
+    private var confirmedRecords: [InputRecordModel] {
+        records.filter { $0.status == .completed }
+    }
+
+    private var selectableRecords: [InputRecordModel] {
+        activeRecords + confirmedRecords
+    }
+
+    private var visibleRecordCount: Int {
+        activeRecords.count + (confirmedRecordsExpanded ? confirmedRecords.count : 0)
+    }
+
     private var selectedRecord: InputRecordModel? {
-        guard let selectedRecordID else { return visibleRecords.first }
-        return visibleRecords.first { $0.id == selectedRecordID }
+        guard let selectedRecordID else { return nil }
+        return selectableRecords.first { $0.id == selectedRecordID }
     }
 
     var body: some View {
         HStack(spacing: 0) {
             List(selection: $selectedRecordID) {
-                ForEach(visibleRecords, id: \.id) { record in
-                    InboxRow(record: record, courseName: courseName(for: record.courseID))
-                        .tag(record.id)
+                if !activeRecords.isEmpty {
+                    Section("Needs Review") {
+                        ForEach(activeRecords, id: \.id) { record in
+                            InboxRow(record: record, courseName: courseName(for: record.courseID))
+                                .tag(record.id)
+                        }
+                    }
+                }
+
+                if !confirmedRecords.isEmpty {
+                    Section {
+                        HStack(spacing: 8) {
+                            Image(systemName: confirmedRecordsExpanded ? "chevron.down" : "chevron.right")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .frame(width: 10)
+                            Label("Confirmed", systemImage: "checkmark.circle")
+                            Spacer()
+                            Text(confirmedRecords.count, format: .number)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            confirmedRecordsExpanded.toggle()
+                        }
+
+                        if confirmedRecordsExpanded {
+                            ForEach(confirmedRecords, id: \.id) { record in
+                                InboxRow(
+                                    record: record,
+                                    courseName: courseName(for: record.courseID),
+                                    isConfirmed: true
+                                )
+                                .tag(record.id)
+                            }
+                        }
+                    }
                 }
             }
             .safeAreaInset(edge: .top, spacing: 0) {
                 PageHeader(
                     title: "Inbox",
-                    subtitle: "\(visibleRecords.count) record\(visibleRecords.count == 1 ? "" : "s")"
+                    subtitle: "\(activeRecords.count) active, \(confirmedRecords.count) confirmed"
                 ) {
                     EmptyView()
                 }
@@ -42,10 +90,10 @@ struct InboxView: View {
                 .background(Color(nsColor: .controlBackgroundColor))
             }
             .overlay {
-                if visibleRecords.isEmpty {
+                if selectableRecords.isEmpty {
                     EmptyStateView(
                         systemImage: "tray",
-                        title: "No Pending Records",
+                        title: "No Inbox Records",
                         message: "Use Quick Add to save a word, phrase, or sentence."
                     ) {
                         EmptyView()
@@ -73,9 +121,9 @@ struct InboxView: View {
                 EmptyStateView(
                     systemImage: "doc.text",
                     title: "No Record Selected",
-                    message: visibleRecords.isEmpty
+                    message: selectableRecords.isEmpty
                         ? "Saved input records will appear here."
-                        : "Select a record to review source text and AI candidates."
+                        : "Select an active record, or expand Confirmed to inspect handled records."
                 ) {
                     EmptyView()
                 }
@@ -84,7 +132,13 @@ struct InboxView: View {
         }
         .frame(minWidth: 980, minHeight: 620)
         .onAppear(perform: maintainSelection)
-        .onChange(of: visibleRecords.map(\.id)) {
+        .onChange(of: selectableRecords.map(\.id)) {
+            maintainSelection()
+        }
+        .onChange(of: visibleRecordCount) {
+            maintainSelection()
+        }
+        .onChange(of: confirmedRecordsExpanded) {
             maintainSelection()
         }
     }
@@ -99,7 +153,7 @@ struct InboxView: View {
         do {
             try service.ignore(record)
             if selectedRecordID == record.id {
-                selectedRecordID = visibleRecords.first?.id
+                selectedRecordID = preferredSelectedRecord?.id
             }
             errorMessage = nil
         } catch {
@@ -111,7 +165,7 @@ struct InboxView: View {
         let service = InputRecordService(modelContext: modelContext)
         do {
             try service.delete(record)
-            selectedRecordID = visibleRecords.first?.id
+            selectedRecordID = preferredSelectedRecord?.id
             errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription
@@ -152,16 +206,25 @@ struct InboxView: View {
     }
 
     private func maintainSelection() {
-        if let selectedRecordID, visibleRecords.contains(where: { $0.id == selectedRecordID }) {
+        if let selectedRecordID, visibleRecordsForSelection.contains(where: { $0.id == selectedRecordID }) {
             return
         }
-        selectedRecordID = visibleRecords.first?.id
+        selectedRecordID = preferredSelectedRecord?.id
+    }
+
+    private var visibleRecordsForSelection: [InputRecordModel] {
+        activeRecords + (confirmedRecordsExpanded ? confirmedRecords : [])
+    }
+
+    private var preferredSelectedRecord: InputRecordModel? {
+        activeRecords.first ?? (confirmedRecordsExpanded ? confirmedRecords.first : nil)
     }
 }
 
 private struct InboxRow: View {
     let record: InputRecordModel
     let courseName: String?
+    var isConfirmed = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -170,7 +233,11 @@ private struct InboxRow: View {
                 .font(.headline)
 
             HStack(spacing: 8) {
-                Text(record.status.displayTitle)
+                if isConfirmed {
+                    Label(record.status.displayTitle, systemImage: "checkmark.circle")
+                } else {
+                    Text(record.status.displayTitle)
+                }
                 Text(record.sourceType.displayTitle)
                 if let courseName {
                     Text(courseName)
@@ -179,6 +246,7 @@ private struct InboxRow: View {
             .font(.caption)
             .foregroundStyle(.secondary)
         }
+        .opacity(isConfirmed ? 0.72 : 1)
         .padding(.vertical, 4)
     }
 }
