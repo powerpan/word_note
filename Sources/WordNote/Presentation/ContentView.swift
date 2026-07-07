@@ -6,10 +6,12 @@ struct ContentView: View {
     @SceneStorage("sidebarSelection") private var selection: SidebarDestination = .dashboard
 
     var body: some View {
-        NavigationSplitView {
+        HSplitView {
             SidebarView(selection: $selection)
-        } detail: {
+                .frame(minWidth: 220, idealWidth: 250, maxWidth: 320)
+
             DetailRouter(selection: selection)
+                .frame(minWidth: 720, maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(minWidth: 980, minHeight: 620)
     }
@@ -19,12 +21,20 @@ private struct SidebarView: View {
     @Binding var selection: SidebarDestination
 
     var body: some View {
-        List(SidebarDestination.allCases, selection: $selection) { destination in
-            Label(destination.title, systemImage: destination.systemImage)
-                .tag(destination)
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Word Note")
+                .font(.title2.bold())
+                .padding(.horizontal, 16)
+                .padding(.top, 18)
+                .padding(.bottom, 12)
+
+            List(SidebarDestination.allCases, selection: $selection) { destination in
+                Label(destination.title, systemImage: destination.systemImage)
+                    .tag(destination)
+            }
+            .listStyle(.sidebar)
         }
-        .listStyle(.sidebar)
-        .navigationTitle("Word Note")
+        .background(.bar)
     }
 }
 
@@ -40,11 +50,7 @@ private struct DetailRouter: View {
         case .inbox:
             InboxView()
         case .vocabulary:
-            PlaceholderFeatureView(
-                title: "Vocabulary",
-                systemImage: "books.vertical",
-                message: "M4 will add term search, detail, edit, and delete."
-            )
+            VocabularyView()
         case .review:
             PlaceholderFeatureView(
                 title: "Review",

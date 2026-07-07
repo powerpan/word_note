@@ -225,25 +225,7 @@ private struct InputRecordDetailView: View {
             }
 
             if !candidates.isEmpty {
-                GroupBox("Candidates") {
-                    VStack(alignment: .leading, spacing: 10) {
-                        ForEach(candidates, id: \.id) { candidate in
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(candidate.term)
-                                    .font(.headline)
-                                Text("\(candidate.importance.displayTitle) · \(candidate.category.displayTitle)")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                if let chineseMeaning = candidate.chineseMeaning, !chineseMeaning.isEmpty {
-                                    Text(chineseMeaning)
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.vertical, 4)
-                        }
-                    }
-                }
+                CandidateReviewView(record: record, candidates: candidates)
             }
 
             Spacer()

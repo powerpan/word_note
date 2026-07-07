@@ -53,6 +53,19 @@ public enum TermType: String, Codable, CaseIterable, Identifiable {
     case sentencePattern
 
     public var id: String { rawValue }
+
+    public var displayTitle: String {
+        switch self {
+        case .word:
+            return "Word"
+        case .phrase:
+            return "Phrase"
+        case .expression:
+            return "Expression"
+        case .sentencePattern:
+            return "Sentence Pattern"
+        }
+    }
 }
 
 public enum SourceType: String, Codable, CaseIterable, Identifiable {
@@ -158,6 +171,19 @@ public enum MasteryLevel: String, Codable, CaseIterable, Identifiable {
     case mastered
 
     public var id: String { rawValue }
+
+    public var displayTitle: String {
+        switch self {
+        case .new:
+            return "New"
+        case .vague:
+            return "Vague"
+        case .familiar:
+            return "Familiar"
+        case .mastered:
+            return "Mastered"
+        }
+    }
 }
 
 public enum ReviewMode: String, Codable, CaseIterable, Identifiable {
