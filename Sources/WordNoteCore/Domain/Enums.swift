@@ -19,6 +19,23 @@ public enum InputRecordStatus: String, Codable, CaseIterable, Identifiable {
     case ignored
 
     public var id: String { rawValue }
+
+    public var displayTitle: String {
+        switch self {
+        case .draft:
+            return "Draft"
+        case .analyzing:
+            return "Analyzing"
+        case .analyzed:
+            return "Analyzed"
+        case .completed:
+            return "Completed"
+        case .failed:
+            return "Failed"
+        case .ignored:
+            return "Ignored"
+        }
+    }
 }
 
 public enum CandidateStatus: String, Codable, CaseIterable, Identifiable {
@@ -47,6 +64,23 @@ public enum SourceType: String, Codable, CaseIterable, Identifiable {
     case other
 
     public var id: String { rawValue }
+
+    public var displayTitle: String {
+        switch self {
+        case .class:
+            return "Class"
+        case .paper:
+            return "Paper"
+        case .slides:
+            return "Slides"
+        case .assignment:
+            return "Assignment"
+        case .book:
+            return "Book"
+        case .other:
+            return "Other"
+        }
+    }
 }
 
 public enum Importance: String, Codable, CaseIterable, Identifiable, Comparable {

@@ -36,17 +36,9 @@ private struct DetailRouter: View {
         case .dashboard:
             DashboardView()
         case .quickAdd:
-            PlaceholderFeatureView(
-                title: "Quick Add",
-                systemImage: "plus.square",
-                message: "M2 will add the raw input capture flow."
-            )
+            QuickAddView()
         case .inbox:
-            PlaceholderFeatureView(
-                title: "Inbox",
-                systemImage: "tray",
-                message: "M2 will show draft, analyzed, and failed input records."
-            )
+            InboxView()
         case .vocabulary:
             PlaceholderFeatureView(
                 title: "Vocabulary",
