@@ -13,7 +13,10 @@ struct QuickAddView: View {
     @State private var note = ""
     @State private var statusMessage: String?
     @State private var errorMessage: String?
-    @State private var isAnalyzing = false
+    @State private var analysisQueue: [QueuedAnalysisRecord] = []
+    @State private var isProcessingAnalysisQueue = false
+    @State private var activeAnalysisTitle: String?
+    @State private var latestAIExplanation: AIExplanationPreview?
 
     private var canSave: Bool {
         !TextNormalizer.isBlank(rawText)
@@ -57,6 +60,8 @@ struct QuickAddView: View {
 
                         TextField("Optional note", text: $note, axis: .vertical)
                             .lineLimit(2...4)
+
+                        aiExplanationPanel
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -87,7 +92,7 @@ struct QuickAddView: View {
                         }
                         .controlSize(.large)
                         .buttonStyle(.borderedProminent)
-                        .disabled(!canSave || isAnalyzing)
+                        .disabled(!canSave)
 
                         Button {
                             saveDraft()
@@ -98,8 +103,15 @@ struct QuickAddView: View {
                         .keyboardShortcut(.return, modifiers: [.command])
                         .disabled(!canSave)
 
-                        if isAnalyzing {
-                            ProgressView("Analyzing with DeepSeek...")
+                        if isProcessingAnalysisQueue || !analysisQueue.isEmpty {
+                            VStack(alignment: .leading, spacing: 8) {
+                                ProgressView(queueStatusText)
+                                if !analysisQueue.isEmpty {
+                                    Text("\(analysisQueue.count) queued")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }
@@ -146,57 +158,203 @@ struct QuickAddView: View {
     }
 
     private func saveAndAnalyze() {
-        isAnalyzing = true
+        let service = InputRecordService(modelContext: modelContext)
         statusMessage = nil
         errorMessage = nil
 
-        Task { @MainActor in
-            let service = InputRecordService(modelContext: modelContext)
-            var record: InputRecordModel?
+        do {
+            let createdRecord = try service.createAnalyzing(
+                rawText: rawText,
+                courseID: selectedCourseID,
+                sourceType: selectedSourceType,
+                note: note
+            )
+            let courseName = courses.first { $0.id == selectedCourseID }?.courseName
 
-            do {
-                let createdRecord = try service.createAnalyzing(
-                    rawText: rawText,
-                    courseID: selectedCourseID,
-                    sourceType: selectedSourceType,
-                    note: note
-                )
-                record = createdRecord
-
-                guard let apiKey = DeepSeekAPIKeyResolver.resolve() else {
-                    try service.markFailed(createdRecord, summary: AIAnalysisError.missingAPIKey.localizedDescription)
-                    throw AIAnalysisError.missingAPIKey
-                }
-
-                let courseName = courses.first { $0.id == selectedCourseID }?.courseName
-                let analysisService = AIAnalysisService(
-                    client: DeepSeekChatClient(apiKey: apiKey)
-                )
-                let result = try await analysisService.analyze(
-                    AIAnalysisRequest(
-                        rawText: createdRecord.rawText,
-                        courseName: courseName,
-                        sourceType: createdRecord.sourceType,
-                        userNote: createdRecord.note
-                    )
-                )
-                let candidates = try service.applyAnalysisResult(result, to: createdRecord)
-
-                rawText = ""
-                note = ""
-                statusMessage = "Analyzed \(createdRecord.rawText). Candidates: \(candidates.count)"
-            } catch {
-                if let record, record.status != .failed {
-                    try? service.markFailed(record, summary: error.localizedDescription)
-                }
-                errorMessage = error.localizedDescription
-            }
-
-            isAnalyzing = false
+            rawText = ""
+            note = ""
+            analysisQueue.append(QueuedAnalysisRecord(record: createdRecord, courseName: courseName))
+            statusMessage = "Queued for AI analysis: \(createdRecord.rawText)"
+            processNextQueuedAnalysisIfNeeded()
+        } catch {
+            statusMessage = nil
+            errorMessage = error.localizedDescription
         }
     }
 
     private func applyDefaultSourceType() {
         selectedSourceType = SourceType(rawValue: defaultSourceType) ?? .other
+    }
+
+    private var queueStatusText: String {
+        if let activeAnalysisTitle {
+            return "Analyzing: \(activeAnalysisTitle)"
+        }
+        return "Preparing AI analysis..."
+    }
+
+    @ViewBuilder
+    private var aiExplanationPanel: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("AI 釋義產出後展示")
+                .font(.headline)
+
+            if let latestAIExplanation {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(latestAIExplanation.rawText)
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(2)
+
+                    if let sentenceMeaning = latestAIExplanation.sentenceMeaning {
+                        Text(sentenceMeaning)
+                            .font(.callout)
+                            .textSelection(.enabled)
+                    }
+
+                    if latestAIExplanation.sentenceMeaning == nil,
+                       latestAIExplanation.candidates.isEmpty {
+                        Text("AI did not return a displayable explanation for this input.")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    ForEach(latestAIExplanation.candidates) { candidate in
+                        VStack(alignment: .leading, spacing: 5) {
+                            HStack {
+                                Text(candidate.term)
+                                    .font(.subheadline.weight(.semibold))
+                                Spacer()
+                                TagChip(title: candidate.importance.displayTitle, tint: .orange)
+                            }
+
+                            if let chineseMeaning = candidate.chineseMeaning {
+                                Text(chineseMeaning)
+                                    .font(.callout)
+                                    .textSelection(.enabled)
+                            }
+
+                            if let aiContextExplanation = candidate.aiContextExplanation {
+                                Text(aiContextExplanation)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .textSelection(.enabled)
+                            }
+                        }
+                        .padding(10)
+                        .background(.regularMaterial)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
+                }
+            } else {
+                Text("保存並加入 AI 分析隊列後，最新一次分析完成的釋義會臨時顯示在這裡。切換欄目或退出 App 後不保留。")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(nsColor: .controlBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func processNextQueuedAnalysisIfNeeded() {
+        guard !isProcessingAnalysisQueue, !analysisQueue.isEmpty else { return }
+
+        isProcessingAnalysisQueue = true
+        let queuedRecord = analysisQueue.removeFirst()
+        activeAnalysisTitle = queuedRecord.record.rawText
+
+        Task { @MainActor in
+            let service = InputRecordService(modelContext: modelContext)
+
+            do {
+                guard let apiKey = DeepSeekAPIKeyResolver.resolve() else {
+                    try service.markFailed(queuedRecord.record, summary: AIAnalysisError.missingAPIKey.localizedDescription)
+                    throw AIAnalysisError.missingAPIKey
+                }
+
+                let analysisService = AIAnalysisService(
+                    client: DeepSeekChatClient(apiKey: apiKey)
+                )
+                let result = try await analysisService.analyze(
+                    AIAnalysisRequest(
+                        rawText: queuedRecord.record.rawText,
+                        courseName: queuedRecord.courseName,
+                        sourceType: queuedRecord.record.sourceType,
+                        userNote: queuedRecord.record.note
+                    )
+                )
+                let candidates = try service.applyAnalysisResult(result, to: queuedRecord.record)
+
+                latestAIExplanation = AIExplanationPreview(
+                    rawText: queuedRecord.record.rawText,
+                    sentenceMeaning: result.sentenceMeaning,
+                    candidates: result.candidates.map(AIExplanationCandidatePreview.init(candidate:))
+                )
+                statusMessage = "Analyzed \(queuedRecord.record.rawText). Candidates: \(candidates.count)"
+                errorMessage = nil
+            } catch {
+                if queuedRecord.record.status != .failed {
+                    try? service.markFailed(queuedRecord.record, summary: error.localizedDescription)
+                }
+                statusMessage = nil
+                errorMessage = "Analysis failed for \(queuedRecord.record.rawText): \(error.localizedDescription)"
+            }
+
+            isProcessingAnalysisQueue = false
+            activeAnalysisTitle = nil
+            processNextQueuedAnalysisIfNeeded()
+        }
+    }
+}
+
+private struct QueuedAnalysisRecord: Identifiable {
+    let id = UUID()
+    let record: InputRecordModel
+    let courseName: String?
+}
+
+private struct AIExplanationPreview {
+    let rawText: String
+    let sentenceMeaning: String?
+    let candidates: [AIExplanationCandidatePreview]
+
+    init(
+        rawText: String,
+        sentenceMeaning: String?,
+        candidates: [AIExplanationCandidatePreview]
+    ) {
+        self.rawText = rawText
+        self.sentenceMeaning = Self.nonBlank(sentenceMeaning)
+        self.candidates = candidates
+    }
+
+    private static func nonBlank(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return TextNormalizer.isBlank(trimmed) ? nil : trimmed
+    }
+}
+
+private struct AIExplanationCandidatePreview: Identifiable {
+    let id: String
+    let term: String
+    let importance: Importance
+    let chineseMeaning: String?
+    let aiContextExplanation: String?
+
+    init(candidate: AIAnalysisCandidate) {
+        id = "\(TextNormalizer.normalized(candidate.term))-\(candidate.termType.rawValue)-\(candidate.importance.rawValue)"
+        term = candidate.term
+        importance = candidate.importance
+        chineseMeaning = Self.nonBlank(candidate.chineseMeaning)
+        aiContextExplanation = Self.nonBlank(candidate.aiContextExplanation)
+    }
+
+    private static func nonBlank(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return TextNormalizer.isBlank(trimmed) ? nil : trimmed
     }
 }

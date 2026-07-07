@@ -13,7 +13,9 @@ struct InboxView: View {
     @State private var analyzingRecordID: UUID?
 
     private var visibleRecords: [InputRecordModel] {
-        records.filter { $0.status != .ignored }
+        records.filter { record in
+            record.status != .ignored && record.status != .analyzing
+        }
     }
 
     private var selectedRecord: InputRecordModel? {
