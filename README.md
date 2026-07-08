@@ -24,7 +24,15 @@ The current implementation follows the engineering plan in [docs](docs/README.md
 
 ## Build And Run
 
-Use the project-local run script:
+Use the root app entrypoint:
+
+```bash
+./WordNote.command
+```
+
+It builds the SwiftPM target, stages `dist/WordNote.app`, and launches the app bundle.
+
+For lower-level launch modes, use the project-local run script directly:
 
 ```bash
 ./script/build_and_run.sh
