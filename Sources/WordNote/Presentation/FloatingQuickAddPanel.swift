@@ -27,6 +27,11 @@ final class QuickAddPanelController {
 
     func close() {
         panel?.orderOut(nil)
+        NotificationCenter.default.post(
+            name: .quickAddPanelFocusDidChange,
+            object: panel,
+            userInfo: [QuickAddPanelFocusUserInfoKey.isFocused: false]
+        )
     }
 
     private func makePanel() -> QuickAddFloatingPanel {
@@ -91,6 +96,24 @@ final class QuickAddPanelController {
 private final class QuickAddFloatingPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
+
+    override func becomeKey() {
+        super.becomeKey()
+        NotificationCenter.default.post(
+            name: .quickAddPanelFocusDidChange,
+            object: self,
+            userInfo: [QuickAddPanelFocusUserInfoKey.isFocused: true]
+        )
+    }
+
+    override func resignKey() {
+        super.resignKey()
+        NotificationCenter.default.post(
+            name: .quickAddPanelFocusDidChange,
+            object: self,
+            userInfo: [QuickAddPanelFocusUserInfoKey.isFocused: false]
+        )
+    }
 }
 
 private enum FloatingQuickAddMetrics {
@@ -99,7 +122,7 @@ private enum FloatingQuickAddMetrics {
     static let explanationBaseHeight: CGFloat = 102
     static let minExpandedHeight: CGFloat = 132
     static let maxExpandedHeight: CGFloat = 270
-    static let explanationDisplayDurationNanoseconds: UInt64 = 10_000_000_000
+    static let explanationDisplayDurationSeconds: TimeInterval = 10
 
     static var collapsedPanelSize: NSSize {
         NSSize(width: width, height: collapsedHeight)
@@ -123,7 +146,11 @@ private struct FloatingQuickAddPanelView: View {
     @State private var rawText = ""
     @State private var displayedExplanation: AIExplanationPreview?
     @State private var explanationHideToken = UUID()
+    @State private var explanationHideTask: Task<Void, Never>?
+    @State private var explanationHideStartedAt: Date?
+    @State private var explanationRemainingHideTime = FloatingQuickAddMetrics.explanationDisplayDurationSeconds
     @State private var explanationContentHeight: CGFloat = 0
+    @State private var panelIsFocused = false
 
     private var canSubmit: Bool {
         !TextNormalizer.isBlank(rawText)
@@ -181,14 +208,22 @@ private struct FloatingQuickAddPanelView: View {
             onHeightChange(preferredPanelHeight)
         }
         .onReceive(NotificationCenter.default.publisher(for: .quickAddPanelDidShow)) { _ in
+            updatePanelFocus(true)
             focusInput()
             onHeightChange(preferredPanelHeight)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .quickAddPanelFocusDidChange)) { notification in
+            let isFocused = notification.userInfo?[QuickAddPanelFocusUserInfoKey.isFocused] as? Bool ?? false
+            updatePanelFocus(isFocused)
         }
         .onChange(of: latestExplanationKey) {
             showLatestExplanation()
         }
         .onChange(of: preferredPanelHeight) {
             onHeightChange(preferredPanelHeight)
+        }
+        .onDisappear {
+            cancelExplanationHideTimer()
         }
         .onExitCommand(perform: onClose)
     }
@@ -241,22 +276,74 @@ private struct FloatingQuickAddPanelView: View {
 
     private func showLatestExplanation() {
         guard let latestAIExplanation = analysisQueue.latestAIExplanation else {
-            displayedExplanation = nil
+            hideExplanation()
             return
         }
 
         displayedExplanation = latestAIExplanation
         explanationContentHeight = 0
+        explanationRemainingHideTime = FloatingQuickAddMetrics.explanationDisplayDurationSeconds
+        explanationHideStartedAt = nil
 
-        let hideToken = UUID()
-        explanationHideToken = hideToken
+        explanationHideToken = UUID()
+        scheduleExplanationHideIfNeeded()
+    }
 
-        Task { @MainActor in
-            try? await Task.sleep(nanoseconds: FloatingQuickAddMetrics.explanationDisplayDurationNanoseconds)
-            if explanationHideToken == hideToken {
-                displayedExplanation = nil
+    private func updatePanelFocus(_ isFocused: Bool) {
+        guard panelIsFocused != isFocused else { return }
+        panelIsFocused = isFocused
+
+        if isFocused {
+            pauseExplanationHideTimer()
+        } else {
+            scheduleExplanationHideIfNeeded()
+        }
+    }
+
+    private func scheduleExplanationHideIfNeeded() {
+        guard displayedExplanation != nil else { return }
+        guard !panelIsFocused else { return }
+
+        if explanationRemainingHideTime <= 0 {
+            hideExplanation()
+            return
+        }
+
+        cancelExplanationHideTimer()
+
+        let hideToken = explanationHideToken
+        let remainingNanoseconds = UInt64(explanationRemainingHideTime * 1_000_000_000)
+        explanationHideStartedAt = Date()
+
+        explanationHideTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: remainingNanoseconds)
+            guard !Task.isCancelled else { return }
+            if explanationHideToken == hideToken, !panelIsFocused {
+                hideExplanation()
             }
         }
+    }
+
+    private func pauseExplanationHideTimer() {
+        cancelExplanationHideTimer()
+
+        guard let explanationHideStartedAt else { return }
+        let elapsedTime = Date().timeIntervalSince(explanationHideStartedAt)
+        explanationRemainingHideTime = max(0, explanationRemainingHideTime - elapsedTime)
+        self.explanationHideStartedAt = nil
+    }
+
+    private func cancelExplanationHideTimer() {
+        explanationHideTask?.cancel()
+        explanationHideTask = nil
+    }
+
+    private func hideExplanation() {
+        cancelExplanationHideTimer()
+        displayedExplanation = nil
+        explanationHideStartedAt = nil
+        explanationRemainingHideTime = FloatingQuickAddMetrics.explanationDisplayDurationSeconds
+        explanationHideToken = UUID()
     }
 
     private func focusInput() {
@@ -341,4 +428,9 @@ private extension View {
 
 private extension Notification.Name {
     static let quickAddPanelDidShow = Notification.Name("WordNoteQuickAddPanelDidShow")
+    static let quickAddPanelFocusDidChange = Notification.Name("WordNoteQuickAddPanelFocusDidChange")
+}
+
+private enum QuickAddPanelFocusUserInfoKey {
+    static let isFocused = "isFocused"
 }
