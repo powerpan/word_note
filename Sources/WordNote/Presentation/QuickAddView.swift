@@ -4,6 +4,7 @@ import WordNoteCore
 
 struct QuickAddView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(QuickAddAnalysisQueue.self) private var analysisQueue
     @AppStorage("defaultSourceType") private var defaultSourceType = SourceType.other.rawValue
     @Query(sort: \CourseModel.courseName) private var courses: [CourseModel]
 
@@ -13,10 +14,6 @@ struct QuickAddView: View {
     @State private var note = ""
     @State private var statusMessage: String?
     @State private var errorMessage: String?
-    @State private var analysisQueue: [QueuedAnalysisRecord] = []
-    @State private var isProcessingAnalysisQueue = false
-    @State private var activeAnalysisTitle: String?
-    @State private var latestAIExplanation: AIExplanationPreview?
 
     private var canSave: Bool {
         !TextNormalizer.isBlank(rawText)
@@ -103,11 +100,11 @@ struct QuickAddView: View {
                         .keyboardShortcut(.return, modifiers: [.command])
                         .disabled(!canSave)
 
-                        if isProcessingAnalysisQueue || !analysisQueue.isEmpty {
+                        if analysisQueue.isBusy {
                             VStack(alignment: .leading, spacing: 8) {
-                                ProgressView(queueStatusText)
-                                if !analysisQueue.isEmpty {
-                                    Text("\(analysisQueue.count) queued")
+                                ProgressView(analysisQueue.queueStatusText)
+                                if analysisQueue.queuedCount > 0 {
+                                    Text("\(analysisQueue.queuedCount) queued")
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                 }
@@ -121,11 +118,11 @@ struct QuickAddView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 8))
                 }
 
-                if let statusMessage {
+                if let statusMessage = statusMessage ?? analysisQueue.statusMessage {
                     StatusBanner(message: statusMessage, kind: .success)
                 }
 
-                if let errorMessage {
+                if let errorMessage = errorMessage ?? analysisQueue.errorMessage {
                     StatusBanner(message: errorMessage, kind: .warning)
                 }
             }
@@ -158,24 +155,21 @@ struct QuickAddView: View {
     }
 
     private func saveAndAnalyze() {
-        let service = InputRecordService(modelContext: modelContext)
         statusMessage = nil
         errorMessage = nil
 
         do {
-            let createdRecord = try service.createAnalyzing(
+            let courseName = courses.first { $0.id == selectedCourseID }?.courseName
+            try analysisQueue.enqueue(
                 rawText: rawText,
                 courseID: selectedCourseID,
+                courseName: courseName,
                 sourceType: selectedSourceType,
                 note: note
             )
-            let courseName = courses.first { $0.id == selectedCourseID }?.courseName
 
             rawText = ""
             note = ""
-            analysisQueue.append(QueuedAnalysisRecord(record: createdRecord, courseName: courseName))
-            statusMessage = "Queued for AI analysis: \(createdRecord.rawText)"
-            processNextQueuedAnalysisIfNeeded()
         } catch {
             statusMessage = nil
             errorMessage = error.localizedDescription
@@ -186,20 +180,13 @@ struct QuickAddView: View {
         selectedSourceType = SourceType(rawValue: defaultSourceType) ?? .other
     }
 
-    private var queueStatusText: String {
-        if let activeAnalysisTitle {
-            return "Analyzing: \(activeAnalysisTitle)"
-        }
-        return "Preparing AI analysis..."
-    }
-
     @ViewBuilder
     private var aiExplanationPanel: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("AI 釋義產出後展示")
                 .font(.headline)
 
-            if let latestAIExplanation {
+            if let latestAIExplanation = analysisQueue.latestAIExplanation {
                 VStack(alignment: .leading, spacing: 10) {
                     Text(latestAIExplanation.rawText)
                         .font(.subheadline.weight(.semibold))
@@ -256,105 +243,5 @@ struct QuickAddView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(nsColor: .controlBackgroundColor))
         .clipShape(RoundedRectangle(cornerRadius: 8))
-    }
-
-    private func processNextQueuedAnalysisIfNeeded() {
-        guard !isProcessingAnalysisQueue, !analysisQueue.isEmpty else { return }
-
-        isProcessingAnalysisQueue = true
-        let queuedRecord = analysisQueue.removeFirst()
-        activeAnalysisTitle = queuedRecord.record.rawText
-
-        Task { @MainActor in
-            let service = InputRecordService(modelContext: modelContext)
-
-            do {
-                guard let apiKey = DeepSeekAPIKeyResolver.resolve() else {
-                    try service.markFailed(queuedRecord.record, summary: AIAnalysisError.missingAPIKey.localizedDescription)
-                    throw AIAnalysisError.missingAPIKey
-                }
-
-                let analysisService = AIAnalysisService(
-                    client: DeepSeekChatClient(apiKey: apiKey)
-                )
-                let result = try await analysisService.analyze(
-                    AIAnalysisRequest(
-                        rawText: queuedRecord.record.rawText,
-                        courseName: queuedRecord.courseName,
-                        sourceType: queuedRecord.record.sourceType,
-                        userNote: queuedRecord.record.note
-                    )
-                )
-                let candidates = try service.applyAnalysisResult(result, to: queuedRecord.record)
-
-                latestAIExplanation = AIExplanationPreview(
-                    rawText: queuedRecord.record.rawText,
-                    sentenceMeaning: result.sentenceMeaning,
-                    candidates: result.candidates.map(AIExplanationCandidatePreview.init(candidate:))
-                )
-                statusMessage = "Analyzed \(queuedRecord.record.rawText). Candidates: \(candidates.count)"
-                errorMessage = nil
-            } catch {
-                if queuedRecord.record.status != .failed {
-                    try? service.markFailed(queuedRecord.record, summary: error.localizedDescription)
-                }
-                statusMessage = nil
-                errorMessage = "Analysis failed for \(queuedRecord.record.rawText): \(error.localizedDescription)"
-            }
-
-            isProcessingAnalysisQueue = false
-            activeAnalysisTitle = nil
-            processNextQueuedAnalysisIfNeeded()
-        }
-    }
-}
-
-private struct QueuedAnalysisRecord: Identifiable {
-    let id = UUID()
-    let record: InputRecordModel
-    let courseName: String?
-}
-
-private struct AIExplanationPreview {
-    let rawText: String
-    let sentenceMeaning: String?
-    let candidates: [AIExplanationCandidatePreview]
-
-    init(
-        rawText: String,
-        sentenceMeaning: String?,
-        candidates: [AIExplanationCandidatePreview]
-    ) {
-        self.rawText = rawText
-        self.sentenceMeaning = Self.nonBlank(sentenceMeaning)
-        self.candidates = candidates
-    }
-
-    private static func nonBlank(_ value: String?) -> String? {
-        guard let value else { return nil }
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        return TextNormalizer.isBlank(trimmed) ? nil : trimmed
-    }
-}
-
-private struct AIExplanationCandidatePreview: Identifiable {
-    let id: String
-    let term: String
-    let importance: Importance
-    let chineseMeaning: String?
-    let aiContextExplanation: String?
-
-    init(candidate: AIAnalysisCandidate) {
-        id = "\(TextNormalizer.normalized(candidate.term))-\(candidate.termType.rawValue)-\(candidate.importance.rawValue)"
-        term = candidate.term
-        importance = candidate.importance
-        chineseMeaning = Self.nonBlank(candidate.chineseMeaning)
-        aiContextExplanation = Self.nonBlank(candidate.aiContextExplanation)
-    }
-
-    private static func nonBlank(_ value: String?) -> String? {
-        guard let value else { return nil }
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        return TextNormalizer.isBlank(trimmed) ? nil : trimmed
     }
 }
