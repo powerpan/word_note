@@ -34,7 +34,7 @@ struct WordNoteApp: App {
                 .environment(analysisQueue)
                 .modelContainer(modelContainer)
         }
-        .defaultSize(width: 1200, height: 760)
+        .defaultSize(width: 1320, height: 800)
         .windowResizability(.contentMinSize)
         .windowStyle(.titleBar)
         .commands {

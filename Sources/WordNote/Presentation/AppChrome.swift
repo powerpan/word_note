@@ -6,19 +6,39 @@ struct PageHeader<Actions: View>: View {
     @ViewBuilder let actions: Actions
 
     var body: some View {
+        ViewThatFits(in: .horizontal) {
+            horizontalLayout
+            verticalLayout
+        }
+    }
+
+    private var horizontalLayout: some View {
         HStack(alignment: .firstTextBaseline) {
-            VStack(alignment: .leading, spacing: 5) {
-                Text(title)
-                    .font(.system(size: 30, weight: .bold))
-                    .lineLimit(1)
-                Text(subtitle)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-            }
+            titleBlock
 
             Spacer(minLength: 16)
             actions
+        }
+    }
+
+    private var verticalLayout: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            titleBlock
+            actions
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var titleBlock: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(title)
+                .font(.system(size: 30, weight: .bold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.86)
+            Text(subtitle)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
         }
     }
 }

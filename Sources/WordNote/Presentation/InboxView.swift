@@ -37,100 +37,26 @@ struct InboxView: View {
     }
 
     var body: some View {
-        HStack(spacing: 0) {
-            List(selection: $selectedRecordID) {
-                if !activeRecords.isEmpty {
-                    Section("Needs Review") {
-                        ForEach(activeRecords, id: \.id) { record in
-                            InboxRow(record: record, courseName: courseName(for: record.courseID))
-                                .tag(record.id)
-                        }
-                    }
-                }
+        GeometryReader { proxy in
+            let listWidth = InboxLayoutMetrics.listWidth(for: proxy.size.width)
 
-                if !confirmedRecords.isEmpty {
-                    Section {
-                        HStack(spacing: 8) {
-                            Image(systemName: confirmedRecordsExpanded ? "chevron.down" : "chevron.right")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .frame(width: 10)
-                            Label("Confirmed", systemImage: "checkmark.circle")
-                            Spacer()
-                            Text(confirmedRecords.count, format: .number)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            confirmedRecordsExpanded.toggle()
-                        }
+            HStack(spacing: 0) {
+                recordList
+                    .frame(
+                        minWidth: InboxLayoutMetrics.minListWidth,
+                        idealWidth: listWidth,
+                        maxWidth: listWidth
+                    )
+                    .layoutPriority(1)
 
-                        if confirmedRecordsExpanded {
-                            ForEach(confirmedRecords, id: \.id) { record in
-                                InboxRow(
-                                    record: record,
-                                    courseName: courseName(for: record.courseID),
-                                    isConfirmed: true
-                                )
-                                .tag(record.id)
-                            }
-                        }
-                    }
-                }
-            }
-            .safeAreaInset(edge: .top, spacing: 0) {
-                PageHeader(
-                    title: "Inbox",
-                    subtitle: "\(activeRecords.count) active, \(confirmedRecords.count) confirmed"
-                ) {
-                    EmptyView()
-                }
-                .padding(18)
-                .background(Color(nsColor: .controlBackgroundColor))
-            }
-            .overlay {
-                if selectableRecords.isEmpty {
-                    EmptyStateView(
-                        systemImage: "tray",
-                        title: "No Inbox Records",
-                        message: "Use Quick Add to save a word, phrase, or sentence."
-                    ) {
-                        EmptyView()
-                    }
-                    .allowsHitTesting(false)
-                }
-            }
-            .frame(width: 380)
-            .background(Color(nsColor: .controlBackgroundColor))
+                Divider()
 
-            Divider()
-
-            if let selectedRecord {
-                InputRecordDetailView(
-                    record: selectedRecord,
-                    courseName: courseName(for: selectedRecord.courseID),
-                    candidates: candidates.filter { $0.inputRecordID == selectedRecord.id },
-                    isAnalyzing: analyzingRecordID == selectedRecord.id,
-                    errorMessage: $errorMessage,
-                    onAnalyze: analyze,
-                    onIgnore: ignore,
-                    onDelete: delete
-                )
-            } else {
-                EmptyStateView(
-                    systemImage: "doc.text",
-                    title: "No Record Selected",
-                    message: selectableRecords.isEmpty
-                        ? "Saved input records will appear here."
-                        : "Select an active record, or expand Confirmed to inspect handled records."
-                ) {
-                    EmptyView()
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                detailPane
+                    .frame(minWidth: InboxLayoutMetrics.minDetailWidth)
+                    .layoutPriority(2)
             }
         }
-        .frame(minWidth: 980, minHeight: 620)
+        .frame(minWidth: InboxLayoutMetrics.minContentWidth, minHeight: InboxLayoutMetrics.minContentHeight)
         .onAppear(perform: maintainSelection)
         .onChange(of: selectableRecords.map(\.id)) {
             maintainSelection()
@@ -140,6 +66,100 @@ struct InboxView: View {
         }
         .onChange(of: confirmedRecordsExpanded) {
             maintainSelection()
+        }
+    }
+
+    private var recordList: some View {
+        List(selection: $selectedRecordID) {
+            if !activeRecords.isEmpty {
+                Section("Needs Review") {
+                    ForEach(activeRecords, id: \.id) { record in
+                        InboxRow(record: record, courseName: courseName(for: record.courseID))
+                            .tag(record.id)
+                    }
+                }
+            }
+
+            if !confirmedRecords.isEmpty {
+                Section {
+                    HStack(spacing: 8) {
+                        Image(systemName: confirmedRecordsExpanded ? "chevron.down" : "chevron.right")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .frame(width: 10)
+                        Label("Confirmed", systemImage: "checkmark.circle")
+                        Spacer()
+                        Text(confirmedRecords.count, format: .number)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        confirmedRecordsExpanded.toggle()
+                    }
+
+                    if confirmedRecordsExpanded {
+                        ForEach(confirmedRecords, id: \.id) { record in
+                            InboxRow(
+                                record: record,
+                                courseName: courseName(for: record.courseID),
+                                isConfirmed: true
+                            )
+                            .tag(record.id)
+                        }
+                    }
+                }
+            }
+        }
+        .safeAreaInset(edge: .top, spacing: 0) {
+            PageHeader(
+                title: "Inbox",
+                subtitle: "\(activeRecords.count) active, \(confirmedRecords.count) confirmed"
+            ) {
+                EmptyView()
+            }
+            .padding(18)
+            .background(Color(nsColor: .controlBackgroundColor))
+        }
+        .overlay {
+            if selectableRecords.isEmpty {
+                EmptyStateView(
+                    systemImage: "tray",
+                    title: "No Inbox Records",
+                    message: "Use Quick Add to save a word, phrase, or sentence."
+                ) {
+                    EmptyView()
+                }
+                .allowsHitTesting(false)
+            }
+        }
+        .background(Color(nsColor: .controlBackgroundColor))
+    }
+
+    @ViewBuilder
+    private var detailPane: some View {
+        if let selectedRecord {
+            InputRecordDetailView(
+                record: selectedRecord,
+                courseName: courseName(for: selectedRecord.courseID),
+                candidates: candidates.filter { $0.inputRecordID == selectedRecord.id },
+                isAnalyzing: analyzingRecordID == selectedRecord.id,
+                errorMessage: $errorMessage,
+                onAnalyze: analyze,
+                onIgnore: ignore,
+                onDelete: delete
+            )
+        } else {
+            EmptyStateView(
+                systemImage: "doc.text",
+                title: "No Record Selected",
+                message: selectableRecords.isEmpty
+                    ? "Saved input records will appear here."
+                    : "Select an active record, or expand Confirmed to inspect handled records."
+            ) {
+                EmptyView()
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
@@ -218,6 +238,18 @@ struct InboxView: View {
 
     private var preferredSelectedRecord: InputRecordModel? {
         activeRecords.first ?? (confirmedRecordsExpanded ? confirmedRecords.first : nil)
+    }
+}
+
+private enum InboxLayoutMetrics {
+    static let minContentWidth: CGFloat = 900
+    static let minContentHeight: CGFloat = 620
+    static let minListWidth: CGFloat = 320
+    static let maxListWidth: CGFloat = 420
+    static let minDetailWidth: CGFloat = 560
+
+    static func listWidth(for contentWidth: CGFloat) -> CGFloat {
+        min(max(contentWidth * 0.36, minListWidth), maxListWidth)
     }
 }
 
