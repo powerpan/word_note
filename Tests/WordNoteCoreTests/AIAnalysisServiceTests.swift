@@ -28,6 +28,11 @@ final class AIAnalysisServiceTests: XCTestCase {
         XCTAssertEqual(result.candidates.first?.term, "regularization")
         XCTAssertEqual(client.lastResponseFormat, .jsonObject)
         XCTAssertTrue(client.lastMessages.contains { $0.content.contains("Return a JSON object") })
+
+        let promptText = client.lastMessages.map(\.content).joined(separator: "\n")
+        XCTAssertTrue(promptText.contains("general Chinese meaning or meanings"))
+        XCTAssertTrue(promptText.contains("AI/CS-specific explanation only when"))
+        XCTAssertTrue(promptText.contains("do not force AI-context wording"))
     }
 }
 
