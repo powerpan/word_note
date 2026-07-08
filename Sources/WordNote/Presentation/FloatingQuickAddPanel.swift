@@ -94,9 +94,8 @@ private final class QuickAddFloatingPanel: NSPanel {
 }
 
 private enum FloatingQuickAddMetrics {
-    static let width: CGFloat = 430
-    static let collapsedHeight: CGFloat = 126
-    static let collapsedWithMessageHeight: CGFloat = 150
+    static let width: CGFloat = 360
+    static let collapsedHeight: CGFloat = 60
     static let minExpandedHeight: CGFloat = 190
     static let maxExpandedHeight: CGFloat = 270
     static let explanationDisplayDurationNanoseconds: UInt64 = 10_000_000_000
@@ -121,8 +120,6 @@ private struct FloatingQuickAddPanelView: View {
     @AppStorage("defaultSourceType") private var defaultSourceType = SourceType.other.rawValue
     @FocusState private var inputFocused: Bool
     @State private var rawText = ""
-    @State private var localMessage: String?
-    @State private var localMessageIsError = false
     @State private var displayedExplanation: AIExplanationPreview?
     @State private var explanationHideToken = UUID()
 
@@ -151,29 +148,19 @@ private struct FloatingQuickAddPanelView: View {
             return FloatingQuickAddMetrics.expandedHeight(for: displayedExplanation)
         }
 
-        if localMessage != nil {
-            return FloatingQuickAddMetrics.collapsedWithMessageHeight
-        }
-
         return FloatingQuickAddMetrics.collapsedHeight
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 11) {
-            header
-
             inputRow
-
-            if displayedExplanation == nil, let localMessage {
-                localStatusMessage(localMessage)
-            }
 
             if let displayedExplanation {
                 Divider()
                 FloatingChineseExplanationView(explanation: displayedExplanation)
             }
         }
-        .padding(14)
+        .padding(10)
         .frame(
             width: FloatingQuickAddMetrics.width,
             height: preferredPanelHeight,
@@ -201,44 +188,15 @@ private struct FloatingQuickAddPanelView: View {
         .onExitCommand(perform: onClose)
     }
 
-    private var header: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "plus.circle.fill")
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(Color.accentColor)
-
-            Text("Quick Add")
-                .font(.system(size: 13, weight: .semibold))
-
-            Spacer()
-
-            if analysisQueue.isBusy {
-                Label(statusTitle, systemImage: "sparkles")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .labelStyle(.titleAndIcon)
-            }
-
-            Button(action: onClose) {
-                Image(systemName: "xmark")
-                    .font(.system(size: 11, weight: .semibold))
-                    .frame(width: 22, height: 22)
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
-            .help("Close")
-        }
-    }
-
     private var inputRow: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
             TextField("Add word, phrase, or sentence", text: $rawText)
                 .textFieldStyle(.plain)
-                .font(.system(size: 15, weight: .medium))
+                .font(.system(size: 14, weight: .medium))
                 .focused($inputFocused)
                 .onSubmit(submit)
-                .padding(.horizontal, 14)
-                .frame(height: 44)
+                .padding(.horizontal, 13)
+                .frame(height: 40)
                 .background(Color(nsColor: .textBackgroundColor).opacity(0.88))
                 .clipShape(Capsule())
                 .overlay {
@@ -248,28 +206,13 @@ private struct FloatingQuickAddPanelView: View {
 
             Button(action: submit) {
                 Image(systemName: "arrow.up.circle.fill")
-                    .font(.system(size: 28, weight: .semibold))
+                    .font(.system(size: 26, weight: .semibold))
             }
             .buttonStyle(.plain)
             .disabled(!canSubmit)
             .foregroundStyle(canSubmit ? Color.accentColor : Color.secondary.opacity(0.45))
             .help("Add to AI analysis queue")
         }
-    }
-
-    private func localStatusMessage(_ message: String) -> some View {
-        Label(message, systemImage: localMessageIsError ? "exclamationmark.triangle" : "checkmark.circle")
-            .font(.caption)
-            .lineLimit(1)
-            .foregroundStyle(localMessageIsError ? Color.orange : Color.green)
-            .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var statusTitle: String {
-        if analysisQueue.queuedCount > 0 {
-            return "\(analysisQueue.queuedCount) queued"
-        }
-        return "Analyzing"
     }
 
     private func submit() {
@@ -285,10 +228,9 @@ private struct FloatingQuickAddPanelView: View {
                 note: nil
             )
             rawText = ""
-            showLocalMessage("Queued", isError: false)
             focusInput()
         } catch {
-            showLocalMessage(error.localizedDescription, isError: true)
+            NSSound.beep()
         }
     }
 
@@ -299,7 +241,6 @@ private struct FloatingQuickAddPanelView: View {
         }
 
         displayedExplanation = latestAIExplanation
-        localMessage = nil
 
         let hideToken = UUID()
         explanationHideToken = hideToken
@@ -316,18 +257,6 @@ private struct FloatingQuickAddPanelView: View {
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 60_000_000)
             inputFocused = true
-        }
-    }
-
-    private func showLocalMessage(_ message: String, isError: Bool) {
-        localMessage = message
-        localMessageIsError = isError
-
-        Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 1_600_000_000)
-            if localMessage == message {
-                localMessage = nil
-            }
         }
     }
 }
