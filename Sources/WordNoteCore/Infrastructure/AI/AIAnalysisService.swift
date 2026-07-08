@@ -33,6 +33,9 @@ public struct AIAnalysisService {
         - If the input is a sentence, explain the sentence meaning and extract only valuable terms, phrases, technical concepts, fixed expressions, or sentence patterns.
         - Do not explain simple function words unless they have special AI/CS meaning in context.
         - Prefer precise AI/CS explanations over generic dictionary meanings.
+        - Chinese meanings must explain how the term is used in this input. Avoid bare synonym lists.
+        - For each chinese_meaning, write 1 to 2 natural Chinese sentences, usually 18 to 45 Chinese characters.
+        - Include the core meaning and the contextual nuance, but do not include example sentences inside chinese_meaning.
         - Return strict JSON only. Do not wrap it in Markdown.
         - The response must be a JSON object with keys: input_type, sentence_meaning, items.
         - Keep the candidate list concise, usually 1 to 5 items.
@@ -53,7 +56,7 @@ public struct AIAnalysisService {
               "importance": "low | medium | high",
               "category": "general | academic | AI/ML | DL | NLP | CV | math | programming",
               "reason": "",
-              "chinese_meaning": "",
+              "chinese_meaning": "Use 1-2 Chinese sentences to explain the meaning in this context, not just synonyms.",
               "english_definition": "",
               "ai_context_explanation": "",
               "example_sentence": "",

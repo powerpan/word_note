@@ -96,7 +96,8 @@ private final class QuickAddFloatingPanel: NSPanel {
 private enum FloatingQuickAddMetrics {
     static let width: CGFloat = 360
     static let collapsedHeight: CGFloat = 60
-    static let minExpandedHeight: CGFloat = 190
+    static let explanationBaseHeight: CGFloat = 102
+    static let minExpandedHeight: CGFloat = 132
     static let maxExpandedHeight: CGFloat = 270
     static let explanationDisplayDurationNanoseconds: UInt64 = 10_000_000_000
 
@@ -104,11 +105,11 @@ private enum FloatingQuickAddMetrics {
         NSSize(width: width, height: collapsedHeight)
     }
 
-    static func expandedHeight(for explanation: AIExplanationPreview) -> CGFloat {
-        let chineseCandidateCount = explanation.candidates.filter { $0.chineseMeaning != nil }.count
-        let sentenceHeight: CGFloat = explanation.sentenceMeaning == nil ? 0 : 34
-        let candidateHeight = min(CGFloat(chineseCandidateCount) * 42, 104)
-        return min(max(168 + sentenceHeight + candidateHeight, minExpandedHeight), maxExpandedHeight)
+    static func expandedHeight(for explanationContentHeight: CGFloat) -> CGFloat {
+        min(
+            max(explanationBaseHeight + explanationContentHeight, minExpandedHeight),
+            maxExpandedHeight
+        )
     }
 }
 
@@ -122,6 +123,7 @@ private struct FloatingQuickAddPanelView: View {
     @State private var rawText = ""
     @State private var displayedExplanation: AIExplanationPreview?
     @State private var explanationHideToken = UUID()
+    @State private var explanationContentHeight: CGFloat = 0
 
     private var canSubmit: Bool {
         !TextNormalizer.isBlank(rawText)
@@ -144,8 +146,8 @@ private struct FloatingQuickAddPanelView: View {
     }
 
     private var preferredPanelHeight: CGFloat {
-        if let displayedExplanation {
-            return FloatingQuickAddMetrics.expandedHeight(for: displayedExplanation)
+        if displayedExplanation != nil {
+            return FloatingQuickAddMetrics.expandedHeight(for: explanationContentHeight)
         }
 
         return FloatingQuickAddMetrics.collapsedHeight
@@ -157,7 +159,10 @@ private struct FloatingQuickAddPanelView: View {
 
             if let displayedExplanation {
                 Divider()
-                FloatingChineseExplanationView(explanation: displayedExplanation)
+                FloatingChineseExplanationView(
+                    explanation: displayedExplanation,
+                    contentHeight: $explanationContentHeight
+                )
             }
         }
         .padding(10)
@@ -241,6 +246,7 @@ private struct FloatingQuickAddPanelView: View {
         }
 
         displayedExplanation = latestAIExplanation
+        explanationContentHeight = 0
 
         let hideToken = UUID()
         explanationHideToken = hideToken
@@ -263,6 +269,7 @@ private struct FloatingQuickAddPanelView: View {
 
 private struct FloatingChineseExplanationView: View {
     let explanation: AIExplanationPreview
+    @Binding var contentHeight: CGFloat
 
     private var chineseCandidates: [AIExplanationCandidatePreview] {
         explanation.candidates.filter { $0.chineseMeaning != nil }
@@ -303,9 +310,32 @@ private struct FloatingChineseExplanationView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.trailing, 4)
+                .measureHeight($contentHeight)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+}
+
+private struct MeasuredHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+private extension View {
+    func measureHeight(_ height: Binding<CGFloat>) -> some View {
+        background {
+            GeometryReader { proxy in
+                Color.clear
+                    .preference(key: MeasuredHeightKey.self, value: proxy.size.height)
+            }
+        }
+        .onPreferenceChange(MeasuredHeightKey.self) { measuredHeight in
+            height.wrappedValue = measuredHeight
+        }
     }
 }
 
