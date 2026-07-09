@@ -99,6 +99,7 @@ WordNoteApp
 
 - createDraft(rawText, course, sourceType, note)
 - saveAndAnalyze(...)
+- resolveExistingTerm(rawText)
 - markAnalyzing(recordID)
 - markAnalyzed(recordID, candidates)
 - markFailed(recordID, error)
@@ -125,6 +126,8 @@ WordNoteApp
 - delete Term。
 - search and filter。
 - duplicate detection。
+- exact lookup by normalizedTerm。
+- bump existing Term after duplicate Quick Add hit。
 
 ### CourseService
 
@@ -141,6 +144,8 @@ WordNoteApp
 - record review feedback。
 - update review counters。
 - compute nextReviewAt。
+- promote existing Term into due queue when duplicate input is detected。
+- support P1 review modes and simplified adaptive scheduling。
 
 ### SettingsService
 
@@ -165,6 +170,11 @@ Domain 不依賴 SwiftUI、SwiftData、URLSession 或 env 文件。
 ```text
 QuickAddView
   -> QuickAddViewModel.saveAndAnalyze()
+  -> VocabularyService.findExactTerm(normalized(rawText))
+  -> if existing Term:
+       -> VocabularyService.bumpDuplicateHit(term)
+       -> QuickAddViewModel.showExistingExplanation(term)
+       -> stop, no DeepSeek request
   -> InputRecordService.create(status=analyzing)
   -> AIAnalysisService.analyze(rawText, metadata)
   -> DeepSeekClient.send()
@@ -173,6 +183,13 @@ QuickAddView
   -> InputRecordRepository.update(status=analyzed)
   -> CandidateReviewView opens record
 ```
+
+精確命中規則：
+
+- 只比較 normalized(rawText) 和 Term.normalizedTerm。
+- 不做包含匹配、模糊匹配或 stemming。
+- 輸入句子包含既有詞條時仍走 DeepSeek，因為句子可能包含新詞或新的上下文。
+- 命中時不創建 InputRecord，避免 Inbox 被重複查詞污染。
 
 ## 資料流：Save Selected Candidates
 
@@ -184,6 +201,27 @@ CandidateReviewView
   -> CandidateRepository.markSaved()
   -> InputRecordService.updateCompletionStatus()
 ```
+
+## 資料流：Duplicate Quick Add Hit
+
+```text
+QuickAddView / FloatingQuickAddPanel
+  -> QuickAddAnalysisQueue.enqueue(rawText)
+  -> TextNormalizer.normalized(rawText)
+  -> VocabularyService.findExactTerm(normalizedTerm)
+  -> VocabularyService.bumpDuplicateHit(term, now)
+  -> latestAIExplanation = preview built from Term
+  -> UI displays existing explanation immediately
+```
+
+`bumpDuplicateHit` 必須是原子資料更新：
+
+- `nextReviewAt = now`。
+- 若 `masteryLevel` 為 familiar/mastered，降為 vague；new/vague 保持不提高。
+- `importance` 最高提升一級。
+- `duplicateHitCount += 1`。
+- `lastDuplicateHitAt = now`。
+- `wrongCount` 只在超過冷卻窗口時 +1，避免短時間重複輸入刷高錯題統計。
 
 ## 錯誤模型
 

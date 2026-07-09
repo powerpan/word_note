@@ -148,6 +148,69 @@
 - 文檔與實作一致。
 - 已知限制記錄清楚。
 
+## P1-A: Duplicate Quick Add Hit
+
+目標：用戶再次輸入已存在詞條時，不再調用 DeepSeek，而是直接進入學習回路。
+
+任務：
+
+- VocabularyService.findExactTerm(normalizedTerm)。
+- VocabularyService.bumpDuplicateHit(term, now)。
+- QuickAddAnalysisQueue 在 enqueue 前查正式 Term。
+- 將 existing Term 組裝成 AIExplanationPreview，復用主窗口和浮窗釋義顯示。
+- duplicateHitCount、lastDuplicateHitAt、correctStreak、reviewIntervalDays schema migration。
+- 10 分鐘冷卻窗口，防止 wrongCount 被短時間重複輸入刷高。
+
+完成標準：
+
+- 精確命中 Term 時不建立 InputRecord。
+- 精確命中 Term 時不調用 DeepSeek。
+- 主 Quick Add 和浮窗都立即顯示已有釋義。
+- 命中後 Term.nextReviewAt = now。
+- importance 最多提升一級。
+- wrongCount 冷卻窗口外才 +1。
+
+## P1-B: Review Experience Upgrade
+
+目標：把 Review 從固定間隔卡片升級為可日常使用的學習回路。
+
+任務：
+
+- ReviewMode selector。
+- 中文 -> 英文卡片。
+- Review keyboard shortcuts：space, 1, 2, 3, 4。
+- Skip / Later。
+- Review session state。
+- 完成頁統計 again/hard/good/easy。
+- 錯題 / 薄弱詞入口。
+
+完成標準：
+
+- 用戶可選英文 -> 中文或中文 -> 英文。
+- 快捷鍵不干擾文本輸入。
+- Skip 不更新 Term。
+- Later 將 nextReviewAt 推遲到明天。
+- 完成頁能展示本輪統計。
+
+## P1-C: Simplified Adaptive Scheduler
+
+目標：用透明規則替代固定 1/3/7/14 天，但不引入完整 SM-2 / FSRS。
+
+任務：
+
+- ReviewScheduler 支持 correctStreak 和 reviewIntervalDays。
+- good/easy 根據 streak 漸進拉長間隔。
+- again/hard 重置 streak 並縮短間隔。
+- ReviewEvent 保存調整前後 nextReviewAt。
+- 補遷移和單元測試。
+
+完成標準：
+
+- 新詞第一次 good 不直接跳到 7 天。
+- 連續答對會逐步拉長間隔。
+- again/hard 會明確降低掌握度並提前復習。
+- 單元測試覆蓋所有 feedback 和 streak 分支。
+
 ## 推薦目錄結構
 
 ```text
@@ -190,6 +253,9 @@ WordNoteUITests/
 2. 用 mock AI 做 Quick Add -> Candidate Review -> Vocabulary 閉環。
 3. 再接入真實 DeepSeek。
 4. 最後補 Review 和 polish。
+5. P1 先做 Duplicate Quick Add Hit，因為它能立刻降低 AI 成本並提升復習價值。
+6. 再做 Review mode / keyboard / session 統計。
+7. 最後替換固定排程為簡化自適應排程。
 
 這樣可以避免一開始被 API 不穩定或本機 secrets 文件細節拖慢。
 
@@ -216,6 +282,9 @@ WordNoteUITests/
 - feat: add vocabulary crud
 - feat: add review scheduler
 - test: cover ai parser and review scheduler
+- feat: skip ai for duplicate quick add terms
+- feat: add review mode selector and shortcuts
+- feat: add adaptive review scheduler
 
 ## 風險與緩解
 

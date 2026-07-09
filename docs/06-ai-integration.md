@@ -128,9 +128,28 @@ Metadata:
 - trim。
 - 限制最大長度。
 - 偵測空輸入。
+- 查詢 Term.normalizedTerm 是否精確命中既有正式詞條。
 - 偵測過長段落並提示用戶縮短。
 
 不要在本地做複雜 NLP 拆詞，避免與 AI 判斷衝突。
+
+### DeepSeek 跳過條件
+
+Save & Analyze 前必須先執行正式詞庫精確命中檢查：
+
+```text
+normalized(rawText) == Term.normalizedTerm
+```
+
+若命中：
+
+- 不發 DeepSeek request。
+- 不建立新的 InputRecord。
+- 不建立 CandidateTerm。
+- 直接使用既有 Term 組裝釋義 preview。
+- 更新該 Term 的復習優先級和重複命中統計。
+
+若 rawText 是句子或段落，即使包含既有詞條，也不應使用包含匹配跳過 DeepSeek。只有完整輸入與既有 Term 完全一致才短路。
 
 ## 結果後處理
 
@@ -191,9 +210,12 @@ Metadata:
 
 詞庫層：
 
+- Save & Analyze 前優先查正式 Term，精確命中則跳過 AI。
 - 保存 CandidateTerm 為 Term 前檢查現有 Term.normalizedTerm。
 - MVP 提示已存在，不強制合併。
-- P1 增加合併流程。
+- P1 增加合併流程；但 Quick Add 的精確命中短路不等待合併功能。
+
+重複命中後的釋義 preview 應復用 AI preview 結構，使主 Quick Add、浮窗 Quick Add 和菜單欄入口顯示一致。
 
 ## 成本控制
 
@@ -202,6 +224,7 @@ MVP：
 - 不做自動批量分析。
 - 每次 Save & Analyze 只分析當前輸入。
 - 不在用戶未確認時反覆重新生成。
+- 已存在詞條精確命中時不調用 DeepSeek。
 
 P1 可加入：
 

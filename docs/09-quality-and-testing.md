@@ -20,7 +20,9 @@ MVP 的質量重點：
 - InputRecord 狀態流轉。
 - CandidateTerm 到 Term 的轉換。
 - duplicate detection。
+- duplicate Quick Add hit priority bump。
 - review scheduler。
+- adaptive review scheduler。
 - AI response parser。
 - validation rules。
 
@@ -30,9 +32,11 @@ MVP 的質量重點：
 
 - Save & Analyze 成功。
 - Save & Analyze 失敗。
+- Save & Analyze 精確命中既有 Term 時不調用 AI。
 - Candidate save to Term。
 - Term delete。
 - Review feedback update。
+- duplicate hit 後 Term 進入今日待復習。
 - Settings API Key 存取可用臨時 env 文件。
 
 ### UI Tests
@@ -126,6 +130,37 @@ Expected:
 - lastReviewedAt 更新。
 - ReviewEvent 建立。
 
+P1 自適應排程還要測：
+
+- good 連續答對時 correctStreak + 1。
+- good/easy 根據 correctStreak 拉長 reviewIntervalDays。
+- again/hard 重置 correctStreak。
+- mastered 詞條 again 後降為 vague。
+- nextReviewAt 不會早於 tomorrow，除非是 duplicate hit 主動加入今日復習。
+
+## Duplicate Quick Add Hit Tests
+
+輸入既有詞：
+
+```text
+regularization
+```
+
+前置：Term.normalizedTerm = `regularization`。
+
+Expected：
+
+- 不建立新的 InputRecord。
+- 不建立 CandidateTerm。
+- 不調用 AICompletionClient。
+- UI preview 使用既有 Term.chineseMeaning。
+- Term.nextReviewAt = now。
+- Term.importance 最多提升一級。
+- familiar/mastered 命中後降為 vague，new/vague 命中後不被提高。
+- duplicateHitCount + 1。
+- 超過冷卻窗口時 wrongCount + 1。
+- 冷卻窗口內重複命中不重複增加 wrongCount。
+
 ## Persistence Tests
 
 要求：
@@ -155,6 +190,9 @@ Expected:
 - 選課程後保存關聯正確。
 - Save 後輸入框清空。
 - Save & Analyze 在 API Key 缺失時提示設置。
+- 輸入既有 Term 時直接顯示既有釋義。
+- 輸入既有 Term 時不新增 Inbox 記錄。
+- 輸入既有 Term 時該詞出現在今日 Review。
 
 ### AI
 
@@ -185,6 +223,9 @@ Expected:
 - Show Answer 展示背面。
 - 四種反饋均能完成。
 - nextReviewAt 更新。
+- 中文 -> 英文模式展示中文提示並在背面展示英文答案。
+- 空格和 1/2/3/4 快捷鍵可用。
+- 完成頁展示本輪統計。
 
 ## Definition Of Done
 

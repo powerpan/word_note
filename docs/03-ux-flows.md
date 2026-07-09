@@ -50,6 +50,9 @@ Dashboard 不做大型視覺化圖表。首版只展示必要指標和入口。
 - 用戶按 Command + Enter 觸發 Save & Analyze。
 - 保存成功後清空輸入，並展示最近保存狀態。
 - AI 分析可以在背景中進行。
+- Save & Analyze 前先做本地詞庫精確命中檢查。
+- 若輸入和既有 Term.normalizedTerm 完全一致，不調用 DeepSeek，直接展示既有中文釋義。
+- 命中已有詞條時提示該詞已加入今日復習隊列。
 
 ### Inbox
 
@@ -160,6 +163,14 @@ Candidate Review 是從 InputRecord 到 Term 的確認界面。
 
 完成後進入下一張卡片。
 
+P1 交互增強：
+
+- 模式切換：英文 -> 中文、中文 -> 英文。
+- 鍵盤快捷鍵：空格顯示答案，1/2/3/4 對應 again/hard/good/easy。
+- Skip / Later，允許用戶暫時跳過卡片。
+- 本輪完成頁展示復習數量、四種反饋分布和明日新增待復習數。
+- 錯題 / 薄弱詞入口按 wrongCount、duplicateHitCount 和近期 again/hard 排序。
+
 ### Courses
 
 課程管理頁。
@@ -215,6 +226,9 @@ P1 再加入：
 打開 Quick Add
   -> 輸入 raw text
   -> 點 Save & Analyze
+  -> 本地查找 Term.normalizedTerm
+  -> 若精確命中：跳過 AI，展示既有釋義，提升復習優先級
+  -> 若未命中：繼續 AI 分析流程
   -> 建立 InputRecord(status=analyzing)
   -> 調用 AI
   -> 解析成功：保存 CandidateTerm，InputRecord(status=analyzed)
@@ -249,11 +263,30 @@ P1 再加入：
 ```text
 打開 Review
   -> 載入 nextReviewAt <= today 的 Term
+  -> 選擇復習模式
   -> 顯示卡片正面
   -> Show Answer
   -> 用戶選擇反饋
   -> 建立 ReviewEvent
   -> 更新 Term 統計和 nextReviewAt
+  -> 進入下一張卡片
+  -> 隊列完成後展示本輪統計
+```
+
+### 流程 6：重複詞命中
+
+```text
+打開 Quick Add 或浮窗 Quick Add
+  -> 輸入 word / phrase
+  -> 點 Save & Analyze 或回車
+  -> normalized(rawText) 精確匹配 Term.normalizedTerm
+  -> 不建立新的 InputRecord
+  -> 不調用 DeepSeek
+  -> 直接展示 Term.chineseMeaning / englishDefinition
+  -> Term.nextReviewAt = now
+  -> 若 Term.masteryLevel 為 familiar/mastered，降為 vague；new/vague 保持不提高
+  -> Term.importance 最高提升一級
+  -> duplicateHitCount + 1；若超過冷卻窗口，wrongCount + 1
 ```
 
 ## 狀態與空狀態
@@ -302,7 +335,7 @@ P1 再加入：
 
 ### 重複詞條
 
-- 保存候選時檢查 normalizedTerm。
-- 若已有相同詞條，提示 Merge / Save Duplicate / Cancel。
-- MVP 可先支持 Save Duplicate 和 Cancel，Merge 放 P1。
-
+- Quick Add 入口優先檢查正式詞庫 Term.normalizedTerm。
+- 若 raw text 與既有 Term 完全一致，直接顯示已有釋義並加入今日復習，不進入 DeepSeek。
+- 保存候選時仍需檢查 normalizedTerm，避免不同 InputRecord 產生重複 Term。
+- 合併候選到已有詞條放 P1 後段；首個重點是輸入入口的精確命中短路。

@@ -105,8 +105,12 @@ Term 1 --- n ReviewEvent
 | category | TermCategory | yes | 類別 |
 | importance | Importance | yes | 重要度 |
 | masteryLevel | MasteryLevel | yes | new/vague/familiar/mastered |
+| reviewIntervalDays | Int | yes | 當前復習間隔，P1 自適應排程使用 |
+| correctStreak | Int | yes | 連續答對次數，P1 自適應排程使用 |
 | reviewCount | Int | yes | 復習次數 |
 | wrongCount | Int | yes | 錯誤次數 |
+| duplicateHitCount | Int | yes | Quick Add 精確命中既有詞條次數 |
+| lastDuplicateHitAt | Date? | no | 最近一次重複輸入命中時間 |
 | lastReviewedAt | Date? | no | 上次復習時間 |
 | nextReviewAt | Date? | no | 下次復習時間 |
 | createdAt | Date | yes | 建立時間 |
@@ -116,6 +120,14 @@ Term 最低要求：
 
 - `term` 必填。
 - `chineseMeaning` 和 `englishDefinition` 至少一個非空。
+
+P1 遷移要求：
+
+- `reviewIntervalDays` 默認 0。
+- `correctStreak` 默認 0。
+- `duplicateHitCount` 默認 0。
+- `lastDuplicateHitAt` 默認 nil。
+- 遷移後現有 Term 的 `nextReviewAt` 不應被改動。
 
 ## Course
 
@@ -150,6 +162,8 @@ Term 最低要求：
 | previousNextReviewAt | Date? | no | 復習前排程 |
 | newNextReviewAt | Date? | no | 復習後排程 |
 | reviewedAt | Date | yes | 復習時間 |
+
+Duplicate Quick Add hit 不等同於一次正式 Review。P1 首版可以只更新 Term 統計和排程，不強制寫 ReviewEvent；若後續需要審計來源，再增加 `ReviewEventSource` 或獨立 `TermActivityEvent`。
 
 ## 枚舉
 
@@ -220,6 +234,26 @@ easy    // 很熟
 
 不應做過度 stemming，避免把專業術語錯誤合併。
 
+## 重複輸入命中規則
+
+Quick Add / 浮窗 Quick Add 的本地命中只使用精確 normalizedTerm：
+
+```text
+normalized(rawText) == Term.normalizedTerm
+```
+
+命中後：
+
+- 不創建 InputRecord。
+- 不創建 CandidateTerm。
+- 不調用 DeepSeek。
+- 使用既有 Term 的 `chineseMeaning`、`englishDefinition`、`aiContextExplanation` 組裝臨時釋義 preview。
+- `nextReviewAt = now`，使詞條進入今日待復習。
+- `importance` 最多提升一級：low -> medium -> high。
+- 若 `masteryLevel` 為 familiar/mastered，降為 vague；new/vague 保持不提高，表示用戶再次遇到且需要復習。
+- `duplicateHitCount + 1`。
+- 若距離 `lastDuplicateHitAt` 超過冷卻窗口，`wrongCount + 1`；冷卻窗口建議 10 分鐘。
+
 ## 索引建議
 
 首版建議優化：
@@ -240,4 +274,3 @@ easy    // 很熟
 - 新字段優先可空或有默認值。
 - 不在小版本中刪除用戶資料。
 - 任何破壞性遷移前先做導出或備份。
-

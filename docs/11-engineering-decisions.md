@@ -120,3 +120,29 @@ MVP 不實作完整 spaced repetition algorithm，只用固定間隔：
 備註：
 
 如果需要支持 macOS 13 或更早版本，應新增 ADR，評估 Core Data 或 SQLite/GRDB。
+
+## Decision 008: P1 Review 優先做學習回路，不直接引入完整 SM-2 / FSRS
+
+日期：2026-07-09
+
+決策：
+
+P1 Review 先做三件事：
+
+- Quick Add 精確命中既有詞條時跳過 DeepSeek，直接顯示已有釋義。
+- 重複輸入既有詞條時，把該詞視為薄弱詞，提升重要度並加入今日復習。
+- Review 排程從固定 1/3/7/14 天升級為簡化自適應規則，但不直接引入完整 SM-2 / FSRS。
+
+原因：
+
+- 再次輸入同一詞通常說明用戶又遇到且沒有掌握，應立即回到復習隊列。
+- 精確命中正式詞庫時重新調用 DeepSeek 沒有必要，會增加等待和 API 成本。
+- 目前數據量不足以支撐複雜算法調參，透明規則更容易驗證和修正。
+- Review 產品體驗的短板不只在算法，也包括模式、快捷鍵、完成統計和錯題入口。
+
+約束：
+
+- 只做 `normalized(rawText) == Term.normalizedTerm` 的精確匹配，不做包含匹配或模糊匹配。
+- 命中時不創建 InputRecord，避免 Inbox 被重複查詞污染。
+- duplicate hit 不等同於正式 Review feedback，P1 首版可不寫 ReviewEvent。
+- wrongCount 需要冷卻窗口，避免短時間重複輸入刷高錯題統計。
