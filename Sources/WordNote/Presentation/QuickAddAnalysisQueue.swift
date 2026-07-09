@@ -41,7 +41,19 @@ final class QuickAddAnalysisQueue {
         courseName: String?,
         sourceType: SourceType,
         note: String?
-    ) throws -> InputRecordModel {
+    ) throws -> QuickAddEnqueueResult {
+        let vocabularyService = VocabularyService(modelContext: modelContext)
+        if let existingTerm = try vocabularyService.findExactTerm(rawText: rawText) {
+            let bumpedTerm = try vocabularyService.bumpDuplicateHit(existingTerm)
+            latestAIExplanation = AIExplanationPreview(
+                rawText: rawText,
+                existingTerm: bumpedTerm
+            )
+            statusMessage = "Already in vocabulary: \(bumpedTerm.term). Added to today's review."
+            errorMessage = nil
+            return .duplicateHit(bumpedTerm)
+        }
+
         let service = InputRecordService(modelContext: modelContext)
         let createdRecord = try service.createAnalyzing(
             rawText: rawText,
@@ -56,7 +68,7 @@ final class QuickAddAnalysisQueue {
         statusMessage = "Queued for AI analysis: \(createdRecord.rawText)"
         errorMessage = nil
         processNextQueuedAnalysisIfNeeded()
-        return createdRecord
+        return .queued(createdRecord)
     }
 
     private func processNextQueuedAnalysisIfNeeded() {
@@ -113,6 +125,11 @@ final class QuickAddAnalysisQueue {
     }
 }
 
+enum QuickAddEnqueueResult {
+    case queued(InputRecordModel)
+    case duplicateHit(TermModel)
+}
+
 private struct QueuedAnalysisRecord: Identifiable {
     let id = UUID()
     let record: InputRecordModel
@@ -120,18 +137,29 @@ private struct QueuedAnalysisRecord: Identifiable {
 }
 
 struct AIExplanationPreview {
+    let id: UUID
     let rawText: String
     let sentenceMeaning: String?
     let candidates: [AIExplanationCandidatePreview]
 
     init(
+        id: UUID = UUID(),
         rawText: String,
         sentenceMeaning: String?,
         candidates: [AIExplanationCandidatePreview]
     ) {
+        self.id = id
         self.rawText = rawText
         self.sentenceMeaning = Self.nonBlank(sentenceMeaning)
         self.candidates = candidates
+    }
+
+    init(rawText: String, existingTerm: TermModel) {
+        self.init(
+            rawText: rawText.trimmingCharacters(in: .whitespacesAndNewlines),
+            sentenceMeaning: nil,
+            candidates: [AIExplanationCandidatePreview(term: existingTerm)]
+        )
     }
 
     private static func nonBlank(_ value: String?) -> String? {
@@ -146,6 +174,7 @@ struct AIExplanationCandidatePreview: Identifiable {
     let term: String
     let importance: Importance
     let chineseMeaning: String?
+    let englishDefinition: String?
     let aiContextExplanation: String?
 
     init(candidate: AIAnalysisCandidate) {
@@ -153,7 +182,17 @@ struct AIExplanationCandidatePreview: Identifiable {
         term = candidate.term
         importance = candidate.importance
         chineseMeaning = Self.nonBlank(candidate.chineseMeaning)
+        englishDefinition = Self.nonBlank(candidate.englishDefinition)
         aiContextExplanation = Self.nonBlank(candidate.aiContextExplanation)
+    }
+
+    init(term: TermModel) {
+        id = term.id.uuidString
+        self.term = term.term
+        importance = term.importance
+        chineseMeaning = Self.nonBlank(term.chineseMeaning)
+        englishDefinition = Self.nonBlank(term.englishDefinition)
+        aiContextExplanation = Self.nonBlank(term.aiContextExplanation)
     }
 
     private static func nonBlank(_ value: String?) -> String? {

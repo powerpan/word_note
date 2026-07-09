@@ -163,9 +163,10 @@ private struct FloatingQuickAddPanelView: View {
     private var latestExplanationKey: String {
         guard let latestAIExplanation = analysisQueue.latestAIExplanation else { return "none" }
         let candidateKey = latestAIExplanation.candidates
-            .map { "\($0.id):\($0.chineseMeaning ?? "")" }
+            .map { "\($0.id):\($0.chineseMeaning ?? ""):\($0.englishDefinition ?? "")" }
             .joined(separator: "|")
         return [
+            latestAIExplanation.id.uuidString,
             latestAIExplanation.rawText,
             latestAIExplanation.sentenceMeaning ?? "",
             candidateKey
@@ -251,7 +252,7 @@ private struct FloatingQuickAddPanelView: View {
             .buttonStyle(.plain)
             .disabled(!canSubmit)
             .foregroundStyle(canSubmit ? Color.accentColor : Color.secondary.opacity(0.45))
-            .help("Add to AI analysis queue")
+            .help("Add term or analyze input")
         }
     }
 

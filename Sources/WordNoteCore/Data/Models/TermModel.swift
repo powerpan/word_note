@@ -19,8 +19,12 @@ public final class TermModel {
     public var categoryRaw: String
     public var importanceRaw: String
     public var masteryLevelRaw: String
+    public var reviewIntervalDays: Int = 0
+    public var correctStreak: Int = 0
     public var reviewCount: Int
     public var wrongCount: Int
+    public var duplicateHitCount: Int = 0
+    public var lastDuplicateHitAt: Date?
     public var lastReviewedAt: Date?
     public var nextReviewAt: Date?
     public var createdAt: Date
@@ -67,8 +71,12 @@ public final class TermModel {
         category: TermCategory = .general,
         importance: Importance = .medium,
         masteryLevel: MasteryLevel = .new,
+        reviewIntervalDays: Int = 0,
+        correctStreak: Int = 0,
         reviewCount: Int = 0,
         wrongCount: Int = 0,
+        duplicateHitCount: Int = 0,
+        lastDuplicateHitAt: Date? = nil,
         lastReviewedAt: Date? = nil,
         nextReviewAt: Date? = Date(),
         createdAt: Date = Date(),
@@ -90,8 +98,12 @@ public final class TermModel {
         self.categoryRaw = category.rawValue
         self.importanceRaw = importance.rawValue
         self.masteryLevelRaw = masteryLevel.rawValue
+        self.reviewIntervalDays = reviewIntervalDays
+        self.correctStreak = correctStreak
         self.reviewCount = reviewCount
         self.wrongCount = wrongCount
+        self.duplicateHitCount = duplicateHitCount
+        self.lastDuplicateHitAt = lastDuplicateHitAt
         self.lastReviewedAt = lastReviewedAt
         self.nextReviewAt = nextReviewAt
         self.createdAt = createdAt
@@ -104,6 +116,8 @@ public final class TermModel {
             wrongCount += 1
         }
         masteryLevel = result.masteryLevel
+        reviewIntervalDays = result.reviewIntervalDays
+        correctStreak = result.correctStreak
         lastReviewedAt = reviewedAt
         nextReviewAt = result.nextReviewAt
         touch(reviewedAt)

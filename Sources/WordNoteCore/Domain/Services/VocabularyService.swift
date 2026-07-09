@@ -26,6 +26,56 @@ public struct VocabularyService {
         self.modelContext = modelContext
     }
 
+    public func findExactTerm(rawText: String) throws -> TermModel? {
+        let normalizedTerm = TextNormalizer.normalized(rawText)
+        return try findExactTerm(normalizedTerm: normalizedTerm)
+    }
+
+    public func findExactTerm(normalizedTerm: String) throws -> TermModel? {
+        let normalizedTerm = TextNormalizer.normalized(normalizedTerm)
+        guard !TextNormalizer.isBlank(normalizedTerm) else { return nil }
+
+        var descriptor = FetchDescriptor<TermModel>(
+            predicate: #Predicate { term in
+                term.normalizedTerm == normalizedTerm
+            }
+        )
+        descriptor.fetchLimit = 1
+        return try modelContext.fetch(descriptor).first
+    }
+
+    @discardableResult
+    public func bumpDuplicateHit(
+        _ term: TermModel,
+        at date: Date = Date(),
+        wrongCountCooldown: TimeInterval = 10 * 60
+    ) throws -> TermModel {
+        let previousDuplicateHitAt = term.lastDuplicateHitAt
+
+        term.nextReviewAt = date
+        term.importance = bumpedImportance(term.importance)
+        switch term.masteryLevel {
+        case .familiar, .mastered:
+            term.masteryLevel = .vague
+        case .new, .vague:
+            break
+        }
+        term.correctStreak = 0
+        term.duplicateHitCount += 1
+        if shouldIncreaseWrongCount(
+            previousDuplicateHitAt: previousDuplicateHitAt,
+            date: date,
+            cooldown: wrongCountCooldown
+        ) {
+            term.wrongCount += 1
+        }
+        term.lastDuplicateHitAt = date
+        term.touch(date)
+
+        try modelContext.save()
+        return term
+    }
+
     @discardableResult
     public func createTerms(
         from candidates: [CandidateTermModel],
@@ -163,5 +213,25 @@ public struct VocabularyService {
     private func normalizedOptional(_ value: String?) -> String? {
         let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed?.isEmpty == true ? nil : trimmed
+    }
+
+    private func bumpedImportance(_ importance: Importance) -> Importance {
+        switch importance {
+        case .low:
+            return .medium
+        case .medium:
+            return .high
+        case .high:
+            return .high
+        }
+    }
+
+    private func shouldIncreaseWrongCount(
+        previousDuplicateHitAt: Date?,
+        date: Date,
+        cooldown: TimeInterval
+    ) -> Bool {
+        guard let previousDuplicateHitAt else { return true }
+        return date.timeIntervalSince(previousDuplicateHitAt) >= cooldown
     }
 }

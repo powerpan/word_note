@@ -34,6 +34,9 @@ public struct ReviewService {
                 if lhs.wrongCount != rhs.wrongCount {
                     return lhs.wrongCount > rhs.wrongCount
                 }
+                if lhs.duplicateHitCount != rhs.duplicateHitCount {
+                    return lhs.duplicateHitCount > rhs.duplicateHitCount
+                }
                 if lhs.importance != rhs.importance {
                     return lhs.importance > rhs.importance
                 }
@@ -50,7 +53,12 @@ public struct ReviewService {
     ) throws -> ReviewEventModel {
         let previousMasteryLevel = term.masteryLevel
         let previousNextReviewAt = term.nextReviewAt
-        let result = scheduler.schedule(after: feedback, reviewedAt: reviewedAt)
+        let result = scheduler.schedule(
+            after: feedback,
+            reviewedAt: reviewedAt,
+            currentIntervalDays: term.reviewIntervalDays,
+            currentCorrectStreak: term.correctStreak
+        )
 
         term.applyReview(result, reviewedAt: reviewedAt)
 

@@ -33,6 +33,8 @@ final class ModelTests: XCTestCase {
         let result = ReviewScheduleResult(
             masteryLevel: .vague,
             nextReviewAt: nextReviewAt,
+            reviewIntervalDays: 1,
+            correctStreak: 0,
             countsAsWrong: true
         )
 
@@ -41,6 +43,8 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual(term.reviewCount, 1)
         XCTAssertEqual(term.wrongCount, 1)
         XCTAssertEqual(term.masteryLevel, .vague)
+        XCTAssertEqual(term.reviewIntervalDays, 1)
+        XCTAssertEqual(term.correctStreak, 0)
         XCTAssertEqual(term.lastReviewedAt, reviewedAt)
         XCTAssertEqual(term.nextReviewAt, nextReviewAt)
     }

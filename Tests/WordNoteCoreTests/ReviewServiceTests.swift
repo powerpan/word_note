@@ -64,6 +64,8 @@ final class ReviewServiceTests: XCTestCase {
         XCTAssertEqual(term.reviewCount, 1)
         XCTAssertEqual(term.wrongCount, 1)
         XCTAssertEqual(term.masteryLevel, .vague)
+        XCTAssertEqual(term.reviewIntervalDays, 1)
+        XCTAssertEqual(term.correctStreak, 0)
         XCTAssertEqual(term.lastReviewedAt, reviewedAt)
         XCTAssertEqual(event.previousMasteryLevel, MasteryLevel.new)
         XCTAssertEqual(event.newMasteryLevel, MasteryLevel.vague)
@@ -71,6 +73,35 @@ final class ReviewServiceTests: XCTestCase {
 
         let events = try context.fetch(FetchDescriptor<ReviewEventModel>())
         XCTAssertEqual(events.count, 1)
+    }
+
+    func testRecordFeedbackUsesExistingStreakForAdaptiveSchedule() throws {
+        let container = try makeInMemoryContainer()
+        let context = ModelContext(container)
+        let reviewedAt = Date(timeIntervalSince1970: 1_700_000_000)
+        let term = TermModel(
+            term: "regularization",
+            termType: .word,
+            chineseMeaning: "正則化",
+            masteryLevel: .familiar,
+            reviewIntervalDays: 4,
+            correctStreak: 2,
+            nextReviewAt: reviewedAt
+        )
+        context.insert(term)
+        try context.save()
+        let service = ReviewService(
+            modelContext: context,
+            scheduler: ReviewScheduler(calendar: .reviewServiceTestCalendar),
+            calendar: .reviewServiceTestCalendar
+        )
+
+        try service.recordFeedback(for: term, feedback: .good, reviewedAt: reviewedAt)
+
+        XCTAssertEqual(term.masteryLevel, .familiar)
+        XCTAssertEqual(term.correctStreak, 3)
+        XCTAssertEqual(term.reviewIntervalDays, 7)
+        XCTAssertEqual(term.nextReviewAt, Calendar.reviewServiceTestCalendar.date(byAdding: .day, value: 7, to: reviewedAt))
     }
 
     private func makeInMemoryContainer() throws -> ModelContainer {

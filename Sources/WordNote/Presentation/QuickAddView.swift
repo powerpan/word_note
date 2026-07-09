@@ -220,6 +220,13 @@ struct QuickAddView: View {
                                     .textSelection(.enabled)
                             }
 
+                            if let englishDefinition = candidate.englishDefinition {
+                                Text(englishDefinition)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .textSelection(.enabled)
+                            }
+
                             if let aiContextExplanation = candidate.aiContextExplanation {
                                 Text(aiContextExplanation)
                                     .font(.caption)

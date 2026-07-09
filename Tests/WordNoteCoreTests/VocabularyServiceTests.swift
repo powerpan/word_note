@@ -86,6 +86,97 @@ final class VocabularyServiceTests: XCTestCase {
         }
     }
 
+    func testFindExactTermMatchesOnlyWholeNormalizedInput() throws {
+        let container = try makeInMemoryContainer()
+        let context = ModelContext(container)
+        let vocabularyService = VocabularyService(modelContext: context)
+        let term = TermModel(
+            term: "regularization",
+            termType: .word,
+            chineseMeaning: "正則化"
+        )
+        context.insert(term)
+        try context.save()
+
+        let exactMatch = try vocabularyService.findExactTerm(rawText: "  Regularization  ")
+        let containingSentence = try vocabularyService.findExactTerm(rawText: "Use regularization to reduce overfitting.")
+
+        XCTAssertEqual(exactMatch?.id, term.id)
+        XCTAssertNil(containingSentence)
+    }
+
+    func testBumpDuplicateHitPromotesReviewPriorityWithoutCreatingInboxArtifacts() throws {
+        let container = try makeInMemoryContainer()
+        let context = ModelContext(container)
+        let vocabularyService = VocabularyService(modelContext: context)
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let term = TermModel(
+            term: "regularization",
+            termType: .word,
+            chineseMeaning: "正則化",
+            importance: .low,
+            masteryLevel: .mastered,
+            reviewIntervalDays: 14,
+            correctStreak: 3,
+            wrongCount: 0,
+            nextReviewAt: now.addingTimeInterval(7 * 24 * 60 * 60)
+        )
+        context.insert(term)
+        try context.save()
+
+        try vocabularyService.bumpDuplicateHit(term, at: now)
+
+        XCTAssertEqual(term.nextReviewAt, now)
+        XCTAssertEqual(term.importance, .medium)
+        XCTAssertEqual(term.masteryLevel, .vague)
+        XCTAssertEqual(term.correctStreak, 0)
+        XCTAssertEqual(term.duplicateHitCount, 1)
+        XCTAssertEqual(term.lastDuplicateHitAt, now)
+        XCTAssertEqual(term.wrongCount, 1)
+
+        let records = try context.fetch(FetchDescriptor<InputRecordModel>())
+        let candidates = try context.fetch(FetchDescriptor<CandidateTermModel>())
+        let reviewEvents = try context.fetch(FetchDescriptor<ReviewEventModel>())
+        XCTAssertTrue(records.isEmpty)
+        XCTAssertTrue(candidates.isEmpty)
+        XCTAssertTrue(reviewEvents.isEmpty)
+    }
+
+    func testBumpDuplicateHitUsesWrongCountCooldownButAlwaysCountsDuplicateHit() throws {
+        let container = try makeInMemoryContainer()
+        let context = ModelContext(container)
+        let vocabularyService = VocabularyService(modelContext: context)
+        let firstHitAt = Date(timeIntervalSince1970: 1_700_000_000)
+        let term = TermModel(
+            term: "gradient descent",
+            termType: .phrase,
+            chineseMeaning: "梯度下降",
+            importance: .medium,
+            masteryLevel: .vague,
+            wrongCount: 4,
+            duplicateHitCount: 2
+        )
+        context.insert(term)
+        try context.save()
+
+        try vocabularyService.bumpDuplicateHit(term, at: firstHitAt, wrongCountCooldown: 600)
+        try vocabularyService.bumpDuplicateHit(
+            term,
+            at: firstHitAt.addingTimeInterval(300),
+            wrongCountCooldown: 600
+        )
+        try vocabularyService.bumpDuplicateHit(
+            term,
+            at: firstHitAt.addingTimeInterval(901),
+            wrongCountCooldown: 600
+        )
+
+        XCTAssertEqual(term.masteryLevel, .vague)
+        XCTAssertEqual(term.importance, .high)
+        XCTAssertEqual(term.duplicateHitCount, 5)
+        XCTAssertEqual(term.wrongCount, 6)
+    }
+
     func testUpdateAndDeleteTermPersist() throws {
         let container = try makeInMemoryContainer()
         let context = ModelContext(container)
