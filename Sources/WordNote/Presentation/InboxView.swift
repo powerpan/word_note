@@ -9,6 +9,7 @@ struct InboxView: View {
     @Query(sort: \CandidateTermModel.createdAt) private var candidates: [CandidateTermModel]
 
     @State private var selectedRecordID: UUID?
+    @State private var selectedBatchRecordIDs = Set<UUID>()
     @State private var errorMessage: String?
     @State private var analyzingRecordID: UUID?
     @SceneStorage("inboxConfirmedRecordsExpanded") private var confirmedRecordsExpanded = false
@@ -36,6 +37,20 @@ struct InboxView: View {
         return selectableRecords.first { $0.id == selectedRecordID }
     }
 
+    private var confirmableRecords: [InputRecordModel] {
+        activeRecords.filter { record in
+            record.status == .analyzed && !pendingCandidates(for: record).isEmpty
+        }
+    }
+
+    private var confirmableRecordIDs: Set<UUID> {
+        Set(confirmableRecords.map(\.id))
+    }
+
+    private var allConfirmableRecordsSelected: Bool {
+        !confirmableRecordIDs.isEmpty && confirmableRecordIDs.isSubset(of: selectedBatchRecordIDs)
+    }
+
     var body: some View {
         GeometryReader { proxy in
             let listWidth = InboxLayoutMetrics.listWidth(for: proxy.size.width)
@@ -57,7 +72,10 @@ struct InboxView: View {
             }
         }
         .frame(minWidth: InboxLayoutMetrics.minContentWidth, minHeight: InboxLayoutMetrics.minContentHeight)
-        .onAppear(perform: maintainSelection)
+        .onAppear {
+            maintainSelection()
+            pruneBatchSelection()
+        }
         .onChange(of: selectableRecords.map(\.id)) {
             maintainSelection()
         }
@@ -67,6 +85,9 @@ struct InboxView: View {
         .onChange(of: confirmedRecordsExpanded) {
             maintainSelection()
         }
+        .onChange(of: confirmableRecordIDs) {
+            pruneBatchSelection()
+        }
     }
 
     private var recordList: some View {
@@ -74,7 +95,12 @@ struct InboxView: View {
             if !activeRecords.isEmpty {
                 Section("Needs Review") {
                     ForEach(activeRecords, id: \.id) { record in
-                        InboxRow(record: record, courseName: courseName(for: record.courseID))
+                        InboxRow(
+                            record: record,
+                            previewText: chineseMeaningPreview(for: record),
+                            batchSelection: batchSelectionBinding(for: record),
+                            batchSelectionEnabled: confirmableRecordIDs.contains(record.id)
+                        )
                             .tag(record.id)
                     }
                 }
@@ -102,7 +128,9 @@ struct InboxView: View {
                         ForEach(confirmedRecords, id: \.id) { record in
                             InboxRow(
                                 record: record,
-                                courseName: courseName(for: record.courseID),
+                                previewText: chineseMeaningPreview(for: record),
+                                batchSelection: nil,
+                                batchSelectionEnabled: false,
                                 isConfirmed: true
                             )
                             .tag(record.id)
@@ -116,7 +144,21 @@ struct InboxView: View {
                 title: "Inbox",
                 subtitle: "\(activeRecords.count) active, \(confirmedRecords.count) confirmed"
             ) {
-                EmptyView()
+                HStack(spacing: 8) {
+                    Button {
+                        toggleSelectAllConfirmableRecords()
+                    } label: {
+                        Label(allConfirmableRecordsSelected ? "Clear" : "Select All", systemImage: "checklist")
+                    }
+                    .disabled(confirmableRecords.isEmpty)
+
+                    Button {
+                        confirmSelectedRecords()
+                    } label: {
+                        Label("Confirm Selected", systemImage: "checkmark.circle")
+                    }
+                    .disabled(selectedBatchRecordIDs.isEmpty)
+                }
             }
             .padding(18)
             .background(Color(nsColor: .controlBackgroundColor))
@@ -166,6 +208,81 @@ struct InboxView: View {
     private func courseName(for courseID: UUID?) -> String? {
         guard let courseID else { return nil }
         return courses.first { $0.id == courseID }?.courseName
+    }
+
+    private func candidates(for record: InputRecordModel) -> [CandidateTermModel] {
+        candidates.filter { $0.inputRecordID == record.id }
+    }
+
+    private func pendingCandidates(for record: InputRecordModel) -> [CandidateTermModel] {
+        candidates(for: record).filter { $0.status == .pending }
+    }
+
+    private func chineseMeaningPreview(for record: InputRecordModel) -> String {
+        let meaning = candidates(for: record)
+            .compactMap { normalizedPreviewText($0.chineseMeaning) }
+            .first ?? normalizedPreviewText(record.sentenceMeaning)
+
+        guard let meaning else { return record.status.displayTitle }
+        return String(meaning.prefix(10))
+    }
+
+    private func normalizedPreviewText(_ value: String?) -> String? {
+        let trimmed = value?
+            .replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let trimmed, !trimmed.isEmpty else { return nil }
+        return trimmed
+    }
+
+    private func batchSelectionBinding(for record: InputRecordModel) -> Binding<Bool>? {
+        guard confirmableRecordIDs.contains(record.id) else { return nil }
+
+        return Binding(
+            get: { selectedBatchRecordIDs.contains(record.id) },
+            set: { isSelected in
+                if isSelected {
+                    selectedBatchRecordIDs.insert(record.id)
+                } else {
+                    selectedBatchRecordIDs.remove(record.id)
+                }
+            }
+        )
+    }
+
+    private func toggleSelectAllConfirmableRecords() {
+        if allConfirmableRecordsSelected {
+            selectedBatchRecordIDs.subtract(confirmableRecordIDs)
+        } else {
+            selectedBatchRecordIDs.formUnion(confirmableRecordIDs)
+        }
+    }
+
+    private func confirmSelectedRecords() {
+        let recordsToConfirm = confirmableRecords
+            .filter { selectedBatchRecordIDs.contains($0.id) }
+            .map { record in
+                (record: record, candidates: pendingCandidates(for: record))
+            }
+
+        guard !recordsToConfirm.isEmpty else { return }
+
+        let service = VocabularyService(modelContext: modelContext)
+
+        do {
+            for item in recordsToConfirm {
+                _ = try service.createTerms(from: item.candidates, sourceRecord: item.record)
+            }
+            selectedBatchRecordIDs.subtract(recordsToConfirm.map(\.record.id))
+            errorMessage = nil
+            maintainSelection()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func pruneBatchSelection() {
+        selectedBatchRecordIDs.formIntersection(confirmableRecordIDs)
     }
 
     private func ignore(_ record: InputRecordModel) {
@@ -255,28 +372,38 @@ private enum InboxLayoutMetrics {
 
 private struct InboxRow: View {
     let record: InputRecordModel
-    let courseName: String?
+    let previewText: String
+    let batchSelection: Binding<Bool>?
+    let batchSelectionEnabled: Bool
     var isConfirmed = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(record.rawText)
-                .lineLimit(1)
-                .font(.headline)
+        HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(record.rawText)
+                    .lineLimit(1)
+                    .font(.headline)
 
-            HStack(spacing: 8) {
-                if isConfirmed {
-                    Label(record.status.displayTitle, systemImage: "checkmark.circle")
-                } else {
-                    Text(record.status.displayTitle)
-                }
-                Text(record.sourceType.displayTitle)
-                if let courseName {
-                    Text(courseName)
-                }
+                Text(previewText)
+                    .lineLimit(1)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
-            .font(.caption)
-            .foregroundStyle(.secondary)
+
+            Spacer(minLength: 8)
+
+            if let batchSelection {
+                Toggle("", isOn: batchSelection)
+                    .labelsHidden()
+                    .toggleStyle(.checkbox)
+                    .disabled(!batchSelectionEnabled)
+                    .help(batchSelectionEnabled ? "Select for batch confirmation" : "Analyze this record before batch confirmation")
+            } else if isConfirmed {
+                Image(systemName: "checkmark.circle")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel("Confirmed")
+            }
         }
         .opacity(isConfirmed ? 0.72 : 1)
         .padding(.vertical, 4)
