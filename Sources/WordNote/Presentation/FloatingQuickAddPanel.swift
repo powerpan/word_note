@@ -54,7 +54,7 @@ struct FloatingQuickAddPanelView: View {
 
             if let displayedExplanation {
                 Divider()
-                FloatingChineseExplanationView(
+                FloatingExplanationResultsView(
                     explanation: displayedExplanation,
                     contentHeight: $explanationContentHeight
                 )
@@ -223,7 +223,7 @@ struct FloatingQuickAddPanelView: View {
     }
 }
 
-private struct FloatingChineseExplanationView: View {
+private struct FloatingExplanationResultsView: View {
     let explanation: AIExplanationPreview
     @Binding var contentHeight: CGFloat
 
@@ -232,49 +232,60 @@ private struct FloatingChineseExplanationView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            Label("中文釋義", systemImage: "text.bubble")
-                .font(.system(size: 12, weight: .semibold))
+        ScrollView {
+            VStack(alignment: .leading, spacing: 9) {
+                if let sentenceMeaning = explanation.sentenceMeaning {
+                    explanationRow(source: explanation.rawText, meaning: sentenceMeaning)
+                }
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 9) {
-                    if let sentenceMeaning = explanation.sentenceMeaning {
-                        Text(sentenceMeaning)
-                            .font(.callout)
-                            .textSelection(.enabled)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-
-                    ForEach(chineseCandidates) { candidate in
-                        if let chineseMeaning = candidate.chineseMeaning {
-                            Text(chineseMeaning)
-                                .font(.callout)
-                                .textSelection(.enabled)
-                                .fixedSize(horizontal: false, vertical: true)
-                                .padding(9)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(WordNoteTheme.surface)
-                                .clipShape(RoundedRectangle(cornerRadius: 6))
-                                .overlay {
-                                    RoundedRectangle(cornerRadius: 6)
-                                        .stroke(WordNoteTheme.line, lineWidth: 1)
-                                }
-                        }
-                    }
-
-                    if explanation.sentenceMeaning == nil, chineseCandidates.isEmpty {
-                        Text("這次分析沒有返回可顯示的中文釋義。")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
+                ForEach(chineseCandidates) { candidate in
+                    if let chineseMeaning = candidate.chineseMeaning {
+                        explanationRow(
+                            source: candidateSourceText(for: candidate),
+                            meaning: chineseMeaning
+                        )
                     }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.trailing, 4)
-                .measureHeight($contentHeight)
+
+                if explanation.sentenceMeaning == nil, chineseCandidates.isEmpty {
+                    explanationRow(
+                        source: explanation.rawText,
+                        meaning: "這次分析沒有返回可顯示的中文釋義。",
+                        isMuted: true
+                    )
+                }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.trailing, 4)
+            .measureHeight($contentHeight)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .tint(WordNoteTheme.brand)
+    }
+
+    private func candidateSourceText(for candidate: AIExplanationCandidatePreview) -> String {
+        if explanation.sentenceMeaning == nil, chineseCandidates.count == 1 {
+            return explanation.rawText
+        }
+        return candidate.term
+    }
+
+    private func explanationRow(source: String, meaning: String, isMuted: Bool = false) -> some View {
+        (Text(source).fontWeight(.semibold) + Text("：\(meaning)"))
+            .font(.callout)
+            .lineSpacing(4)
+            .foregroundStyle(isMuted ? WordNoteTheme.mutedInk : Color.primary)
+            .textSelection(.enabled)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(WordNoteTheme.surface)
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .overlay {
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(WordNoteTheme.line, lineWidth: 1)
+            }
     }
 }
 

@@ -123,9 +123,9 @@ private final class QuickAddFloatingPanel: NSPanel {
 enum FloatingQuickAddMetrics {
     static let width: CGFloat = 360
     static let collapsedHeight: CGFloat = 60
-    static let explanationBaseHeight: CGFloat = 102
+    static let explanationBaseHeight: CGFloat = 84
     static let minExpandedHeight: CGFloat = 132
-    static let maxExpandedHeight: CGFloat = 270
+    static let maxExpandedHeight: CGFloat = 320
     static let explanationDisplayDurationSeconds: TimeInterval = 10
 
     static var collapsedPanelSize: NSSize {

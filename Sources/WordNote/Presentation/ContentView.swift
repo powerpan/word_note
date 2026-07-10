@@ -99,6 +99,7 @@ private struct SidebarView: View {
                     }
                 }
             }
+            .frame(maxWidth: .infinity)
             .padding(.horizontal, presentation.isCompact ? 8 : 10)
 
             Spacer()
@@ -153,6 +154,7 @@ private struct SidebarRow: View {
                         .foregroundStyle(isSelected ? WordNoteTheme.brand : Color.primary)
                         .padding(.leading, 3)
                 }
+                .frame(maxWidth: .infinity, minHeight: 38)
             } else {
                 HStack(spacing: 10) {
                     Rectangle()
@@ -172,8 +174,9 @@ private struct SidebarRow: View {
                 .background(isSelected ? WordNoteTheme.brand.opacity(0.055) : .clear)
             }
         }
-        .buttonStyle(.plain)
+        .frame(maxWidth: .infinity)
         .contentShape(Rectangle())
+        .buttonStyle(.plain)
         .help(destination.title)
         .accessibilityLabel(destination.title)
     }

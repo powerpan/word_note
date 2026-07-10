@@ -266,7 +266,7 @@ private struct DashboardReviewLedger: View {
             Text("TERM").frame(width: 128, alignment: .leading)
             Text("DEFINITION (PREVIEW)").frame(maxWidth: .infinity, alignment: .leading)
             Text("PRIORITY").frame(width: 76, alignment: .leading)
-            Text("PROGRESS").frame(width: 88, alignment: .leading)
+            Text("MASTERY").frame(width: 88, alignment: .leading)
         }
         .font(.system(size: 9, weight: .semibold))
         .foregroundStyle(WordNoteTheme.mutedInk)
@@ -302,7 +302,7 @@ private struct DashboardTermLedgerRow: View {
             TagChip(title: term.importance.displayTitle, tint: importanceTint)
                 .frame(width: 76, alignment: .leading)
 
-            ProgressView(value: progress)
+            ProgressView(value: masteryProgress)
                 .progressViewStyle(.linear)
                 .tint(WordNoteTheme.brand)
                 .frame(width: 88)
@@ -313,7 +313,7 @@ private struct DashboardTermLedgerRow: View {
         }
     }
 
-    private var progress: Double {
+    private var masteryProgress: Double {
         switch term.masteryLevel {
         case .new: 0.12
         case .vague: 0.34
