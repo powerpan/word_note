@@ -47,6 +47,8 @@ Verification mode builds the app bundle, launches it, and checks the app process
 ./script/build_and_run.sh --verify
 ```
 
+The selected 1024px app icon master is stored at `Resources/AppIcon-1024.png`; alternative concepts are retained under `design/app-icons/`. Regenerate the complete iconset and `AppIcon.icns` with `./script/generate_app_icon.sh`. The build-and-run script embeds the generated ICNS in the staged app bundle.
+
 The Codex desktop Run action is wired to the same script through `.codex/environments/environment.toml`.
 
 ## Tests

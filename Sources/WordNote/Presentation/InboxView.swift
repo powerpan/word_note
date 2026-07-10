@@ -236,7 +236,7 @@ struct InboxView: View {
             .first ?? normalizedPreviewText(record.sentenceMeaning)
 
         guard let meaning else { return record.status.displayTitle }
-        return String(meaning.prefix(10))
+        return String(meaning.prefix(18))
     }
 
     private func normalizedPreviewText(_ value: String?) -> String? {

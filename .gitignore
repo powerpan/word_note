@@ -4,6 +4,7 @@ xcuserdata/
 .build/
 .swiftpm/
 dist/
+tmp/
 .env
 .env.*
 key.md
