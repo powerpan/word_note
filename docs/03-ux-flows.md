@@ -70,6 +70,11 @@ Dashboard 不做大型視覺化圖表。首版只展示必要指標和入口。
 - 用戶按 Command + Enter 觸發 Save & Analyze。
 - 保存成功後清空輸入，並展示最近保存狀態。
 - AI 分析可以在背景中進行。
+- 輸入至少 2 個字符、沒有換行且光標位於末尾時，使用正式詞庫顯示一個灰色前綴補全後綴。
+- Tab 只在存在補全時接受完整詞條；沒有補全時保持正常焦點切換。
+- Escape 隱藏當前補全；移動光標、選中文字或離開輸入框時不展示補全。
+- 中文等輸入法仍有 marked text 時，Tab、Escape、Enter 優先交給系統輸入法，不接受補全也不提交 Quick Add。
+- 補全只填充輸入，不自動保存、不自動入隊，也不調用 DeepSeek。
 - Save & Analyze 前先做本地詞庫精確命中檢查。
 - 若輸入和既有 Term.normalizedTerm 完全一致，不調用 DeepSeek，直接展示既有中文釋義。
 - 命中已有詞條時提示該詞已加入今日復習隊列。
@@ -308,6 +313,20 @@ P1 再加入：
   -> Term.importance 最高提升一級
   -> duplicateHitCount + 1；若超過冷卻窗口，wrongCount + 1
 ```
+
+### 流程 7：本地詞庫輸入補全
+
+```text
+打開 Quick Add 或浮窗 Quick Add
+  -> 輸入至少 2 個字符，例如 qu
+  -> 只在 Term.term 中做大小寫不敏感的前綴匹配
+  -> 選擇需要補充字符最少的候選，長度相同時按字母排序
+  -> 在光標後以灰色顯示後綴，例如 ick
+  -> Tab：填充為 quick，但不提交
+  -> Enter / Save & Analyze：按既有流程提交
+```
+
+補全與重複詞命中是不同階段：補全可以做前綴匹配，提交後仍只允許 `normalized(rawText) == Term.normalizedTerm` 進入重複詞短路。
 
 ## 狀態與空狀態
 

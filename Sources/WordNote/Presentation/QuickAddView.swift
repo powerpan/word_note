@@ -7,6 +7,7 @@ struct QuickAddView: View {
     @Environment(QuickAddAnalysisQueue.self) private var analysisQueue
     @AppStorage("defaultSourceType") private var defaultSourceType = SourceType.other.rawValue
     @Query private var storedCourses: [CourseModel]
+    @Query private var storedTerms: [TermModel]
 
     @State private var rawText = ""
     @State private var selectedCourseID: UUID?
@@ -38,25 +39,18 @@ struct QuickAddView: View {
                         Text("Input")
                             .font(.headline)
 
-                        TextEditor(text: $rawText)
-                            .font(.body)
-                            .scrollContentBackground(.hidden)
+                        VocabularyCompletionEditor(
+                            text: $rawText,
+                            vocabulary: storedTerms.map(\.term),
+                            placeholder: "Paste English text from class, papers, slides, or assignments",
+                            style: .multiline
+                        )
                             .frame(minHeight: 300)
-                            .padding(12)
                             .background(WordNoteTheme.field)
                             .clipShape(RoundedRectangle(cornerRadius: 6))
                             .overlay {
                                 RoundedRectangle(cornerRadius: 6)
                                     .stroke(WordNoteTheme.line, lineWidth: 1)
-                            }
-                            .overlay(alignment: .topLeading) {
-                                if rawText.isEmpty {
-                                    Text("Paste English text from class, papers, slides, or assignments")
-                                        .foregroundStyle(.tertiary)
-                                        .padding(.horizontal, 18)
-                                        .padding(.vertical, 20)
-                                        .allowsHitTesting(false)
-                                }
                             }
 
                         TextField("Optional note", text: $note, axis: .vertical)

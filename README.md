@@ -9,6 +9,7 @@ The current implementation follows the engineering plan in [docs](docs/README.md
 - Native macOS SwiftUI app shell.
 - Versioned local SwiftData persistence with one-time legacy-store backup and migration.
 - Quick Add for saving raw English input.
+- Local vocabulary prefix completion in the main and floating Quick Add inputs, with Tab acceptance.
 - Non-blocking, persistent AI analysis queue shared by the main window and menu bar panel.
 - DeepSeek-powered analysis through OpenAI-compatible chat completions.
 - Candidate review with editable AI-generated terms.

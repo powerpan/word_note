@@ -9,8 +9,9 @@ struct FloatingQuickAddPanelView: View {
     let onClose: () -> Void
 
     @AppStorage("defaultSourceType") private var defaultSourceType = SourceType.other.rawValue
-    @FocusState private var inputFocused: Bool
+    @Query private var storedTerms: [TermModel]
     @State private var rawText = ""
+    @State private var inputFocusRequestID = UUID()
     @State private var displayedExplanation: AIExplanationPreview?
     @State private var explanationHideToken = UUID()
     @State private var explanationHideTask: Task<Void, Never>?
@@ -99,12 +100,15 @@ struct FloatingQuickAddPanelView: View {
 
     private var inputRow: some View {
         HStack(spacing: 8) {
-            TextField("Add word, phrase, or sentence", text: $rawText)
-                .textFieldStyle(.plain)
-                .font(.system(size: 14, weight: .medium))
-                .focused($inputFocused)
-                .onSubmit(submit)
-                .padding(.horizontal, 13)
+            VocabularyCompletionEditor(
+                text: $rawText,
+                vocabulary: storedTerms.map(\.term),
+                placeholder: "Add word, phrase, or sentence",
+                style: .singleLine,
+                focusRequestID: inputFocusRequestID,
+                onSubmit: submit,
+                onEscape: onClose
+            )
                 .frame(height: 40)
                 .background(WordNoteTheme.field)
                 .clipShape(Capsule())
@@ -218,7 +222,7 @@ struct FloatingQuickAddPanelView: View {
     private func focusInput() {
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 60_000_000)
-            inputFocused = true
+            inputFocusRequestID = UUID()
         }
     }
 }

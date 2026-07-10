@@ -163,6 +163,18 @@ WordNoteApp
 - App 啟動時恢復仍為 `analyzing` 的記錄。
 - 同一 normalizedText 已在分析中時直接返回既有排隊記錄，不重複調用 AI。
 
+### VocabularyCompletionMatcher
+
+職責：
+
+- 接收當前原始輸入和正式詞庫詞條文本，返回至多一個補全結果。
+- 只做大小寫不敏感的 anchored prefix match，不做 substring 或編輯距離模糊匹配。
+- 排除空輸入、少於 2 個字符、包含換行、已完整匹配和沒有剩餘後綴的候選。
+- 優先選擇剩餘後綴最短的候選，長度相同時按穩定字母順序選擇。
+- 保留用戶已輸入文本，只追加正式詞條中的剩餘後綴。
+
+匹配器屬於 `WordNoteCore` 純邏輯，不依賴 SwiftUI、AppKit、SwiftData 或網絡。Presentation 層只把 `Term.term` 快照傳入匹配器。
+
 ## 依賴方向
 
 依賴只能向內：
@@ -247,6 +259,22 @@ QuickAddView / FloatingQuickAddPanel
 - `duplicateHitCount += 1`。
 - `lastDuplicateHitAt = now`。
 - `wrongCount` 只在超過冷卻窗口時 +1，避免短時間重複輸入刷高錯題統計。
+
+## 資料流：Vocabulary Input Completion
+
+```text
+QuickAddView / FloatingQuickAddPanel
+  -> SwiftData @Query loads Term.term snapshot
+  -> AppKit completion editor observes text and selection
+  -> VocabularyCompletionMatcher.bestCompletion(input, terms)
+  -> editor draws suffix as non-editable gray ghost text
+  -> Tab accepts completion into rawText
+  -> Enter / Save remains the only submit action
+```
+
+AppKit bridge 只處理文本選區、ghost text 繪製和 Tab/Escape 鍵。候選排序留在可單元測試的 core matcher；橋接不得直接讀取 ModelContext 或觸發 QuickAddAnalysisQueue。
+
+`NSTextView.hasMarkedText()` 為按鍵路由的最高優先級。輸入法組合期間所有按鍵先交回 AppKit 文本系統；只有 marked text 已提交後，bridge 才可攔截 Tab 補全、Escape 隱藏或單行 Enter 提交。
 
 ## 錯誤模型
 

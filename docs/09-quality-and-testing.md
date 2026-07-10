@@ -21,6 +21,7 @@ MVP 的質量重點：
 - CandidateTerm 到 Term 的轉換。
 - duplicate detection。
 - duplicate Quick Add hit priority bump。
+- vocabulary prefix completion matching and ranking。
 - review scheduler。
 - adaptive review scheduler。
 - AI response parser。
@@ -167,6 +168,27 @@ Expected：
 - 超過冷卻窗口時 wrongCount + 1。
 - 冷卻窗口內重複命中不重複增加 wrongCount。
 
+## Vocabulary Completion Tests
+
+核心 matcher 必須覆蓋：
+
+- 少於 2 個字符時不提示。
+- `qu` 可從 `quick` 得到灰色後綴 `ick`。
+- 匹配大小寫不敏感，但接受後保留用戶已輸入的大小寫。
+- 同時存在 `quick`、`quickly`、`quick sort` 時優先 `quick`。
+- 後綴長度相同時使用穩定字母排序。
+- 完整輸入、換行輸入、非前綴 substring 和空詞庫均不提示。
+- 短語前綴可以補全，例如 `machine le` -> `machine learning`。
+
+UI 手動回歸必須覆蓋：
+
+- 主 Quick Add 和浮窗 Quick Add 都顯示相同補全。
+- Tab 有建議時接受但不提交；無建議時移動到下一個焦點。
+- Enter 仍按原有入口提交。
+- Escape、光標移動、文字選區和輸入框失焦會隱藏灰色後綴。
+- 中文輸入法輸入 `qui` 時，第一次 Enter 先提交 marked text 到輸入框，不觸發 Quick Add；組合結束後再次 Enter 才提交。
+- 接受完整既有詞後提交，仍走精確重複命中，不調用 DeepSeek。
+
 ## Persistence Tests
 
 要求：
@@ -210,6 +232,8 @@ Expected：
 - 輸入既有 Term 時直接顯示既有釋義。
 - 輸入既有 Term 時不新增 Inbox 記錄。
 - 輸入既有 Term 時該詞出現在今日 Review。
+- 輸入正式詞條前綴時顯示灰色後綴，Tab 只補全不提交。
+- 主 Quick Add 和浮窗 Quick Add 的候選與排序一致。
 
 ### AI
 
@@ -259,7 +283,7 @@ Expected：
 
 2026-07-10 完整加固驗證：
 
-- `swift test`：56 tests，0 failures；付費 live 測試按預設閘門跳過 1 項。
+- `swift test`：63 tests，0 failures；付費 live 測試按預設閘門跳過 1 項。
 - `RUN_LIVE_DEEPSEEK_TESTS=1 swift test --filter LiveDeepSeekSmokeTests`：1 test，0 failures。
 - `swift build -Xswiftc -warnings-as-errors`：通過。
 - 全新 scratch path 的 `strict-concurrency=complete` + `warn-concurrency` + `warnings-as-errors`：通過。

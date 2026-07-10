@@ -219,6 +219,28 @@
 - again/hard 會明確降低掌握度並提前復習。
 - 單元測試覆蓋所有 feedback 和 streak 分支。
 
+## P1-D: Local Vocabulary Input Completion
+
+狀態：已完成。
+
+目標：在不發送網絡請求的前提下，使用正式詞庫縮短重複輸入單詞和短語的時間。
+
+任務：
+
+- 在 WordNoteCore 增加純 `VocabularyCompletionMatcher`。
+- 主 Quick Add 和浮窗通過 SwiftData `@Query` 提供正式詞條快照。
+- 使用共享 AppKit completion editor 繪製灰色後綴並處理 Tab/Escape、選區和焦點。
+- 保留 Enter/Save 提交語義與精確 duplicate hit 邏輯。
+- 補 matcher 單元測試和兩個入口的手動回歸。
+
+完成標準：
+
+- 至少 2 個字符時可按穩定規則得到至多一個前綴候選。
+- Tab 接受補全但不觸發保存或分析。
+- 多行文本、光標不在末尾或已有文字選區時不顯示補全。
+- 主窗口和浮窗共用同一 matcher，不複製排序規則。
+- 補全不讀寫業務資料、不調用 DeepSeek。
+
 ## Reliability Hardening
 
 狀態：已完成。
@@ -284,6 +306,7 @@ WordNoteUITests/
 5. P1 先做 Duplicate Quick Add Hit，因為它能立刻降低 AI 成本並提升復習價值。
 6. 再做 Review mode / keyboard / session 統計。
 7. 最後替換固定排程為簡化自適應排程。
+8. 在重複詞短路穩定後增加本地詞庫輸入補全，復用同一正式詞庫資料源。
 
 這樣可以避免一開始被 API 不穩定或本機 secrets 文件細節拖慢。
 

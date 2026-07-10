@@ -161,6 +161,8 @@ AI 只提供候選和初稿。最終保存什麼、如何解釋、是否進入�
 - 選擇來源：class、paper、slides、assignment、book、other。
 - 填寫備註，可留空。
 - 支持「保存」和「保存並解析」。
+- 主 Quick Add 和浮窗 Quick Add 使用現有正式詞庫提供本地前綴補全。
+- 補全只以灰色後綴提示；用戶按 Tab 接受，按 Enter 或保存按鈕才提交。
 - 保存並解析前檢查正式詞庫是否已有完全相同的 normalizedTerm。
 - 若命中已有詞條，跳過 DeepSeek，直接展示既有釋義並將該詞加入今日復習。
 
