@@ -25,6 +25,14 @@ final class QuickAddPanelController {
         NotificationCenter.default.post(name: .quickAddPanelDidShow, object: nil)
     }
 
+    func toggle() {
+        if panel?.isVisible == true {
+            close()
+        } else {
+            show()
+        }
+    }
+
     func close() {
         panel?.orderOut(nil)
         NotificationCenter.default.post(

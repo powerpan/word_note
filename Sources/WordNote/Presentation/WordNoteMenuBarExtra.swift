@@ -19,7 +19,7 @@ struct WordNoteMenuBarMenu: View {
 
     var body: some View {
         Button {
-            quickAddPanelController.show()
+            quickAddPanelController.toggle()
         } label: {
             Label("Quick Add", systemImage: "plus.circle")
         }
