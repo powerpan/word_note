@@ -13,6 +13,8 @@ AI 集成的目標是把用戶輸入的英文內容轉換成可確認、可編�
 - JSON 解析失敗時不丟失 InputRecord。
 - 實施前應核對 DeepSeek 官方當前 API 文檔；本文件只定義 App 內部契約。
 
+目前客戶端使用 `deepseek-v4-flash`，並顯式發送 `thinking.type = disabled`。查詞是結構化抽取任務，預設關閉思考以降低延遲；若後續切換模型或開啟思考，必須更新請求契約測試與 live smoke test。
+
 ## AIAnalysisService 介面
 
 ```swift
@@ -131,6 +133,8 @@ Metadata:
 - 查詢 Term.normalizedTerm 是否精確命中既有正式詞條。
 - 偵測過長段落並提示用戶縮短。
 
+目前 rawText 上限為 8,000 個字符；超過上限在網絡請求前返回 typed error。
+
 不要在本地做複雜 NLP 拆詞，避免與 AI 判斷衝突。
 
 ### DeepSeek 跳過條件
@@ -201,6 +205,14 @@ normalized(rawText) == Term.normalizedTerm
 - 若 sentenceMeaning 非空，仍保存分析結果。
 - UI 提供 Add Term Manually。
 
+## 非阻塞分析佇列
+
+- 點擊 Save & Analyze 或在浮窗回車後，先持久化 `InputRecord.status = analyzing`，UI 立即恢復可輸入狀態。
+- 佇列按建立時間依序處理，一筆失敗只把該記錄設為 failed，後續記錄繼續。
+- App 啟動時恢復所有 analyzing 記錄，避免重啟後丟失待處理請求。
+- 同一 normalizedText 已處於 analyzing 時返回 `alreadyQueued`，不建立第二筆記錄、不發第二個請求。
+- 分析完成後寫入 Inbox 候選，主窗口與浮窗都使用同一個臨時釋義 preview。
+
 ## 去重策略
 
 候選層：
@@ -219,17 +231,20 @@ normalized(rawText) == Term.normalizedTerm
 
 ## 成本控制
 
-MVP：
+目前策略：
 
-- 不做自動批量分析。
-- 每次 Save & Analyze 只分析當前輸入。
+- 支持連續快速提交，但 worker 依序發送請求，避免無上限併發。
 - 不在用戶未確認時反覆重新生成。
 - 已存在詞條精確命中時不調用 DeepSeek。
 
 P1 可加入：
 
-- 未整理記錄批量分析。
+- 可配置的佇列併發與退避策略。
 - 每日 token 使用估算。
+
+## Live 測試閘門
+
+`swift test` 默認不發真實 DeepSeek 請求。只有設置 `RUN_LIVE_DEEPSEEK_TESTS=1` 時，`LiveDeepSeekSmokeTests` 才會執行付費網絡測試；其餘 URLSession 契約測試使用本地 mock。
 
 ## 測試樣例
 

@@ -73,20 +73,11 @@ public struct CourseService {
 
     public func delete(_ course: CourseModel) throws {
         let courseID = course.id
-        let inputDescriptor = FetchDescriptor<InputRecordModel>(
-            predicate: #Predicate { record in
-                record.courseID == courseID
-            }
-        )
-        let termDescriptor = FetchDescriptor<TermModel>(
-            predicate: #Predicate { term in
-                term.courseID == courseID
-            }
-        )
-
-        let inputCount = try modelContext.fetchCount(inputDescriptor)
-        let termCount = try modelContext.fetchCount(termDescriptor)
-        guard inputCount == 0, termCount == 0 else {
+        let courseIsReferenced = try modelContext.fetch(FetchDescriptor<InputRecordModel>())
+            .contains { $0.courseID == courseID }
+            || modelContext.fetch(FetchDescriptor<TermModel>())
+            .contains { $0.courseID == courseID }
+        guard !courseIsReferenced else {
             throw CourseServiceError.courseInUse
         }
 

@@ -3,7 +3,7 @@ import SwiftUI
 import WordNoteCore
 
 struct CoursesOverviewView: View {
-    @Query(sort: \CourseModel.courseName) private var courses: [CourseModel]
+    @Query private var storedCourses: [CourseModel]
     @Query private var terms: [TermModel]
     @Query private var records: [InputRecordModel]
 
@@ -11,14 +11,21 @@ struct CoursesOverviewView: View {
     @State private var isCreating = false
     @State private var errorMessage: String?
 
+    private var courses: [CourseModel] {
+        storedCourses.sorted { $0.courseName.localizedStandardCompare($1.courseName) == .orderedAscending }
+    }
+
     private var selectedCourse: CourseModel? {
         guard let selectedCourseID else { return courses.first }
         return courses.first { $0.id == selectedCourseID }
     }
 
     var body: some View {
-        HStack(spacing: 0) {
-            VStack(spacing: 12) {
+        GeometryReader { proxy in
+            let listWidth = CoursesLayoutMetrics.listWidth(for: proxy.size.width)
+
+            HStack(spacing: 0) {
+                VStack(spacing: 12) {
                 PageHeader(
                     title: "Courses",
                     subtitle: "\(courses.count) course\(courses.count == 1 ? "" : "s")"
@@ -53,13 +60,13 @@ struct CoursesOverviewView: View {
                     }
                 }
             }
-            .frame(width: 380)
-            .background(Color(nsColor: .controlBackgroundColor))
+                .frame(width: listWidth)
+                .background(Color(nsColor: .controlBackgroundColor))
 
-            Divider()
+                Divider()
 
-            if isCreating {
-                CourseEditor(
+                if isCreating {
+                    CourseEditor(
                     mode: .create,
                     course: nil,
                     termCount: 0,
@@ -70,9 +77,9 @@ struct CoursesOverviewView: View {
                         isCreating = false
                     },
                     onDeleted: {}
-                )
-            } else if let selectedCourse {
-                CourseEditor(
+                    )
+                } else if let selectedCourse {
+                    CourseEditor(
                     mode: .edit,
                     course: selectedCourse,
                     termCount: termCount(for: selectedCourse.id),
@@ -84,13 +91,14 @@ struct CoursesOverviewView: View {
                     onDeleted: {
                         selectedCourseID = courses.first?.id
                     }
-                )
-            } else {
-                ContentUnavailableView("No Course Selected", systemImage: "graduationcap")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    )
+                } else {
+                    ContentUnavailableView("No Course Selected", systemImage: "graduationcap")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
             }
         }
-        .frame(minWidth: 980, minHeight: 620)
+        .frame(minWidth: CoursesLayoutMetrics.minContentWidth, minHeight: 620)
         .onAppear(perform: maintainSelection)
         .onChange(of: courses.map(\.id)) {
             maintainSelection()
@@ -113,6 +121,16 @@ struct CoursesOverviewView: View {
             return
         }
         selectedCourseID = courses.first?.id
+    }
+}
+
+private enum CoursesLayoutMetrics {
+    static let minContentWidth: CGFloat = 860
+    static let minListWidth: CGFloat = 320
+    static let maxListWidth: CGFloat = 380
+
+    static func listWidth(for contentWidth: CGFloat) -> CGFloat {
+        min(max(contentWidth * 0.36, minListWidth), maxListWidth)
     }
 }
 
@@ -162,6 +180,7 @@ private struct CourseEditor: View {
     @State private var semester = ""
     @State private var description = ""
     @State private var statusMessage: String?
+    @State private var isDeleteConfirmationPresented = false
 
     var body: some View {
         ScrollView {
@@ -175,7 +194,15 @@ private struct CourseEditor: View {
                     }
                     if mode == .edit {
                         Button("Delete", role: .destructive) {
-                            delete()
+                            isDeleteConfirmationPresented = true
+                        }
+                        .confirmationDialog(
+                            "Delete this course?",
+                            isPresented: $isDeleteConfirmationPresented
+                        ) {
+                            Button("Delete Course", role: .destructive, action: delete)
+                        } message: {
+                            Text("Courses referenced by terms or input records cannot be deleted.")
                         }
                     }
                 }

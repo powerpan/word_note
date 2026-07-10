@@ -38,10 +38,16 @@ MVP 的質量重點：
 - Review feedback update。
 - duplicate hit 後 Term 進入今日待復習。
 - Settings API Key 存取可用臨時 env 文件。
+- analyzing 記錄在 App 重啟後恢復入隊。
+- 同一輸入已排隊時不建立第二筆記錄。
+- 一筆 AI 失敗後佇列繼續處理下一筆。
+- AI 重試替換未保存舊候選，不累積重複資料。
+- 批量確認先全量驗證，任一錯誤時不部分寫入。
+- 刪除 InputRecord/Term 時按規則級聯或清空外鍵。
 
 ### UI Tests
 
-首版最少覆蓋：
+SwiftPM 目前沒有獨立 XCUITest target。以下流程由服務層整合測試、App 啟動驗證和發版前手動回歸共同覆蓋；若改用 Xcode project，應把它們升級為自動化 UI smoke tests：
 
 - Quick Add 保存 draft。
 - Save & Analyze mock 成功後進入 Candidate Review。
@@ -116,12 +122,12 @@ Expected:
 
 ## Review Scheduler Tests
 
-| feedback | expected mastery | expected interval |
+| feedback | expected mastery | first expected interval |
 |---|---|---|
 | again | vague | 1 day |
-| hard | vague | 3 days |
-| good | familiar | 7 days |
-| easy | mastered | 14 days |
+| hard | vague | 1 day |
+| good | familiar | 2 days |
+| easy | mastered | 4 days |
 
 還要測：
 
@@ -171,6 +177,17 @@ Expected：
 - Term 與 Course 關聯正確。
 - 刪除 Course 被引用時被阻止。
 - 刪除 Term 時 ReviewEvent 按策略處理。
+- 舊 unversioned store 複製後可由 versioned schema 打開且資料保留。
+- 遷移前建立備份，既有新 store 不被覆寫。
+- 孤兒 CandidateTerm/ReviewEvent 被清理，懸空可空外鍵被清空。
+- store 目錄和文件權限分別為 `0700` / `0600`。
+
+## DeepSeek Contract Tests
+
+- URL、Bearer header、model、`response_format` 與 `thinking.type = disabled` 使用 mock URLProtocol 驗證。
+- 429 映射到 typed rate-limit error。
+- rawText 超過 8,000 字符時不調用 client。
+- `swift test` 不執行付費網絡請求；live smoke test 必須顯式設置 `RUN_LIVE_DEEPSEEK_TESTS=1`。
 
 ## Security Tests
 
@@ -237,6 +254,16 @@ Expected：
 4. 核心邏輯有單元測試。
 5. 本地資料不會因錯誤操作丟失。
 6. UI 有 loading、empty、error state。
+
+## 目前驗證基線
+
+2026-07-10 完整加固驗證：
+
+- `swift test`：56 tests，0 failures；付費 live 測試按預設閘門跳過 1 項。
+- `RUN_LIVE_DEEPSEEK_TESTS=1 swift test --filter LiveDeepSeekSmokeTests`：1 test，0 failures。
+- `swift build -Xswiftc -warnings-as-errors`：通過。
+- 全新 scratch path 的 `strict-concurrency=complete` + `warn-concurrency` + `warnings-as-errors`：通過。
+- App bundle 啟動、首屏可訪問性樹、舊 store 備份/遷移、SQLite `quick_check`、孤兒資料修復與 `0700/0600` 權限：通過。
 
 ## MVP Release Gate
 

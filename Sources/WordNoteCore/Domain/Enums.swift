@@ -1,6 +1,6 @@
 import Foundation
 
-public enum InputType: String, Codable, CaseIterable, Identifiable {
+public enum InputType: String, Codable, CaseIterable, Identifiable, Hashable, Sendable {
     case word
     case phrase
     case sentence
@@ -10,7 +10,7 @@ public enum InputType: String, Codable, CaseIterable, Identifiable {
     public var id: String { rawValue }
 }
 
-public enum InputRecordStatus: String, Codable, CaseIterable, Identifiable {
+public enum InputRecordStatus: String, Codable, CaseIterable, Identifiable, Hashable, Sendable {
     case draft
     case analyzing
     case analyzed
@@ -38,7 +38,7 @@ public enum InputRecordStatus: String, Codable, CaseIterable, Identifiable {
     }
 }
 
-public enum CandidateStatus: String, Codable, CaseIterable, Identifiable {
+public enum CandidateStatus: String, Codable, CaseIterable, Identifiable, Hashable, Sendable {
     case pending
     case saved
     case ignored
@@ -46,7 +46,7 @@ public enum CandidateStatus: String, Codable, CaseIterable, Identifiable {
     public var id: String { rawValue }
 }
 
-public enum TermType: String, Codable, CaseIterable, Identifiable {
+public enum TermType: String, Codable, CaseIterable, Identifiable, Hashable, Sendable {
     case word
     case phrase
     case expression
@@ -68,7 +68,7 @@ public enum TermType: String, Codable, CaseIterable, Identifiable {
     }
 }
 
-public enum SourceType: String, Codable, CaseIterable, Identifiable {
+public enum SourceType: String, Codable, CaseIterable, Identifiable, Hashable, Sendable {
     case `class`
     case paper
     case slides
@@ -96,7 +96,7 @@ public enum SourceType: String, Codable, CaseIterable, Identifiable {
     }
 }
 
-public enum Importance: String, Codable, CaseIterable, Identifiable, Comparable {
+public enum Importance: String, Codable, CaseIterable, Identifiable, Comparable, Hashable, Sendable {
     case low
     case medium
     case high
@@ -130,7 +130,7 @@ public enum Importance: String, Codable, CaseIterable, Identifiable, Comparable 
     }
 }
 
-public enum TermCategory: String, Codable, CaseIterable, Identifiable {
+public enum TermCategory: String, Codable, CaseIterable, Identifiable, Hashable, Sendable {
     case general
     case academic
     case aiML
@@ -164,7 +164,7 @@ public enum TermCategory: String, Codable, CaseIterable, Identifiable {
     }
 }
 
-public enum MasteryLevel: String, Codable, CaseIterable, Identifiable {
+public enum MasteryLevel: String, Codable, CaseIterable, Identifiable, Hashable, Sendable {
     case new
     case vague
     case familiar
@@ -186,15 +186,26 @@ public enum MasteryLevel: String, Codable, CaseIterable, Identifiable {
     }
 }
 
-public enum ReviewMode: String, Codable, CaseIterable, Identifiable {
+public enum ReviewMode: String, Codable, CaseIterable, Identifiable, Hashable, Sendable {
     case englishToChinese
     case chineseToEnglish
     case contextCloze
 
     public var id: String { rawValue }
+
+    public var displayTitle: String {
+        switch self {
+        case .englishToChinese:
+            return "English → Chinese"
+        case .chineseToEnglish:
+            return "Chinese → English"
+        case .contextCloze:
+            return "Context Cloze"
+        }
+    }
 }
 
-public enum ReviewFeedback: String, Codable, CaseIterable, Identifiable {
+public enum ReviewFeedback: String, Codable, CaseIterable, Identifiable, Hashable, Sendable {
     case again
     case hard
     case good

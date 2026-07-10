@@ -4,15 +4,27 @@ import WordNoteCore
 
 struct InboxView: View {
     @Environment(\.modelContext) private var modelContext
-    @Query(sort: \InputRecordModel.createdAt, order: .reverse) private var records: [InputRecordModel]
-    @Query(sort: \CourseModel.courseName) private var courses: [CourseModel]
-    @Query(sort: \CandidateTermModel.createdAt) private var candidates: [CandidateTermModel]
+    @Query private var storedRecords: [InputRecordModel]
+    @Query private var storedCourses: [CourseModel]
+    @Query private var storedCandidates: [CandidateTermModel]
 
     @State private var selectedRecordID: UUID?
     @State private var selectedBatchRecordIDs = Set<UUID>()
     @State private var errorMessage: String?
     @State private var analyzingRecordID: UUID?
     @SceneStorage("inboxConfirmedRecordsExpanded") private var confirmedRecordsExpanded = false
+
+    private var records: [InputRecordModel] {
+        storedRecords.sorted { $0.createdAt > $1.createdAt }
+    }
+
+    private var courses: [CourseModel] {
+        storedCourses.sorted { $0.courseName.localizedStandardCompare($1.courseName) == .orderedAscending }
+    }
+
+    private var candidates: [CandidateTermModel] {
+        storedCandidates.sorted { $0.createdAt < $1.createdAt }
+    }
 
     private var activeRecords: [InputRecordModel] {
         records.filter { record in
@@ -270,9 +282,11 @@ struct InboxView: View {
         let service = VocabularyService(modelContext: modelContext)
 
         do {
-            for item in recordsToConfirm {
-                _ = try service.createTerms(from: item.candidates, sourceRecord: item.record)
-            }
+            _ = try service.confirmCandidates(
+                recordsToConfirm.map {
+                    CandidateConfirmation(candidates: $0.candidates, sourceRecord: $0.record)
+                }
+            )
             selectedBatchRecordIDs.subtract(recordsToConfirm.map(\.record.id))
             errorMessage = nil
             maintainSelection()
@@ -367,154 +381,5 @@ private enum InboxLayoutMetrics {
 
     static func listWidth(for contentWidth: CGFloat) -> CGFloat {
         min(max(contentWidth * 0.36, minListWidth), maxListWidth)
-    }
-}
-
-private struct InboxRow: View {
-    let record: InputRecordModel
-    let previewText: String
-    let batchSelection: Binding<Bool>?
-    let batchSelectionEnabled: Bool
-    var isConfirmed = false
-
-    var body: some View {
-        HStack(spacing: 10) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(record.rawText)
-                    .lineLimit(1)
-                    .font(.headline)
-
-                Text(previewText)
-                    .lineLimit(1)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer(minLength: 8)
-
-            if let batchSelection {
-                Toggle("", isOn: batchSelection)
-                    .labelsHidden()
-                    .toggleStyle(.checkbox)
-                    .disabled(!batchSelectionEnabled)
-                    .help(batchSelectionEnabled ? "Select for batch confirmation" : "Analyze this record before batch confirmation")
-            } else if isConfirmed {
-                Image(systemName: "checkmark.circle")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .accessibilityLabel("Confirmed")
-            }
-        }
-        .opacity(isConfirmed ? 0.72 : 1)
-        .padding(.vertical, 4)
-    }
-}
-
-private struct InputRecordDetailView: View {
-    let record: InputRecordModel
-    let courseName: String?
-    let candidates: [CandidateTermModel]
-    let isAnalyzing: Bool
-    @Binding var errorMessage: String?
-    let onAnalyze: (InputRecordModel) -> Void
-    let onIgnore: (InputRecordModel) -> Void
-    let onDelete: (InputRecordModel) -> Void
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                PageHeader(
-                    title: "Input Record",
-                    subtitle: record.sourceType.displayTitle
-                ) {
-                    Button {
-                        onAnalyze(record)
-                    } label: {
-                        Label(record.status == .failed ? "Retry" : "Analyze", systemImage: "sparkles")
-                    }
-                    .disabled(isAnalyzing || record.status == .analyzing)
-
-                    Button {
-                        onIgnore(record)
-                    } label: {
-                        Label("Ignore", systemImage: "archivebox")
-                    }
-
-                    Button(role: .destructive) {
-                        onDelete(record)
-                    } label: {
-                        Label("Delete", systemImage: "trash")
-                    }
-                }
-
-                if let errorMessage {
-                    StatusBanner(message: errorMessage, kind: .warning)
-                }
-
-                if isAnalyzing || record.status == .analyzing {
-                    ProgressView("Analyzing with DeepSeek...")
-                }
-
-                GroupBox("Raw Text") {
-                    Text(record.rawText)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .textSelection(.enabled)
-                        .padding(.vertical, 4)
-                }
-
-                Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 10) {
-                    detailRow("Status", record.status.displayTitle)
-                    detailRow("Source", record.sourceType.displayTitle)
-                    detailRow("Course", courseName ?? "No Course")
-                    detailRow("Created", record.createdAt.formatted(date: .abbreviated, time: .shortened))
-                    detailRow("Updated", record.updatedAt.formatted(date: .abbreviated, time: .shortened))
-                }
-
-                if let note = record.note, !note.isEmpty {
-                    GroupBox("Note") {
-                        Text(note)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .textSelection(.enabled)
-                            .padding(.vertical, 4)
-                    }
-                }
-
-                if let sentenceMeaning = record.sentenceMeaning, !sentenceMeaning.isEmpty {
-                    GroupBox("Sentence Meaning") {
-                        Text(sentenceMeaning)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .textSelection(.enabled)
-                            .padding(.vertical, 4)
-                    }
-                }
-
-                if let aiErrorSummary = record.aiErrorSummary, !aiErrorSummary.isEmpty {
-                    GroupBox("AI Error") {
-                        Text(aiErrorSummary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .textSelection(.enabled)
-                            .padding(.vertical, 4)
-                    }
-                }
-
-                if !candidates.isEmpty {
-                    CandidateReviewView(record: record, candidates: candidates)
-                }
-
-                Spacer(minLength: 0)
-            }
-            .padding(28)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    @ViewBuilder
-    private func detailRow(_ title: String, _ value: String) -> some View {
-        GridRow {
-            Text(title)
-                .foregroundStyle(.secondary)
-            Text(value)
-                .textSelection(.enabled)
-        }
     }
 }

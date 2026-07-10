@@ -12,11 +12,7 @@ struct DashboardView: View {
     }
 
     private var dueTodayCount: Int {
-        let endOfToday = Calendar.current.startOfDay(for: Date()).addingTimeInterval(24 * 60 * 60)
-        return terms.filter { term in
-            guard let nextReviewAt = term.nextReviewAt else { return false }
-            return nextReviewAt < endOfToday
-        }.count
+        dueTerms.count
     }
 
     var body: some View {
@@ -81,17 +77,13 @@ struct DashboardView: View {
     }
 
     private var duePreview: [TermModel] {
-        let endOfToday = Calendar.current.startOfDay(for: Date()).addingTimeInterval(24 * 60 * 60)
-        return terms
-            .filter { term in
-                guard let nextReviewAt = term.nextReviewAt else { return false }
-                return nextReviewAt < endOfToday
-            }
-            .sorted {
-                ($0.nextReviewAt ?? .distantFuture) < ($1.nextReviewAt ?? .distantFuture)
-            }
+        dueTerms
             .prefix(5)
             .map { $0 }
+    }
+
+    private var dueTerms: [TermModel] {
+        ReviewQueuePolicy().terms(from: terms)
     }
 }
 

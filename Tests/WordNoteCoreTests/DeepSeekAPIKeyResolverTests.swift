@@ -59,4 +59,23 @@ final class DeepSeekAPIKeyResolverTests: XCTestCase {
         XCTAssertNil(store.load())
         XCTAssertFalse(FileManager.default.fileExists(atPath: fileURL.path))
     }
+
+    func testEnvironmentFileStoreMigratesProcessKeyOnlyWhenFileIsMissing() throws {
+        let fileURL = temporaryDirectoryURL.appending(path: "deepseek.env")
+        let store = DeepSeekEnvironmentFileStore(fileURL: fileURL)
+
+        XCTAssertTrue(
+            try store.migrateFromProcessEnvironmentIfNeeded(
+                environment: [DeepSeekAPIKeyResolver.environmentVariableName: "process-key"]
+            )
+        )
+        XCTAssertEqual(store.load(), "process-key")
+
+        XCTAssertFalse(
+            try store.migrateFromProcessEnvironmentIfNeeded(
+                environment: [DeepSeekAPIKeyResolver.environmentVariableName: "replacement-key"]
+            )
+        )
+        XCTAssertEqual(store.load(), "process-key")
+    }
 }

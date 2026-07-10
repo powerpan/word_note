@@ -267,10 +267,22 @@ normalized(rawText) == Term.normalizedTerm
 
 ## 遷移原則
 
-資料模型應預留 schema version。
+資料模型使用 `WordNoteSchemaV1` 和 `WordNoteMigrationPlan` 顯式版本化。當增加、重命名或刪除持久化字段時，必須新增 schema version 和可測試的 migration stage，不能直接修改既有版本的語義。
 
 遷移要求：
 
 - 新字段優先可空或有默認值。
 - 不在小版本中刪除用戶資料。
 - 任何破壞性遷移前先做導出或備份。
+- 正式 store 固定在 `~/Library/Application Support/WordNote/WordNote.store`。
+- 若只存在歷史 `~/Library/Application Support/default.store`，首次啟動先完整複製 store、WAL、SHM 到 `WordNote/Backups/`，再複製到新位置；舊檔保留不刪除。
+- App 啟動後清理沒有 InputRecord 的 CandidateTerm、沒有 Term 的 ReviewEvent，並清空指向不存在 Course/InputRecord 的可空外鍵。
+- `WordNote` 和 `Backups` 目錄使用 `0700`，store 與 sidecar 文件使用 `0600`。
+
+## 刪除與重試一致性
+
+- 刪除 InputRecord 時，刪除它的全部 CandidateTerm，並把仍存在 Term 的 `sourceRecordID` 清空；不刪除已確認 Term。
+- 刪除 Term 時，級聯刪除對應 ReviewEvent。
+- 刪除 Course 仍採引用保護，不自動清空關聯。
+- 重試 AI 分析時，保留已保存 CandidateTerm，刪除其餘舊候選，再寫入新的去重候選，避免同一記錄反覆累積結果。
+- 批量確認 CandidateTerm 必須全量預驗證並單次保存，禁止部分成功。

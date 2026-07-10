@@ -27,6 +27,8 @@
 sk-****abcd
 ```
 
+環境文件和資料庫文件使用 owner-only `0600` 權限，`WordNote` 應用資料目錄使用 `0700`。若啟動進程只有 `DEEPSEEK_API_KEY` 而默認環境文件尚未配置，App 首次啟動會把 key 寫入該私有文件；不使用 Keychain。
+
 ## 本地資料
 
 首版所有學習資料默認只保存在本機。
@@ -106,10 +108,11 @@ P1 JSON/CSV 導出要求：
 
 ## 備份策略
 
-MVP：
+目前：
 
-- 不自動備份。
-- SwiftData 使用系統應用容器。
+- SwiftData 固定存放在 `~/Library/Application Support/WordNote/WordNote.store`。
+- 從歷史 `default.store` 遷移時自動建立一次不可覆寫的完整備份，並保留原檔。
+- 一般日常寫入不建立逐次備份；仍需後續提供用戶主動導出能力。
 
 P1：
 

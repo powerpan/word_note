@@ -4,6 +4,8 @@
 
 採用垂直切片，而不是先把所有 UI 或所有資料模型一次寫完。每個里程碑都應該能運行、能保存資料、能被手工驗收。
 
+截至 2026-07-10，M1-M7、P1-A、P1-B、P1-C 和下列可靠性加固均已落地。後續變更應維持本文件定義的資料一致性與測試門檻。
+
 ## M1: Project Foundation
 
 目標：建立可運行的 macOS App 骨架和基礎資料層。
@@ -150,6 +152,8 @@
 
 ## P1-A: Duplicate Quick Add Hit
 
+狀態：已完成。
+
 目標：用戶再次輸入已存在詞條時，不再調用 DeepSeek，而是直接進入學習回路。
 
 任務：
@@ -171,6 +175,8 @@
 - wrongCount 冷卻窗口外才 +1。
 
 ## P1-B: Review Experience Upgrade
+
+狀態：已完成。
 
 目標：把 Review 從固定間隔卡片升級為可日常使用的學習回路。
 
@@ -194,6 +200,8 @@
 
 ## P1-C: Simplified Adaptive Scheduler
 
+狀態：已完成。
+
 目標：用透明規則替代固定 1/3/7/14 天，但不引入完整 SM-2 / FSRS。
 
 任務：
@@ -210,6 +218,26 @@
 - 連續答對會逐步拉長間隔。
 - again/hard 會明確降低掌握度並提前復習。
 - 單元測試覆蓋所有 feedback 和 streak 分支。
+
+## Reliability Hardening
+
+狀態：已完成。
+
+交付內容：
+
+- SwiftData schema 顯式版本化，舊 `default.store` 安全備份並遷移到私有固定路徑。
+- 啟動時修復孤兒記錄與懸空引用，持久化失敗顯示恢復頁而不是直接崩潰。
+- AI 佇列以 analyzing InputRecord 作為持久化事實來源，支持重啟恢復、排隊去重和單筆失敗隔離。
+- AI 重試候選替換、InputRecord/Term 級聯刪除、Term 全局去重和批量確認原子性。
+- DeepSeek 請求契約、輸入上限、live 測試顯式閘門和 strict concurrency build gate。
+- Inbox 批量確認、手動建詞、危險刪除確認、響應式三欄佈局與可訪問性標籤。
+
+完成標準：
+
+- 舊 store 遷移測試證明資料保留、備份存在且不覆寫新 store。
+- 全部單元與整合測試通過。
+- warnings-as-errors 和 Swift 6 complete concurrency warnings-as-errors 建置通過。
+- App bundle 啟動及實際本機 store 遷移後資料完整性驗證通過。
 
 ## 推薦目錄結構
 
@@ -296,11 +324,11 @@ WordNoteUITests/
 | API Key 泄漏 | 安全問題 | env 文件忽略、日誌脫敏、測試 |
 | UI 過度設計 | 延誤核心閉環 | 先做密集、清楚的工作台式界面 |
 
-## P1 啟動條件
+## 歷史 P1 啟動條件
 
-只有滿足以下條件才進入 P1：
+下列條件已滿足並已進入 P1；保留作為後續大階段啟動門檻的參考：
 
 - P0 閉環可日常使用。
 - AI 失敗和重試穩定。
 - 用戶已累積至少一批真實詞條。
-- 已確認最常用入口確實需要菜單欄或全局快捷鍵。
+- 已確認最常用入口需要菜單欄快速輸入；系統全局快捷鍵仍未實作。

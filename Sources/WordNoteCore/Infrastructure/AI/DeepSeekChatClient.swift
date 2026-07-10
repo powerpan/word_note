@@ -1,10 +1,10 @@
 import Foundation
 
-public protocol AICompletionClient {
+public protocol AICompletionClient: Sendable {
     func complete(messages: [DeepSeekMessage], responseFormat: DeepSeekResponseFormat) async throws -> DeepSeekCompletion
 }
 
-public struct DeepSeekMessage: Codable, Equatable {
+public struct DeepSeekMessage: Codable, Equatable, Sendable {
     public let role: String
     public let content: String
 
@@ -14,13 +14,13 @@ public struct DeepSeekMessage: Codable, Equatable {
     }
 }
 
-public struct DeepSeekResponseFormat: Codable, Equatable {
+public struct DeepSeekResponseFormat: Codable, Equatable, Sendable {
     public let type: String
 
     public static let jsonObject = DeepSeekResponseFormat(type: "json_object")
 }
 
-public struct DeepSeekCompletion: Equatable {
+public struct DeepSeekCompletion: Equatable, Sendable {
     public let id: String?
     public let model: String
     public let content: String
@@ -32,11 +32,17 @@ public struct DeepSeekCompletion: Equatable {
     }
 }
 
-public struct DeepSeekChatClient: AICompletionClient {
+public enum DeepSeekThinkingMode: String, Sendable {
+    case enabled
+    case disabled
+}
+
+public struct DeepSeekChatClient: AICompletionClient, Sendable {
     public let apiKey: String
     public let baseURL: URL
     public let model: String
     public let timeout: TimeInterval
+    public let thinkingMode: DeepSeekThinkingMode
     private let session: URLSession
 
     public init(
@@ -44,12 +50,14 @@ public struct DeepSeekChatClient: AICompletionClient {
         baseURL: URL = URL(string: "https://api.deepseek.com")!,
         model: String = "deepseek-v4-flash",
         timeout: TimeInterval = 30,
+        thinkingMode: DeepSeekThinkingMode = .disabled,
         session: URLSession = .shared
     ) {
         self.apiKey = apiKey
         self.baseURL = baseURL
         self.model = model
         self.timeout = timeout
+        self.thinkingMode = thinkingMode
         self.session = session
     }
 
@@ -68,6 +76,7 @@ public struct DeepSeekChatClient: AICompletionClient {
                 model: model,
                 messages: messages,
                 responseFormat: responseFormat,
+                thinking: DeepSeekThinking(type: thinkingMode.rawValue),
                 temperature: 0.2,
                 maxTokens: 2000
             )
@@ -109,6 +118,7 @@ private struct DeepSeekChatRequest: Encodable {
     let model: String
     let messages: [DeepSeekMessage]
     let responseFormat: DeepSeekResponseFormat
+    let thinking: DeepSeekThinking
     let temperature: Double
     let maxTokens: Int
 
@@ -116,9 +126,14 @@ private struct DeepSeekChatRequest: Encodable {
         case model
         case messages
         case responseFormat = "response_format"
+        case thinking
         case temperature
         case maxTokens = "max_tokens"
     }
+}
+
+private struct DeepSeekThinking: Encodable {
+    let type: String
 }
 
 private struct DeepSeekChatResponse: Decodable {

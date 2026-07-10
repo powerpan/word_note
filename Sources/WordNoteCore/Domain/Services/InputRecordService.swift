@@ -62,9 +62,24 @@ public struct InputRecordService {
         _ result: AIAnalysisResult,
         to record: InputRecordModel
     ) throws -> [CandidateTermModel] {
+        let recordID = record.id
+        let existingCandidates = try modelContext.fetch(FetchDescriptor<CandidateTermModel>())
+            .filter { $0.inputRecordID == recordID }
+        let savedNormalizedTerms = Set(
+            existingCandidates
+                .filter { $0.status == .saved }
+                .map(\.normalizedTerm)
+        )
+
+        existingCandidates
+            .filter { $0.status != .saved }
+            .forEach(modelContext.delete)
+
         record.markAnalyzed(sentenceMeaning: result.sentenceMeaning, inputType: result.inputType)
 
-        let candidates = result.candidates.map { candidate in
+        let candidates = result.candidates
+            .filter { !savedNormalizedTerms.contains(TextNormalizer.normalized($0.term)) }
+            .map { candidate in
             CandidateTermModel(
                 inputRecordID: record.id,
                 term: candidate.term,
@@ -81,7 +96,7 @@ public struct InputRecordService {
                 confidence: candidate.confidence,
                 status: .pending
             )
-        }
+            }
 
         candidates.forEach(modelContext.insert)
         try modelContext.save()
@@ -126,7 +141,20 @@ public struct InputRecordService {
     }
 
     public func delete(_ record: InputRecordModel) throws {
+        let recordID = record.id
+        let candidates = try modelContext.fetch(FetchDescriptor<CandidateTermModel>())
+            .filter { $0.inputRecordID == recordID }
+        let sourcedTerms = try modelContext.fetch(FetchDescriptor<TermModel>())
+            .filter { $0.sourceRecordID == recordID }
+        candidates.forEach(modelContext.delete)
+        sourcedTerms.forEach { $0.sourceRecordID = nil }
         modelContext.delete(record)
-        try modelContext.save()
+
+        do {
+            try modelContext.save()
+        } catch {
+            modelContext.rollback()
+            throw error
+        }
     }
 }

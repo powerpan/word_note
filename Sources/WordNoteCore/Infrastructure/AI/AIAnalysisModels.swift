@@ -1,6 +1,6 @@
 import Foundation
 
-public struct AIAnalysisRequest: Equatable {
+public struct AIAnalysisRequest: Equatable, Sendable {
     public let rawText: String
     public let courseName: String?
     public let sourceType: SourceType
@@ -22,7 +22,7 @@ public struct AIAnalysisRequest: Equatable {
     }
 }
 
-public struct AIAnalysisResult: Equatable {
+public struct AIAnalysisResult: Equatable, Sendable {
     public let inputType: InputType
     public let sentenceMeaning: String?
     public let candidates: [AIAnalysisCandidate]
@@ -44,7 +44,7 @@ public struct AIAnalysisResult: Equatable {
     }
 }
 
-public struct AIAnalysisCandidate: Equatable {
+public struct AIAnalysisCandidate: Equatable, Sendable {
     public let term: String
     public let termType: TermType
     public let needToLearn: Bool
@@ -100,6 +100,7 @@ public enum AIAnalysisError: LocalizedError, Equatable {
     case emptyResponse
     case invalidResponse
     case schemaMismatch(String)
+    case inputTooLong(maxCharacters: Int)
 
     public var errorDescription: String? {
         switch self {
@@ -121,6 +122,8 @@ public enum AIAnalysisError: LocalizedError, Equatable {
             return "DeepSeek returned an invalid response."
         case .schemaMismatch(let summary):
             return "AI JSON schema mismatch: \(summary)"
+        case .inputTooLong(let maxCharacters):
+            return "Input is too long for AI analysis. Keep it under \(maxCharacters) characters."
         }
     }
 }

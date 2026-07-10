@@ -3,10 +3,13 @@ import XCTest
 
 final class LiveDeepSeekSmokeTests: XCTestCase {
     func testLiveDeepSeekReturnsStructuredCandidate() async throws {
-        guard let apiKey = ProcessInfo.processInfo.environment[DeepSeekAPIKeyResolver.environmentVariableName],
-              !TextNormalizer.isBlank(apiKey)
+        guard ProcessInfo.processInfo.environment["RUN_LIVE_DEEPSEEK_TESTS"] == "1" else {
+            throw XCTSkip("Set RUN_LIVE_DEEPSEEK_TESTS=1 to opt into the paid live DeepSeek smoke test.")
+        }
+
+        guard let apiKey = DeepSeekAPIKeyResolver.resolve(), !TextNormalizer.isBlank(apiKey)
         else {
-            throw XCTSkip("Set DEEPSEEK_API_KEY to run the live DeepSeek smoke test.")
+            throw XCTSkip("Configure DEEPSEEK_API_KEY to run the live DeepSeek smoke test.")
         }
 
         let service = AIAnalysisService(client: DeepSeekChatClient(apiKey: apiKey))

@@ -6,7 +6,7 @@ struct QuickAddView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(QuickAddAnalysisQueue.self) private var analysisQueue
     @AppStorage("defaultSourceType") private var defaultSourceType = SourceType.other.rawValue
-    @Query(sort: \CourseModel.courseName) private var courses: [CourseModel]
+    @Query private var storedCourses: [CourseModel]
 
     @State private var rawText = ""
     @State private var selectedCourseID: UUID?
@@ -14,6 +14,10 @@ struct QuickAddView: View {
     @State private var note = ""
     @State private var statusMessage: String?
     @State private var errorMessage: String?
+
+    private var courses: [CourseModel] {
+        storedCourses.sorted { $0.courseName.localizedStandardCompare($1.courseName) == .orderedAscending }
+    }
 
     private var canSave: Bool {
         !TextNormalizer.isBlank(rawText)

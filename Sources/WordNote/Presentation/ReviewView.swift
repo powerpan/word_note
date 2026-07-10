@@ -4,73 +4,59 @@ import WordNoteCore
 
 struct ReviewView: View {
     @Environment(\.modelContext) private var modelContext
-    @Query(sort: \TermModel.nextReviewAt) private var terms: [TermModel]
-    @Query(sort: \CourseModel.courseName) private var courses: [CourseModel]
+    @Query private var terms: [TermModel]
+    @Query private var storedCourses: [CourseModel]
 
     @State private var selectedCourseID: UUID?
-    @State private var selectedTermID: UUID?
+    @State private var reviewMode: ReviewMode = .englishToChinese
+    @State private var queueScope: ReviewQueueScope = .dueToday
+    @State private var queueIDs: [UUID] = []
+    @State private var handledTermIDs = Set<UUID>()
     @State private var isAnswerVisible = false
-    @State private var reviewedCount = 0
+    @State private var feedbackCounts: [ReviewFeedback: Int] = [:]
+    @State private var postponedCount = 0
     @State private var statusMessage: String?
     @State private var errorMessage: String?
 
-    private var dueTerms: [TermModel] {
-        let endOfToday = Calendar.current.startOfDay(for: Date()).addingTimeInterval(24 * 60 * 60)
-        return terms
-            .filter { term in
-                guard let nextReviewAt = term.nextReviewAt else { return false }
-                let courseMatches = selectedCourseID == nil || term.courseID == selectedCourseID
-                return courseMatches && nextReviewAt < endOfToday
-            }
-            .sorted { lhs, rhs in
-                if lhs.nextReviewAt != rhs.nextReviewAt {
-                    return (lhs.nextReviewAt ?? .distantFuture) < (rhs.nextReviewAt ?? .distantFuture)
-                }
-                if lhs.wrongCount != rhs.wrongCount {
-                    return lhs.wrongCount > rhs.wrongCount
-                }
-                if lhs.importance != rhs.importance {
-                    return lhs.importance > rhs.importance
-                }
-                return lhs.createdAt < rhs.createdAt
-            }
+    private var courses: [CourseModel] {
+        storedCourses.sorted { $0.courseName.localizedStandardCompare($1.courseName) == .orderedAscending }
+    }
+
+    private var availableTerms: [TermModel] {
+        ReviewQueuePolicy().terms(
+            from: terms,
+            scope: queueScope,
+            courseID: selectedCourseID
+        )
     }
 
     private var activeTerm: TermModel? {
-        if let selectedTermID, let selected = dueTerms.first(where: { $0.id == selectedTermID }) {
-            return selected
-        }
-        return dueTerms.first
+        guard let activeID = queueIDs.first else { return nil }
+        return availableTerms.first { $0.id == activeID }
+    }
+
+    private var reviewedCount: Int {
+        feedbackCounts.values.reduce(0, +)
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
+        VStack(alignment: .leading, spacing: 18) {
             PageHeader(
                 title: "Review",
-                subtitle: "Review due terms and update the next review date with simple feedback."
+                subtitle: queueScope == .dueToday
+                    ? "Work through terms scheduled for today."
+                    : "Practice terms raised by mistakes and repeated lookups."
             ) {
-                EmptyView()
-            }
-
-            HStack {
-                Picker("Course", selection: $selectedCourseID) {
-                    Text("All Courses").tag(UUID?.none)
-                    ForEach(courses, id: \.id) { course in
-                        Text(course.courseName).tag(Optional(course.id))
-                    }
-                }
-                .frame(maxWidth: 280)
-
-                Spacer()
-
-                Text("\(dueTerms.count) due")
+                Text("\(queueIDs.count) remaining")
                     .foregroundStyle(.secondary)
+                    .monospacedDigit()
             }
+
+            reviewControls
 
             if let statusMessage {
                 StatusBanner(message: statusMessage, kind: .success)
             }
-
             if let errorMessage {
                 StatusBanner(message: errorMessage, kind: .warning)
             }
@@ -79,30 +65,84 @@ struct ReviewView: View {
                 ReviewCard(
                     term: activeTerm,
                     courseName: courseName(for: activeTerm.courseID),
+                    mode: reviewMode,
                     isAnswerVisible: isAnswerVisible,
-                    onShowAnswer: {
-                        isAnswerVisible = true
-                    },
-                    onFeedback: recordFeedback
+                    onShowAnswer: { isAnswerVisible = true },
+                    onFeedback: recordFeedback,
+                    onSkip: skipActiveTerm,
+                    onLater: postponeActiveTerm
+                )
+            } else if reviewedCount > 0 || postponedCount > 0 {
+                ReviewCompletionView(
+                    feedbackCounts: feedbackCounts,
+                    postponedCount: postponedCount,
+                    onRestart: startSession
                 )
             } else {
                 EmptyStateView(
-                    systemImage: "checkmark.circle",
-                    title: "No Terms Due",
-                    message: reviewedCount == 0 ? "There are no terms scheduled for review today." : "Review complete for this queue."
+                    systemImage: queueScope == .dueToday ? "checkmark.circle" : "brain.head.profile",
+                    title: queueScope == .dueToday ? "No Terms Due" : "No Weak Terms",
+                    message: queueScope == .dueToday
+                        ? "There are no terms scheduled for review today."
+                        : "Repeated lookups and difficult reviews will appear here."
                 ) {
                     EmptyView()
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
 
-            Spacer()
+            Spacer(minLength: 0)
         }
         .padding(28)
-        .onChange(of: selectedCourseID) {
-            selectedTermID = nil
-            isAnswerVisible = false
+        .onAppear(perform: startSession)
+        .onChange(of: selectedCourseID) { startSession() }
+        .onChange(of: queueScope) { startSession() }
+        .onChange(of: reviewMode) { isAnswerVisible = false }
+        .onChange(of: availableTerms.map(\.id)) { syncQueueWithAvailableTerms() }
+    }
+
+    private var reviewControls: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
+                scopePicker
+                modePicker
+                coursePicker
+            }
+            VStack(alignment: .leading, spacing: 10) {
+                scopePicker
+                modePicker
+                coursePicker
+            }
         }
+    }
+
+    private var scopePicker: some View {
+        Picker("Queue", selection: $queueScope) {
+            ForEach(ReviewQueueScope.allCases) { scope in
+                Text(scope.displayTitle).tag(scope)
+            }
+        }
+        .pickerStyle(.segmented)
+        .frame(maxWidth: 260)
+    }
+
+    private var modePicker: some View {
+        Picker("Mode", selection: $reviewMode) {
+            Text("English → Chinese").tag(ReviewMode.englishToChinese)
+            Text("Chinese → English").tag(ReviewMode.chineseToEnglish)
+        }
+        .pickerStyle(.segmented)
+        .frame(maxWidth: 300)
+    }
+
+    private var coursePicker: some View {
+        Picker("Course", selection: $selectedCourseID) {
+            Text("All Courses").tag(UUID?.none)
+            ForEach(courses, id: \.id) { course in
+                Text(course.courseName).tag(Optional(course.id))
+            }
+        }
+        .frame(maxWidth: 260)
     }
 
     private func courseName(for courseID: UUID?) -> String? {
@@ -110,16 +150,69 @@ struct ReviewView: View {
         return courses.first { $0.id == courseID }?.courseName
     }
 
+    private func startSession() {
+        handledTermIDs.removeAll()
+        queueIDs = availableTerms.map(\.id)
+        feedbackCounts.removeAll()
+        postponedCount = 0
+        isAnswerVisible = false
+        statusMessage = nil
+        errorMessage = nil
+    }
+
+    private func syncQueueWithAvailableTerms() {
+        let availableIDs = availableTerms.map(\.id).filter { !handledTermIDs.contains($0) }
+        let availableIDSet = Set(availableIDs)
+        queueIDs.removeAll { !availableIDSet.contains($0) }
+        for id in availableIDs where !queueIDs.contains(id) {
+            queueIDs.append(id)
+        }
+        if activeTerm == nil {
+            isAnswerVisible = false
+        }
+    }
+
     private func recordFeedback(_ feedback: ReviewFeedback) {
         guard let activeTerm else { return }
         let service = ReviewService(modelContext: modelContext)
 
         do {
-            _ = try service.recordFeedback(for: activeTerm, feedback: feedback)
-            reviewedCount += 1
-            selectedTermID = dueTerms.first { $0.id != activeTerm.id }?.id
+            _ = try service.recordFeedback(for: activeTerm, mode: reviewMode, feedback: feedback)
+            handledTermIDs.insert(activeTerm.id)
+            queueIDs.removeAll { $0 == activeTerm.id }
+            feedbackCounts[feedback, default: 0] += 1
             isAnswerVisible = false
             statusMessage = "Recorded: \(feedback.displayTitle)"
+            errorMessage = nil
+        } catch {
+            statusMessage = nil
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func skipActiveTerm() {
+        guard queueIDs.count > 1 else {
+            statusMessage = "This is the last term in the current queue."
+            return
+        }
+        let skippedID = queueIDs.removeFirst()
+        queueIDs.append(skippedID)
+        isAnswerVisible = false
+        statusMessage = "Moved to the end of this session."
+        errorMessage = nil
+    }
+
+    private func postponeActiveTerm() {
+        guard let activeTerm else { return }
+        let service = ReviewService(modelContext: modelContext)
+
+        do {
+            try service.postponeUntilTomorrow(activeTerm)
+            handledTermIDs.insert(activeTerm.id)
+            queueIDs.removeAll { $0 == activeTerm.id }
+            postponedCount += 1
+            isAnswerVisible = false
+            statusMessage = "Moved to tomorrow without changing review statistics."
             errorMessage = nil
         } catch {
             statusMessage = nil
@@ -131,41 +224,84 @@ struct ReviewView: View {
 private struct ReviewCard: View {
     let term: TermModel
     let courseName: String?
+    let mode: ReviewMode
     let isAnswerVisible: Bool
     let onShowAnswer: () -> Void
     let onFeedback: (ReviewFeedback) -> Void
+    let onSkip: () -> Void
+    let onLater: () -> Void
+
+    private var promptText: String {
+        switch mode {
+        case .chineseToEnglish:
+            return term.chineseMeaning ?? term.englishDefinition ?? "No definition available"
+        case .englishToChinese, .contextCloze:
+            return term.term
+        }
+    }
+
+    private var contextText: String? {
+        guard let context = term.contextSentence, !context.isEmpty else { return nil }
+        if mode == .chineseToEnglish {
+            return context.replacingOccurrences(
+                of: term.term,
+                with: "_____",
+                options: [.caseInsensitive]
+            )
+        }
+        return context
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text(term.term)
-                        .font(.system(size: 34, weight: .bold))
-                    Spacer()
-                    Text(term.importance.displayTitle)
-                        .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(promptText)
+                        .font(.system(size: mode == .chineseToEnglish ? 26 : 34, weight: .bold))
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    HStack(spacing: 10) {
+                        TagChip(title: term.termType.displayTitle, tint: .blue)
+                        TagChip(title: term.masteryLevel.displayTitle, tint: .purple)
+                        if let courseName {
+                            Text(courseName)
+                                .lineLimit(1)
+                        }
+                    }
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
                 }
 
-                HStack(spacing: 10) {
-                    TagChip(title: term.termType.displayTitle, tint: .blue)
-                    TagChip(title: term.masteryLevel.displayTitle, tint: .purple)
-                    if let courseName {
-                        Text(courseName)
+                Spacer(minLength: 12)
+
+                HStack(spacing: 8) {
+                    Button(action: onSkip) {
+                        Label("Skip", systemImage: "forward")
                     }
+                    .help("Move this term to the end of the current session")
+
+                    Button(action: onLater) {
+                        Label("Later", systemImage: "calendar.badge.clock")
+                    }
+                    .help("Move this term to tomorrow without recording an answer")
                 }
-                .font(.callout)
-                .foregroundStyle(.secondary)
             }
 
-            if let contextSentence = term.contextSentence, !contextSentence.isEmpty {
+            if let contextText {
                 GroupBox("Context") {
-                    Text(contextSentence)
+                    Text(contextText)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .textSelection(.enabled)
                 }
             }
 
             if isAnswerVisible {
+                if mode == .chineseToEnglish {
+                    Text(term.term)
+                        .font(.title.bold())
+                        .textSelection(.enabled)
+                }
+
                 VStack(alignment: .leading, spacing: 12) {
                     answerSection("Chinese", term.chineseMeaning)
                     answerSection("English", term.englishDefinition)
@@ -174,17 +310,14 @@ private struct ReviewCard: View {
                 }
 
                 HStack(spacing: 10) {
-                    ForEach(ReviewFeedback.allCases) { feedback in
-                        Button(feedback.displayTitle) {
-                            onFeedback(feedback)
-                        }
-                    }
+                    feedbackButton(.again, key: "1", keyLabel: "1")
+                    feedbackButton(.hard, key: "2", keyLabel: "2")
+                    feedbackButton(.good, key: "3", keyLabel: "3")
+                    feedbackButton(.easy, key: "4", keyLabel: "4")
                     Spacer()
                 }
             } else {
-                Button {
-                    onShowAnswer()
-                } label: {
+                Button(action: onShowAnswer) {
                     Label("Show Answer", systemImage: "eye")
                 }
                 .keyboardShortcut(.space, modifiers: [])
@@ -194,6 +327,20 @@ private struct ReviewCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.regularMaterial)
         .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func feedbackButton(
+        _ feedback: ReviewFeedback,
+        key: KeyEquivalent,
+        keyLabel: String
+    ) -> some View {
+        Button {
+            onFeedback(feedback)
+        } label: {
+            Text("\(keyLabel)  \(feedback.displayTitle)")
+        }
+        .keyboardShortcut(key, modifiers: [])
+        .help("Record \(feedback.displayTitle) (\(keyLabel))")
     }
 
     @ViewBuilder
@@ -207,5 +354,40 @@ private struct ReviewCard: View {
                     .textSelection(.enabled)
             }
         }
+    }
+}
+
+private struct ReviewCompletionView: View {
+    let feedbackCounts: [ReviewFeedback: Int]
+    let postponedCount: Int
+    let onRestart: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Label("Session Complete", systemImage: "checkmark.circle.fill")
+                .font(.title2.bold())
+                .foregroundStyle(.green)
+
+            HStack(spacing: 24) {
+                ForEach(ReviewFeedback.allCases) { feedback in
+                    LabeledContent(feedback.displayTitle) {
+                        Text(feedbackCounts[feedback, default: 0], format: .number)
+                            .monospacedDigit()
+                    }
+                }
+                LabeledContent("Later") {
+                    Text(postponedCount, format: .number)
+                        .monospacedDigit()
+                }
+            }
+
+            Button(action: onRestart) {
+                Label("Refresh Queue", systemImage: "arrow.clockwise")
+            }
+        }
+        .padding(22)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.regularMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }

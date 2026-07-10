@@ -19,7 +19,7 @@
 | Persistence | SwiftData |
 | Networking | URLSession + async/await |
 | Secrets | 本機 env 文件 |
-| State | ViewModel + service protocols |
+| State | Observation state + domain services |
 | Tests | XCTest |
 | Platform | macOS 14+ |
 
@@ -59,7 +59,7 @@ WordNoteApp
 - 展示 loading、empty、error、success states。
 - 不直接拼接 AI prompt。
 - 不直接操作 env 文件。
-- 不直接寫 SwiftData，通過 use case 或 repository。
+- 可用 SwiftData `@Query` 做只讀列表查詢；所有跨實體寫入必須通過 domain service，以保證原子性和級聯規則。
 
 ### Domain
 
@@ -97,14 +97,12 @@ WordNoteApp
 
 職責：
 
-- createDraft(rawText, course, sourceType, note)
-- saveAndAnalyze(...)
-- resolveExistingTerm(rawText)
-- markAnalyzing(recordID)
-- markAnalyzed(recordID, candidates)
-- markFailed(recordID, error)
-- ignore(recordID)
-- delete(recordID)
+- `createDraft(rawText, courseID, sourceType, note)`
+- `createAnalyzing(rawText, courseID, sourceType, note)`
+- `applyAnalysisResult(result, record)`
+- `markFailed(record, summary)`
+- `ignore(record)`
+- `delete(record)`，按規則級聯候選並清空正式詞條來源引用
 
 ### AIAnalysisService
 
@@ -155,33 +153,44 @@ WordNoteApp
 - default course/source。
 - test API connectivity。
 
+### QuickAddAnalysisQueue
+
+職責：
+
+- 將每次 Save & Analyze 先持久化為 `InputRecord.status = analyzing`。
+- 主窗口和菜單欄浮窗共用同一個進程內協調器。
+- 依序處理多個請求，單次失敗不阻塞後續項目。
+- App 啟動時恢復仍為 `analyzing` 的記錄。
+- 同一 normalizedText 已在分析中時直接返回既有排隊記錄，不重複調用 AI。
+
 ## 依賴方向
 
 依賴只能向內：
 
 ```text
-Views -> ViewModels -> UseCases/Services -> Repositories/Clients
+Views -> Observation state / Services -> SwiftData Models / Infrastructure Clients
 ```
 
-Domain 不依賴 SwiftUI、SwiftData、URLSession 或 env 文件。
+純排程與規範化規則不依賴 SwiftUI。現階段 domain services 使用 SwiftData `ModelContext` 作為交易邊界；若後續引入同步後端，再抽取 repository protocol。
 
 ## 資料流：Save & Analyze
 
 ```text
 QuickAddView
-  -> QuickAddViewModel.saveAndAnalyze()
+  -> QuickAddAnalysisQueue.enqueue()
   -> VocabularyService.findExactTerm(normalized(rawText))
   -> if existing Term:
        -> VocabularyService.bumpDuplicateHit(term)
-       -> QuickAddViewModel.showExistingExplanation(term)
+       -> QuickAddAnalysisQueue.latestAIExplanation = existing term preview
        -> stop, no DeepSeek request
-  -> InputRecordService.create(status=analyzing)
-  -> AIAnalysisService.analyze(rawText, metadata)
+  -> InputRecordService.createAnalyzing()
+  -> return immediately to UI
+  -> queue worker: AIAnalysisService.analyze(rawText, metadata)
   -> DeepSeekClient.send()
   -> AIResponseParser.decode()
   -> CandidateRepository.insertMany()
   -> InputRecordRepository.update(status=analyzed)
-  -> CandidateReviewView opens record
+  -> Inbox exposes analyzed record for confirmation
 ```
 
 精確命中規則：
@@ -195,12 +204,28 @@ QuickAddView
 
 ```text
 CandidateReviewView
-  -> CandidateReviewViewModel.saveSelected()
-  -> VocabularyService.createTerms(from candidates)
+  -> VocabularyService.confirmCandidates(selections)
   -> ReviewService.initialize(term)
   -> CandidateRepository.markSaved()
   -> InputRecordService.updateCompletionStatus()
 ```
+
+批量確認必須先驗證全部選項，再在一次 `ModelContext.save()` 中建立 Term、更新 CandidateTerm 與 InputRecord。任一項失敗時整批不落盤。
+
+## 持久化啟動流程
+
+```text
+prepare private app directory
+  -> if WordNote.store is absent and legacy default.store exists
+       -> copy legacy store + WAL/SHM to unique backup directory
+       -> copy into WordNote/WordNote.store
+  -> open versioned SwiftData schema
+  -> repair dangling references and orphan rows
+  -> set directory 0700 and store files 0600
+  -> recover analyzing records into the queue
+```
+
+舊 `default.store` 永不由遷移器刪除。持久化容器打開失敗時，App 顯示可操作的啟動錯誤頁，只使用記憶體容器承載錯誤 UI，不允許在該狀態下捕獲新資料。
 
 ## 資料流：Duplicate Quick Add Hit
 
@@ -283,11 +308,11 @@ API Key 存在本機 env 文件或進程環境變量，不進入 SwiftData、日
 
 ### Menu Bar
 
-P1 可增加 MenuBarExtra，復用 QuickAddViewModel 和 InputRecordService。
+已實作 `MenuBarExtra` 和 AppKit 浮動 panel，與主窗口共用 `QuickAddAnalysisQueue`。panel 只負責窗口生命週期、置頂和焦點事件，資料寫入仍由 domain services 完成。
 
 ### Global Hotkey
 
-P1 可增加全局快捷鍵，需單獨處理權限和衝突。
+目前只有 App 內 `Command-Shift-N`；真正的系統全局快捷鍵仍需單獨處理權限和衝突。
 
 ### Export
 

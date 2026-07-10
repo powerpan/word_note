@@ -1,33 +1,40 @@
 import Foundation
 import Observation
 import SwiftData
-import WordNoteCore
 
 @MainActor
 @Observable
-final class QuickAddAnalysisQueue {
+public final class QuickAddAnalysisQueue {
+    public typealias AnalysisHandler = @MainActor (AIAnalysisRequest) async throws -> AIAnalysisResult
+
     @ObservationIgnored private let modelContext: ModelContext
+    @ObservationIgnored private let analysisHandler: AnalysisHandler
+    @ObservationIgnored private var processingTask: Task<Void, Never>?
     private var queuedRecords: [QueuedAnalysisRecord] = []
     private var isProcessingAnalysisQueue = false
 
-    var activeAnalysisTitle: String?
-    var statusMessage: String?
-    var errorMessage: String?
-    var latestAIExplanation: AIExplanationPreview?
+    public var activeAnalysisTitle: String?
+    public var statusMessage: String?
+    public var errorMessage: String?
+    public var latestAIExplanation: AIExplanationPreview?
 
-    init(modelContext: ModelContext) {
+    public init(
+        modelContext: ModelContext,
+        analysisHandler: AnalysisHandler? = nil
+    ) {
         self.modelContext = modelContext
+        self.analysisHandler = analysisHandler ?? Self.performLiveAnalysis
     }
 
-    var queuedCount: Int {
+    public var queuedCount: Int {
         queuedRecords.count
     }
 
-    var isBusy: Bool {
+    public var isBusy: Bool {
         isProcessingAnalysisQueue || !queuedRecords.isEmpty
     }
 
-    var queueStatusText: String {
+    public var queueStatusText: String {
         if let activeAnalysisTitle {
             return "Analyzing: \(activeAnalysisTitle)"
         }
@@ -35,7 +42,7 @@ final class QuickAddAnalysisQueue {
     }
 
     @discardableResult
-    func enqueue(
+    public func enqueue(
         rawText: String,
         courseID: UUID?,
         courseName: String?,
@@ -52,6 +59,13 @@ final class QuickAddAnalysisQueue {
             statusMessage = "Already in vocabulary: \(bumpedTerm.term). Added to today's review."
             errorMessage = nil
             return .duplicateHit(bumpedTerm)
+        }
+
+        let normalizedText = TextNormalizer.normalized(rawText)
+        if let queuedRecord = try findPersistedQueuedRecord(normalizedText: normalizedText) {
+            statusMessage = "Already queued for AI analysis: \(queuedRecord.rawText)"
+            errorMessage = nil
+            return .alreadyQueued(queuedRecord)
         }
 
         let service = InputRecordService(modelContext: modelContext)
@@ -71,6 +85,49 @@ final class QuickAddAnalysisQueue {
         return .queued(createdRecord)
     }
 
+    @discardableResult
+    public func recoverPendingAnalyses() throws -> Int {
+        let persistedRecords = try modelContext.fetch(FetchDescriptor<InputRecordModel>())
+            .filter { $0.status == .analyzing }
+            .sorted { $0.createdAt < $1.createdAt }
+        let queuedIDs = Set(queuedRecords.map { $0.record.id })
+        let activeID = processingTask == nil ? nil : persistedRecords.first { $0.rawText == activeAnalysisTitle }?.id
+        let courses = try modelContext.fetch(FetchDescriptor<CourseModel>())
+        let courseNames = Dictionary(uniqueKeysWithValues: courses.map { ($0.id, $0.courseName) })
+
+        let recoveredRecords = persistedRecords.filter { record in
+            record.id != activeID && !queuedIDs.contains(record.id)
+        }
+        queuedRecords.append(contentsOf: recoveredRecords.map { record in
+            QueuedAnalysisRecord(
+                record: record,
+                courseName: record.courseID.flatMap { courseNames[$0] }
+            )
+        })
+
+        if !recoveredRecords.isEmpty {
+            statusMessage = "Recovered \(recoveredRecords.count) queued analysis request\(recoveredRecords.count == 1 ? "" : "s")."
+            errorMessage = nil
+        }
+        processNextQueuedAnalysisIfNeeded()
+        return recoveredRecords.count
+    }
+
+    func waitUntilIdle(timeoutNanoseconds: UInt64 = 3_000_000_000) async throws {
+        let startedAt = ContinuousClock.now
+        while isBusy {
+            if ContinuousClock.now - startedAt > .nanoseconds(Int64(timeoutNanoseconds)) {
+                throw QuickAddQueueWaitError.timedOut
+            }
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+    }
+
+    private func findPersistedQueuedRecord(normalizedText: String) throws -> InputRecordModel? {
+        try modelContext.fetch(FetchDescriptor<InputRecordModel>())
+            .first { $0.status == .analyzing && $0.normalizedText == normalizedText }
+    }
+
     private func processNextQueuedAnalysisIfNeeded() {
         guard !isProcessingAnalysisQueue, !queuedRecords.isEmpty else { return }
 
@@ -78,22 +135,11 @@ final class QuickAddAnalysisQueue {
         let queuedRecord = queuedRecords.removeFirst()
         activeAnalysisTitle = queuedRecord.record.rawText
 
-        Task { @MainActor in
+        processingTask = Task { @MainActor in
             let service = InputRecordService(modelContext: modelContext)
 
             do {
-                guard let apiKey = DeepSeekAPIKeyResolver.resolve() else {
-                    try service.markFailed(
-                        queuedRecord.record,
-                        summary: AIAnalysisError.missingAPIKey.localizedDescription
-                    )
-                    throw AIAnalysisError.missingAPIKey
-                }
-
-                let analysisService = AIAnalysisService(
-                    client: DeepSeekChatClient(apiKey: apiKey)
-                )
-                let result = try await analysisService.analyze(
+                let result = try await analysisHandler(
                     AIAnalysisRequest(
                         rawText: queuedRecord.record.rawText,
                         courseName: queuedRecord.courseName,
@@ -120,13 +166,24 @@ final class QuickAddAnalysisQueue {
 
             isProcessingAnalysisQueue = false
             activeAnalysisTitle = nil
+            processingTask = nil
             processNextQueuedAnalysisIfNeeded()
         }
     }
+
+    private static func performLiveAnalysis(_ request: AIAnalysisRequest) async throws -> AIAnalysisResult {
+        guard let apiKey = DeepSeekAPIKeyResolver.resolve() else {
+            throw AIAnalysisError.missingAPIKey
+        }
+        return try await AIAnalysisService(
+            client: DeepSeekChatClient(apiKey: apiKey)
+        ).analyze(request)
+    }
 }
 
-enum QuickAddEnqueueResult {
+public enum QuickAddEnqueueResult {
     case queued(InputRecordModel)
+    case alreadyQueued(InputRecordModel)
     case duplicateHit(TermModel)
 }
 
@@ -136,13 +193,17 @@ private struct QueuedAnalysisRecord: Identifiable {
     let courseName: String?
 }
 
-struct AIExplanationPreview {
-    let id: UUID
-    let rawText: String
-    let sentenceMeaning: String?
-    let candidates: [AIExplanationCandidatePreview]
+enum QuickAddQueueWaitError: Error {
+    case timedOut
+}
 
-    init(
+public struct AIExplanationPreview {
+    public let id: UUID
+    public let rawText: String
+    public let sentenceMeaning: String?
+    public let candidates: [AIExplanationCandidatePreview]
+
+    public init(
         id: UUID = UUID(),
         rawText: String,
         sentenceMeaning: String?,
@@ -154,7 +215,7 @@ struct AIExplanationPreview {
         self.candidates = candidates
     }
 
-    init(rawText: String, existingTerm: TermModel) {
+    public init(rawText: String, existingTerm: TermModel) {
         self.init(
             rawText: rawText.trimmingCharacters(in: .whitespacesAndNewlines),
             sentenceMeaning: nil,
@@ -169,15 +230,15 @@ struct AIExplanationPreview {
     }
 }
 
-struct AIExplanationCandidatePreview: Identifiable {
-    let id: String
-    let term: String
-    let importance: Importance
-    let chineseMeaning: String?
-    let englishDefinition: String?
-    let aiContextExplanation: String?
+public struct AIExplanationCandidatePreview: Identifiable {
+    public let id: String
+    public let term: String
+    public let importance: Importance
+    public let chineseMeaning: String?
+    public let englishDefinition: String?
+    public let aiContextExplanation: String?
 
-    init(candidate: AIAnalysisCandidate) {
+    public init(candidate: AIAnalysisCandidate) {
         id = "\(TextNormalizer.normalized(candidate.term))-\(candidate.termType.rawValue)-\(candidate.importance.rawValue)"
         term = candidate.term
         importance = candidate.importance
@@ -186,7 +247,7 @@ struct AIExplanationCandidatePreview: Identifiable {
         aiContextExplanation = Self.nonBlank(candidate.aiContextExplanation)
     }
 
-    init(term: TermModel) {
+    public init(term: TermModel) {
         id = term.id.uuidString
         self.term = term.term
         importance = term.importance

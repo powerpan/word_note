@@ -97,6 +97,109 @@ final class InputRecordServiceTests: XCTestCase {
         XCTAssertEqual(persistedCandidates.first?.inputRecordID, record.id)
     }
 
+    func testReanalysisReplacesPendingCandidatesAndKeepsSavedHistory() throws {
+        let container = try makeInMemoryContainer()
+        let context = ModelContext(container)
+        let service = InputRecordService(modelContext: context)
+        let record = try service.createAnalyzing(
+            rawText: "A model uses regularization.",
+            courseID: nil,
+            sourceType: .paper,
+            note: nil
+        )
+        let saved = CandidateTermModel(
+            inputRecordID: record.id,
+            term: "model",
+            termType: .word,
+            needToLearn: true,
+            importance: .medium,
+            category: .aiML,
+            chineseMeaning: "模型",
+            status: .saved
+        )
+        let stale = CandidateTermModel(
+            inputRecordID: record.id,
+            term: "stale",
+            termType: .word,
+            needToLearn: true,
+            importance: .low,
+            category: .general,
+            chineseMeaning: "舊候選"
+        )
+        context.insert(saved)
+        context.insert(stale)
+        try context.save()
+
+        let result = AIAnalysisResult(
+            inputType: .sentence,
+            sentenceMeaning: "模型使用正則化。",
+            candidates: [
+                AIAnalysisCandidate(
+                    term: "model",
+                    termType: .word,
+                    needToLearn: true,
+                    importance: .medium,
+                    category: .aiML,
+                    chineseMeaning: "模型"
+                ),
+                AIAnalysisCandidate(
+                    term: "regularization",
+                    termType: .word,
+                    needToLearn: true,
+                    importance: .high,
+                    category: .aiML,
+                    chineseMeaning: "正則化"
+                )
+            ],
+            model: "test-model",
+            rawResponseID: nil
+        )
+
+        let newCandidates = try service.applyAnalysisResult(result, to: record)
+        let persistedCandidates = try context.fetch(FetchDescriptor<CandidateTermModel>())
+
+        XCTAssertEqual(newCandidates.map(\.normalizedTerm), ["regularization"])
+        XCTAssertEqual(Set(persistedCandidates.map(\.normalizedTerm)), ["model", "regularization"])
+        XCTAssertEqual(persistedCandidates.first { $0.normalizedTerm == "model" }?.status, .saved)
+    }
+
+    func testDeleteRecordCascadesCandidatesAndClearsTermSourceReference() throws {
+        let container = try makeInMemoryContainer()
+        let context = ModelContext(container)
+        let service = InputRecordService(modelContext: context)
+        let record = try service.createDraft(
+            rawText: "gradient descent",
+            courseID: nil,
+            sourceType: .class,
+            note: nil
+        )
+        let candidate = CandidateTermModel(
+            inputRecordID: record.id,
+            term: "gradient descent",
+            termType: .phrase,
+            needToLearn: true,
+            importance: .high,
+            category: .aiML,
+            chineseMeaning: "梯度下降"
+        )
+        let term = TermModel(
+            term: "gradient descent",
+            termType: .phrase,
+            chineseMeaning: "梯度下降",
+            sourceRecordID: record.id
+        )
+        context.insert(candidate)
+        context.insert(term)
+        try context.save()
+
+        try service.delete(record)
+
+        XCTAssertTrue(try context.fetch(FetchDescriptor<InputRecordModel>()).isEmpty)
+        XCTAssertTrue(try context.fetch(FetchDescriptor<CandidateTermModel>()).isEmpty)
+        XCTAssertNil(term.sourceRecordID)
+        XCTAssertEqual(try context.fetch(FetchDescriptor<TermModel>()).count, 1)
+    }
+
     private func makeInMemoryContainer() throws -> ModelContainer {
         let schema = Schema([
             CourseModel.self,

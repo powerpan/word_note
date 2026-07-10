@@ -163,7 +163,7 @@ Candidate Review 是從 InputRecord 到 Term 的確認界面。
 
 完成後進入下一張卡片。
 
-P1 交互增強：
+現行交互：
 
 - 模式切換：英文 -> 中文、中文 -> 英文。
 - 鍵盤快捷鍵：空格顯示答案，1/2/3/4 對應 again/hard/good/easy。

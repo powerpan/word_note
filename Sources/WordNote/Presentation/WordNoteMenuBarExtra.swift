@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import WordNoteCore
 
 struct WordNoteMenuBarLabel: View {
     let analysisQueue: QuickAddAnalysisQueue
@@ -14,6 +15,7 @@ struct WordNoteMenuBarMenu: View {
 
     let analysisQueue: QuickAddAnalysisQueue
     let quickAddPanelController: QuickAddPanelController
+    let captureAvailable: Bool
 
     var body: some View {
         Button {
@@ -22,6 +24,7 @@ struct WordNoteMenuBarMenu: View {
             Label("Quick Add", systemImage: "plus.circle")
         }
         .keyboardShortcut("n", modifiers: [.command, .shift])
+        .disabled(!captureAvailable)
 
         SettingsLink {
             Label("Settings", systemImage: "gearshape")
@@ -39,6 +42,11 @@ struct WordNoteMenuBarMenu: View {
         if analysisQueue.isBusy {
             Divider()
             Label(menuStatusTitle, systemImage: "sparkles")
+        }
+
+        if !captureAvailable {
+            Divider()
+            Label("Storage unavailable", systemImage: "externaldrive.badge.exclamationmark")
         }
 
         Divider()

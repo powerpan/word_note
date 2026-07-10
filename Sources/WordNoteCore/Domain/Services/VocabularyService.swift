@@ -5,6 +5,7 @@ public enum VocabularyServiceError: LocalizedError, Equatable {
     case duplicateTerm(String)
     case missingDefinition(String)
     case emptySelection
+    case candidateSourceMismatch(String)
 
     public var errorDescription: String? {
         switch self {
@@ -14,7 +15,19 @@ public enum VocabularyServiceError: LocalizedError, Equatable {
             return "'\(term)' needs a Chinese meaning or English definition."
         case .emptySelection:
             return "Select at least one candidate."
+        case .candidateSourceMismatch(let term):
+            return "'\(term)' does not belong to this input record."
         }
+    }
+}
+
+public struct CandidateConfirmation {
+    public let candidates: [CandidateTermModel]
+    public let sourceRecord: InputRecordModel
+
+    public init(candidates: [CandidateTermModel], sourceRecord: InputRecordModel) {
+        self.candidates = candidates
+        self.sourceRecord = sourceRecord
     }
 }
 
@@ -35,13 +48,8 @@ public struct VocabularyService {
         let normalizedTerm = TextNormalizer.normalized(normalizedTerm)
         guard !TextNormalizer.isBlank(normalizedTerm) else { return nil }
 
-        var descriptor = FetchDescriptor<TermModel>(
-            predicate: #Predicate { term in
-                term.normalizedTerm == normalizedTerm
-            }
-        )
-        descriptor.fetchLimit = 1
-        return try modelContext.fetch(descriptor).first
+        return try modelContext.fetch(FetchDescriptor<TermModel>())
+            .first { $0.normalizedTerm == normalizedTerm }
     }
 
     @discardableResult
@@ -79,64 +87,134 @@ public struct VocabularyService {
     @discardableResult
     public func createTerms(
         from candidates: [CandidateTermModel],
-        sourceRecord: InputRecordModel,
-        allowDuplicates: Bool = false
+        sourceRecord: InputRecordModel
     ) throws -> [TermModel] {
-        guard !candidates.isEmpty else {
+        try confirmCandidates([
+            CandidateConfirmation(candidates: candidates, sourceRecord: sourceRecord)
+        ])
+    }
+
+    @discardableResult
+    public func confirmCandidates(_ confirmations: [CandidateConfirmation]) throws -> [TermModel] {
+        guard !confirmations.isEmpty,
+              confirmations.allSatisfy({ !$0.candidates.isEmpty })
+        else {
             throw VocabularyServiceError.emptySelection
         }
 
         let existingTerms = try modelContext.fetch(FetchDescriptor<TermModel>())
-        let existingNormalizedTerms = Set(existingTerms.map(\.normalizedTerm))
+        var seenNormalizedTerms = Set(existingTerms.map(\.normalizedTerm))
 
-        for candidate in candidates {
-            let hasDefinition = !TextNormalizer.isBlank(candidate.chineseMeaning ?? "") ||
-                !TextNormalizer.isBlank(candidate.englishDefinition ?? "")
-            guard hasDefinition else {
-                throw VocabularyServiceError.missingDefinition(candidate.term)
-            }
+        for confirmation in confirmations {
+            for candidate in confirmation.candidates {
+                guard candidate.inputRecordID == confirmation.sourceRecord.id else {
+                    throw VocabularyServiceError.candidateSourceMismatch(candidate.term)
+                }
 
-            if !allowDuplicates, existingNormalizedTerms.contains(candidate.normalizedTerm) {
-                throw VocabularyServiceError.duplicateTerm(candidate.term)
+                let hasDefinition = !TextNormalizer.isBlank(candidate.chineseMeaning ?? "") ||
+                    !TextNormalizer.isBlank(candidate.englishDefinition ?? "")
+                guard hasDefinition else {
+                    throw VocabularyServiceError.missingDefinition(candidate.term)
+                }
+
+                let normalizedTerm = TextNormalizer.normalized(candidate.term)
+                guard !seenNormalizedTerms.contains(normalizedTerm) else {
+                    throw VocabularyServiceError.duplicateTerm(candidate.term)
+                }
+                seenNormalizedTerms.insert(normalizedTerm)
             }
         }
 
         let now = Date()
-        let terms = candidates.map { candidate in
-            TermModel(
-                term: candidate.term,
-                termType: candidate.termType,
-                chineseMeaning: candidate.chineseMeaning,
-                englishDefinition: candidate.englishDefinition,
-                aiContextExplanation: candidate.aiContextExplanation,
-                exampleSentence: candidate.exampleSentence,
-                contextSentence: sourceRecord.rawText,
-                courseID: sourceRecord.courseID,
-                sourceRecordID: sourceRecord.id,
-                sourceType: sourceRecord.sourceType,
-                tags: [],
-                category: candidate.category,
-                importance: candidate.importance,
-                masteryLevel: .new,
-                reviewCount: 0,
-                wrongCount: 0,
-                nextReviewAt: now,
-                createdAt: now,
-                updatedAt: now
-            )
+        let terms = confirmations.flatMap { confirmation in
+            confirmation.candidates.map { candidate in
+                TermModel(
+                    term: candidate.term.trimmingCharacters(in: .whitespacesAndNewlines),
+                    termType: candidate.termType,
+                    chineseMeaning: normalizedOptional(candidate.chineseMeaning),
+                    englishDefinition: normalizedOptional(candidate.englishDefinition),
+                    aiContextExplanation: normalizedOptional(candidate.aiContextExplanation),
+                    exampleSentence: normalizedOptional(candidate.exampleSentence),
+                    contextSentence: confirmation.sourceRecord.rawText,
+                    courseID: confirmation.sourceRecord.courseID,
+                    sourceRecordID: confirmation.sourceRecord.id,
+                    sourceType: confirmation.sourceRecord.sourceType,
+                    tags: [],
+                    category: candidate.category,
+                    importance: candidate.importance,
+                    masteryLevel: .new,
+                    reviewCount: 0,
+                    wrongCount: 0,
+                    nextReviewAt: now,
+                    createdAt: now,
+                    updatedAt: now
+                )
+            }
         }
 
-        for term in terms {
+        do {
+            terms.forEach(modelContext.insert)
+
+            for confirmation in confirmations {
+                confirmation.candidates.forEach { $0.markSaved(at: now) }
+                try updateCompletionStatus(for: confirmation.sourceRecord, at: now)
+            }
+
+            try modelContext.save()
+            return terms
+        } catch {
+            modelContext.rollback()
+            throw error
+        }
+    }
+
+    @discardableResult
+    public func createManualTerm(
+        termText: String,
+        chineseMeaning: String?,
+        englishDefinition: String?,
+        sourceRecord: InputRecordModel
+    ) throws -> TermModel {
+        let trimmedTerm = termText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !TextNormalizer.isBlank(trimmedTerm) else {
+            throw InputRecordValidationError.blankRawText
+        }
+
+        let normalizedTerm = TextNormalizer.normalized(trimmedTerm)
+        guard try findExactTerm(normalizedTerm: normalizedTerm) == nil else {
+            throw VocabularyServiceError.duplicateTerm(trimmedTerm)
+        }
+
+        let normalizedChineseMeaning = normalizedOptional(chineseMeaning)
+        let normalizedEnglishDefinition = normalizedOptional(englishDefinition)
+        guard normalizedChineseMeaning != nil || normalizedEnglishDefinition != nil else {
+            throw VocabularyServiceError.missingDefinition(trimmedTerm)
+        }
+
+        let now = Date()
+        let term = TermModel(
+            term: trimmedTerm,
+            termType: trimmedTerm.contains(" ") ? .phrase : .word,
+            chineseMeaning: normalizedChineseMeaning,
+            englishDefinition: normalizedEnglishDefinition,
+            contextSentence: sourceRecord.rawText,
+            courseID: sourceRecord.courseID,
+            sourceRecordID: sourceRecord.id,
+            sourceType: sourceRecord.sourceType,
+            nextReviewAt: now,
+            createdAt: now,
+            updatedAt: now
+        )
+
+        do {
             modelContext.insert(term)
+            try completeRecordWhenNoPendingCandidates(sourceRecord, at: now)
+            try modelContext.save()
+            return term
+        } catch {
+            modelContext.rollback()
+            throw error
         }
-
-        for candidate in candidates {
-            candidate.markSaved(at: now)
-        }
-
-        try updateCompletionStatus(for: sourceRecord, at: now)
-        try modelContext.save()
-        return terms
     }
 
     public func ignore(_ candidates: [CandidateTermModel], sourceRecord: InputRecordModel) throws {
@@ -174,8 +252,13 @@ public struct VocabularyService {
             throw VocabularyServiceError.missingDefinition(trimmedTerm)
         }
 
+        let normalizedTerm = TextNormalizer.normalized(trimmedTerm)
+        if let duplicate = try findExactTerm(normalizedTerm: normalizedTerm), duplicate.id != term.id {
+            throw VocabularyServiceError.duplicateTerm(trimmedTerm)
+        }
+
         term.term = trimmedTerm
-        term.normalizedTerm = TextNormalizer.normalized(trimmedTerm)
+        term.normalizedTerm = normalizedTerm
         term.termType = termType
         term.chineseMeaning = normalizedOptional(chineseMeaning)
         term.englishDefinition = normalizedOptional(englishDefinition)
@@ -192,19 +275,35 @@ public struct VocabularyService {
     }
 
     public func delete(_ term: TermModel) throws {
+        let termID = term.id
+        let reviewEvents = try modelContext.fetch(FetchDescriptor<ReviewEventModel>())
+            .filter { $0.termID == termID }
+        reviewEvents.forEach(modelContext.delete)
         modelContext.delete(term)
-        try modelContext.save()
+
+        do {
+            try modelContext.save()
+        } catch {
+            modelContext.rollback()
+            throw error
+        }
     }
 
     private func updateCompletionStatus(for record: InputRecordModel, at date: Date) throws {
         let recordID = record.id
-        let descriptor = FetchDescriptor<CandidateTermModel>(
-            predicate: #Predicate { candidate in
-                candidate.inputRecordID == recordID
-            }
-        )
-        let candidates = try modelContext.fetch(descriptor)
+        let candidates = try modelContext.fetch(FetchDescriptor<CandidateTermModel>())
+            .filter { $0.inputRecordID == recordID }
         if !candidates.isEmpty, candidates.allSatisfy({ $0.status != .pending }) {
+            record.status = .completed
+            record.touch(date)
+        }
+    }
+
+    private func completeRecordWhenNoPendingCandidates(_ record: InputRecordModel, at date: Date) throws {
+        let recordID = record.id
+        let candidates = try modelContext.fetch(FetchDescriptor<CandidateTermModel>())
+            .filter { $0.inputRecordID == recordID }
+        if candidates.allSatisfy({ $0.status != .pending }) {
             record.status = .completed
             record.touch(date)
         }

@@ -1,6 +1,8 @@
 import Foundation
 
 public struct AIAnalysisService {
+    public static let maximumInputCharacters = 8_000
+
     private let client: AICompletionClient
     private let parser: AIResponseParser
 
@@ -10,6 +12,10 @@ public struct AIAnalysisService {
     }
 
     public func analyze(_ request: AIAnalysisRequest) async throws -> AIAnalysisResult {
+        guard request.rawText.count <= Self.maximumInputCharacters else {
+            throw AIAnalysisError.inputTooLong(maxCharacters: Self.maximumInputCharacters)
+        }
+
         let messages = [
             DeepSeekMessage(role: "system", content: systemPrompt),
             DeepSeekMessage(role: "user", content: userPrompt(for: request))

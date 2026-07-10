@@ -56,6 +56,21 @@ public struct DeepSeekEnvironmentFileStore {
         }
     }
 
+    @discardableResult
+    public func migrateFromProcessEnvironmentIfNeeded(
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) throws -> Bool {
+        guard load() == nil,
+              let processKey = environment[DeepSeekAPIKeyResolver.environmentVariableName],
+              !TextNormalizer.isBlank(processKey)
+        else {
+            return false
+        }
+
+        try save(processKey)
+        return true
+    }
+
     private static func envQuoted(_ value: String) -> String {
         let escaped = value
             .replacingOccurrences(of: "\\", with: "\\\\")

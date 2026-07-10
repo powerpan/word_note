@@ -214,6 +214,174 @@ final class VocabularyServiceTests: XCTestCase {
         XCTAssertTrue(terms.isEmpty)
     }
 
+    func testCreateTermsRejectsDuplicatesWithinSameSelection() throws {
+        let container = try makeInMemoryContainer()
+        let context = ModelContext(container)
+        let inputService = InputRecordService(modelContext: context)
+        let service = VocabularyService(modelContext: context)
+        let record = try inputService.createDraft(
+            rawText: "regularization",
+            courseID: nil,
+            sourceType: .paper,
+            note: nil
+        )
+        let first = CandidateTermModel(
+            inputRecordID: record.id,
+            term: "Regularization",
+            termType: .word,
+            needToLearn: true,
+            importance: .high,
+            category: .aiML,
+            chineseMeaning: "正則化"
+        )
+        let second = CandidateTermModel(
+            inputRecordID: record.id,
+            term: " regularization ",
+            termType: .word,
+            needToLearn: true,
+            importance: .medium,
+            category: .general,
+            chineseMeaning: "正規化處理"
+        )
+        context.insert(first)
+        context.insert(second)
+        try context.save()
+
+        XCTAssertThrowsError(try service.createTerms(from: [first, second], sourceRecord: record))
+        XCTAssertTrue(try context.fetch(FetchDescriptor<TermModel>()).isEmpty)
+        XCTAssertEqual(first.status, .pending)
+        XCTAssertEqual(second.status, .pending)
+    }
+
+    func testBatchConfirmationValidatesAllRecordsBeforeMutating() throws {
+        let container = try makeInMemoryContainer()
+        let context = ModelContext(container)
+        let inputService = InputRecordService(modelContext: context)
+        let service = VocabularyService(modelContext: context)
+        let firstRecord = try inputService.createDraft(
+            rawText: "unique term",
+            courseID: nil,
+            sourceType: .paper,
+            note: nil
+        )
+        let secondRecord = try inputService.createDraft(
+            rawText: "existing term",
+            courseID: nil,
+            sourceType: .paper,
+            note: nil
+        )
+        let uniqueCandidate = CandidateTermModel(
+            inputRecordID: firstRecord.id,
+            term: "unique term",
+            termType: .phrase,
+            needToLearn: true,
+            importance: .medium,
+            category: .general,
+            chineseMeaning: "唯一詞條"
+        )
+        let duplicateCandidate = CandidateTermModel(
+            inputRecordID: secondRecord.id,
+            term: "existing term",
+            termType: .phrase,
+            needToLearn: true,
+            importance: .medium,
+            category: .general,
+            chineseMeaning: "既有詞條"
+        )
+        let existing = TermModel(
+            term: "existing term",
+            termType: .phrase,
+            chineseMeaning: "既有詞條"
+        )
+        context.insert(uniqueCandidate)
+        context.insert(duplicateCandidate)
+        context.insert(existing)
+        try context.save()
+
+        XCTAssertThrowsError(
+            try service.confirmCandidates([
+                CandidateConfirmation(candidates: [uniqueCandidate], sourceRecord: firstRecord),
+                CandidateConfirmation(candidates: [duplicateCandidate], sourceRecord: secondRecord)
+            ])
+        )
+
+        XCTAssertEqual(try context.fetch(FetchDescriptor<TermModel>()).count, 1)
+        XCTAssertEqual(uniqueCandidate.status, .pending)
+        XCTAssertEqual(duplicateCandidate.status, .pending)
+    }
+
+    func testUpdateTermRejectsAnotherTermsNormalizedValue() throws {
+        let context = ModelContext(try makeInMemoryContainer())
+        let service = VocabularyService(modelContext: context)
+        let first = TermModel(term: "regularization", termType: .word, chineseMeaning: "正則化")
+        let second = TermModel(term: "gradient descent", termType: .phrase, chineseMeaning: "梯度下降")
+        context.insert(first)
+        context.insert(second)
+        try context.save()
+
+        XCTAssertThrowsError(
+            try service.updateTerm(
+                second,
+                termText: " Regularization ",
+                termType: .word,
+                chineseMeaning: "正則化",
+                englishDefinition: nil,
+                aiContextExplanation: nil,
+                exampleSentence: nil,
+                contextSentence: nil,
+                courseID: nil,
+                sourceType: .other,
+                category: .general,
+                importance: .medium,
+                masteryLevel: .new
+            )
+        )
+        XCTAssertEqual(second.normalizedTerm, "gradient descent")
+    }
+
+    func testDeleteTermCascadesReviewEvents() throws {
+        let context = ModelContext(try makeInMemoryContainer())
+        let service = VocabularyService(modelContext: context)
+        let term = TermModel(term: "regularization", termType: .word, chineseMeaning: "正則化")
+        let event = ReviewEventModel(
+            termID: term.id,
+            mode: .englishToChinese,
+            feedback: .good,
+            previousMasteryLevel: .new,
+            newMasteryLevel: .familiar
+        )
+        context.insert(term)
+        context.insert(event)
+        try context.save()
+
+        try service.delete(term)
+
+        XCTAssertTrue(try context.fetch(FetchDescriptor<TermModel>()).isEmpty)
+        XCTAssertTrue(try context.fetch(FetchDescriptor<ReviewEventModel>()).isEmpty)
+    }
+
+    func testCreateManualTermCompletesRecordWithoutPendingCandidates() throws {
+        let context = ModelContext(try makeInMemoryContainer())
+        let inputService = InputRecordService(modelContext: context)
+        let service = VocabularyService(modelContext: context)
+        let record = try inputService.createDraft(
+            rawText: "ablation study",
+            courseID: nil,
+            sourceType: .paper,
+            note: nil
+        )
+
+        let term = try service.createManualTerm(
+            termText: "ablation study",
+            chineseMeaning: "消融研究",
+            englishDefinition: nil,
+            sourceRecord: record
+        )
+
+        XCTAssertEqual(term.termType, .phrase)
+        XCTAssertEqual(record.status, .completed)
+    }
+
     private func makeInMemoryContainer() throws -> ModelContainer {
         let schema = Schema([
             CourseModel.self,

@@ -13,7 +13,7 @@ Term created
   -> nextReviewAt updated
 ```
 
-首版不實現完整 SM-2 或複雜間隔重複算法。下一階段先做簡化自適應排程和復習體驗完善，暫不引入完整 FSRS / SM-2。
+目前已完成 P1 簡化自適應排程和復習體驗，仍不引入完整 FSRS / SM-2。
 
 ## MasteryLevel
 
@@ -44,7 +44,9 @@ Term created
 
 這樣用戶保存後即可在今日復習中看到。
 
-## MVP 排程規則
+## 歷史 MVP 排程規則
+
+以下固定間隔只保留作為歷史基線，現行實作使用後文的 P1 簡化自適應排程。
 
 | feedback | new mastery | nextReviewAt |
 |---|---|---|
@@ -72,19 +74,14 @@ Term created
 
 ## ReviewMode
 
-MVP 只做：
+現行模式：
 
 ```text
 englishToChinese
-```
-
-P1 加入：
-
-```text
 chineseToEnglish
 ```
 
-P1 必須提供模式切換，但不同模式共用同一個 Term 排程。一次復習只記錄一個 mode 和 feedback。
+介面提供模式切換，但不同模式共用同一個 Term 排程。一次復習只記錄一個 mode 和 feedback。
 
 P2 評估：
 
@@ -116,7 +113,7 @@ contextCloze
 - exampleSentence。
 - relatedTerms。
 
-## P1 卡片交互
+## 卡片交互
 
 - 空格：Show Answer。
 - 1：Again。
@@ -163,7 +160,7 @@ nextReviewAt != nil && nextReviewAt <= endOfToday
 - 顯示本輪錯題和薄弱詞摘要。
 - 返回 Dashboard。
 
-## P1 簡化自適應排程
+## 現行簡化自適應排程
 
 P1 不直接上完整 SM-2。採用透明、可測的簡化規則：
 
@@ -240,7 +237,7 @@ easy:
 
 不出現在今日復習。編輯詞條時可提供「Add to Review」。
 
-## P1 改進
+## 已完成的 P1 改進
 
 - 復習模式選擇。
 - 中文 -> 英文。
@@ -251,6 +248,8 @@ easy:
 - Review session 完成統計。
 - 鍵盤快捷鍵。
 - 跳過卡片。
+- Later 推遲到下一個本地日曆日，不寫 ReviewEvent、不增加復習統計。
+- 今日到期與薄弱詞兩個隊列共用排序策略。
 
 ## P2 改進
 

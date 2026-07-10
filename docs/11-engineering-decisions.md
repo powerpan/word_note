@@ -146,3 +146,57 @@ P1 Review 先做三件事：
 - 命中時不創建 InputRecord，避免 Inbox 被重複查詞污染。
 - duplicate hit 不等同於正式 Review feedback，P1 首版可不寫 ReviewEvent。
 - wrongCount 需要冷卻窗口，避免短時間重複輸入刷高錯題統計。
+
+## Decision 009: 使用版本化私有 store，保守遷移歷史資料
+
+日期：2026-07-10
+
+決策：
+
+- SwiftData 使用顯式 `VersionedSchema` 和 `SchemaMigrationPlan`。
+- store 固定在 `~/Library/Application Support/WordNote/WordNote.store`。
+- 首次發現舊 `default.store` 時，先複製主檔及 WAL/SHM 到唯一備份目錄，再複製到新位置。
+- 遷移器永不刪除舊 store；啟動後執行孤兒資料修復和私有權限校正。
+- 持久化容器無法打開時顯示啟動錯誤頁，禁止在記憶體 fallback 中繼續新增學習資料。
+
+原因：
+
+- 直接沿用 SwiftData 默認位置和隱式 schema 會讓後續模型變更難以驗證。
+- 詞庫是不可替代的用戶資產，遷移必須可回退且不能覆寫已有新 store。
+- 啟動修復能清理由早期不完整級聯規則留下的孤兒記錄。
+
+## Decision 010: 分析佇列以持久化 InputRecord 為恢復來源
+
+日期：2026-07-10
+
+決策：
+
+- Save & Analyze 先建立 `status = analyzing` 的 InputRecord，再立即把輸入控制權還給 UI。
+- 進程內使用單一 `QuickAddAnalysisQueue` 依序處理主窗口與浮窗提交。
+- App 啟動時重新入隊所有 analyzing 記錄；同 normalizedText 已排隊時不重複建立或發送。
+- 單筆失敗只標記該記錄為 failed，不阻塞後續請求。
+- DeepSeek 查詞默認使用 `deepseek-v4-flash` 並顯式關閉 thinking；live 測試必須顯式 opt-in。
+
+原因：
+
+- 網絡請求不能阻塞連續捕獲詞句。
+- 僅存在記憶體的 Task 在 App 退出時會丟失，持久化狀態可在重啟後恢復。
+- 順序 worker 能控制請求壓力，也讓狀態流轉和錯誤隔離更易測試。
+- 結構化查詞不需要默認思考模式，關閉後延遲與輸出契約更可控。
+
+## Decision 011: 跨實體寫入必須原子化並定義級聯規則
+
+日期：2026-07-10
+
+決策：
+
+- 批量確認候選先驗證全部輸入，再一次保存；任一錯誤整批回滾。
+- 刪除 InputRecord 級聯 CandidateTerm，保留 Term 但清空 `sourceRecordID`。
+- 刪除 Term 級聯 ReviewEvent；刪除被引用 Course 仍被阻止。
+- AI 重試保留 saved 候選、替換其餘候選，不追加歷史失敗結果。
+- 新建和編輯 Term 都執行全局 normalizedTerm 去重。
+
+原因：
+
+- SwiftData model 關聯目前以 UUID 表示，不能依賴資料庫自動維護引用完整性。
+- 部分保存和孤兒事件會使 Inbox、Vocabulary、Dashboard 和 Review 對同一資料得出不同結果。

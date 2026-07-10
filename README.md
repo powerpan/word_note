@@ -7,13 +7,16 @@ The current implementation follows the engineering plan in [docs](docs/README.md
 ## Current MVP Features
 
 - Native macOS SwiftUI app shell.
-- Local SwiftData persistence.
+- Versioned local SwiftData persistence with one-time legacy-store backup and migration.
 - Quick Add for saving raw English input.
+- Non-blocking, persistent AI analysis queue shared by the main window and menu bar panel.
 - DeepSeek-powered analysis through OpenAI-compatible chat completions.
 - Candidate review with editable AI-generated terms.
+- Manual term creation when AI returns no useful candidate.
 - Vocabulary list, search, filters, detail editing, and deletion.
 - Course creation, editing, deletion guard, and course statistics.
-- Basic review queue with `Again`, `Hard`, `Good`, and `Easy` feedback.
+- Adaptive review queues, bidirectional cards, keyboard shortcuts, and session statistics.
+- Menu bar Quick Add panel with temporary Chinese explanation preview.
 - Environment-file storage for DeepSeek API key, with `DEEPSEEK_API_KEY` process environment fallback.
 
 ## Requirements
@@ -54,10 +57,10 @@ Run the full non-live test suite:
 swift test
 ```
 
-Run the live DeepSeek smoke test when `DEEPSEEK_API_KEY` is available:
+The default suite skips paid network tests. Explicitly enable the live DeepSeek smoke test when a key is available:
 
 ```bash
-DEEPSEEK_API_KEY="$DEEPSEEK_API_KEY" swift test --filter LiveDeepSeekSmokeTests
+RUN_LIVE_DEEPSEEK_TESTS=1 swift test --filter LiveDeepSeekSmokeTests
 ```
 
 The live test calls DeepSeek with `latent representation` and verifies that a structured candidate is returned.
@@ -66,16 +69,18 @@ The live test calls DeepSeek with `latent representation` and verifies that a st
 
 The app resolves the DeepSeek key in this order:
 
-1. Environment file managed from Settings: `~/Library/Application Support/WordNote/deepseek.env`.
-2. Optional override file from `WORD_NOTE_ENV_FILE`.
+1. Optional override file from `WORD_NOTE_ENV_FILE`.
+2. Environment file managed from Settings: `~/Library/Application Support/WordNote/deepseek.env`.
 3. Local development files: `.env.local`, then `.env`.
 4. `DEEPSEEK_API_KEY` process environment variable.
+
+On first launch, a process-level `DEEPSEEK_API_KEY` is copied to the private environment file only when that file does not already contain a key. The file is created with owner-only permissions.
 
 The API key must not be committed to the repository. Local key files such as `.env`, `.env.local`, `.env.*`, and `key.md` are ignored by `.gitignore`.
 
 ## Development Milestones
 
-Implemented and pushed:
+Implemented:
 
 - M1: Project foundation.
 - M2: Quick Add and Inbox.
@@ -84,10 +89,11 @@ Implemented and pushed:
 - M5: Course management and filters.
 - M6: Review loop.
 - M7: QA and release polish.
+- P1: duplicate-term AI bypass, adaptive review, weak-term queue, bidirectional cards, shortcuts, and session statistics.
 
 ## Known Limits
 
 - Candidate merge into existing terms is not implemented yet; duplicate terms are rejected.
-- Menu bar entry, global hotkey, clipboard import, and export are planned for P1.
+- Global system-wide hotkey, clipboard import, and export are not implemented.
 - Live AI behavior depends on DeepSeek service availability and model behavior.
 - No cloud sync, accounts, or multi-device support in MVP.

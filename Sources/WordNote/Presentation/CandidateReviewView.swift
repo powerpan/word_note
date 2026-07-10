@@ -11,6 +11,7 @@ struct CandidateReviewView: View {
     @State private var selectedCandidateIDs = Set<UUID>()
     @State private var statusMessage: String?
     @State private var errorMessage: String?
+    @State private var isManualEditorPresented = false
 
     private var pendingCandidates: [CandidateTermModel] {
         candidates.filter { $0.status == .pending }
@@ -20,7 +21,12 @@ struct CandidateReviewView: View {
         GroupBox("Candidate Review") {
             VStack(alignment: .leading, spacing: 14) {
                 if pendingCandidates.isEmpty {
-                    Label("All candidates have been handled.", systemImage: "checkmark.circle")
+                    Label(
+                        record.status == .completed
+                            ? "All candidates have been handled."
+                            : "No AI candidate is ready to save.",
+                        systemImage: record.status == .completed ? "checkmark.circle" : "doc.badge.plus"
+                    )
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(pendingCandidates, id: \.id) { candidate in
@@ -60,8 +66,34 @@ struct CandidateReviewView: View {
                             Label("Ignore All", systemImage: "xmark.circle")
                         }
 
+                        Button {
+                            isManualEditorPresented.toggle()
+                        } label: {
+                            Label("Add Manually", systemImage: "square.and.pencil")
+                        }
+
                         Spacer()
                     }
+                }
+
+                if record.status != .completed, pendingCandidates.isEmpty {
+                    Button {
+                        isManualEditorPresented.toggle()
+                    } label: {
+                        Label("Add Term Manually", systemImage: "square.and.pencil")
+                    }
+                }
+
+                if isManualEditorPresented {
+                    ManualTermEditor(
+                        record: record,
+                        onSaved: { term in
+                            isManualEditorPresented = false
+                            errorMessage = nil
+                            statusMessage = "Saved \(term.term) to Vocabulary."
+                        },
+                        onCancel: { isManualEditorPresented = false }
+                    )
                 }
 
                 if let statusMessage {
@@ -136,6 +168,8 @@ private struct CandidateEditorRow: View {
             HStack(alignment: .firstTextBaseline) {
                 Toggle("", isOn: $isSelected)
                     .labelsHidden()
+                    .toggleStyle(.checkbox)
+                    .accessibilityLabel("Select \(candidate.term)")
 
                 TextField("Term", text: $candidate.term)
                     .font(.headline)

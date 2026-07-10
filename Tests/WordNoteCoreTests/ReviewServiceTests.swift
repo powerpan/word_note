@@ -104,6 +104,35 @@ final class ReviewServiceTests: XCTestCase {
         XCTAssertEqual(term.nextReviewAt, Calendar.reviewServiceTestCalendar.date(byAdding: .day, value: 7, to: reviewedAt))
     }
 
+    func testPostponeUntilTomorrowDoesNotCreateReviewEvent() throws {
+        let context = ModelContext(try makeInMemoryContainer())
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let term = TermModel(
+            term: "regularization",
+            termType: .word,
+            chineseMeaning: "正則化",
+            wrongCount: 2,
+            nextReviewAt: now
+        )
+        context.insert(term)
+        try context.save()
+        let service = ReviewService(
+            modelContext: context,
+            calendar: .reviewServiceTestCalendar
+        )
+
+        try service.postponeUntilTomorrow(term, from: now)
+
+        let startOfToday = Calendar.reviewServiceTestCalendar.startOfDay(for: now)
+        XCTAssertEqual(
+            term.nextReviewAt,
+            Calendar.reviewServiceTestCalendar.date(byAdding: .day, value: 1, to: startOfToday)
+        )
+        XCTAssertEqual(term.reviewCount, 0)
+        XCTAssertEqual(term.wrongCount, 2)
+        XCTAssertTrue(try context.fetch(FetchDescriptor<ReviewEventModel>()).isEmpty)
+    }
+
     private func makeInMemoryContainer() throws -> ModelContainer {
         let schema = Schema([
             CourseModel.self,

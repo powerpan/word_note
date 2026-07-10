@@ -34,9 +34,30 @@ final class AIAnalysisServiceTests: XCTestCase {
         XCTAssertTrue(promptText.contains("AI/CS-specific explanation only when"))
         XCTAssertTrue(promptText.contains("do not force AI-context wording"))
     }
+
+    func testAnalyzeRejectsOverlongInputBeforeCallingClient() async throws {
+        let client = MockCompletionClient(
+            completion: DeepSeekCompletion(id: nil, model: "unused", content: "{}")
+        )
+        let service = AIAnalysisService(client: client)
+        let request = AIAnalysisRequest(
+            rawText: String(repeating: "a", count: AIAnalysisService.maximumInputCharacters + 1)
+        )
+
+        do {
+            _ = try await service.analyze(request)
+            XCTFail("Expected overlong input to be rejected.")
+        } catch {
+            XCTAssertEqual(
+                error as? AIAnalysisError,
+                .inputTooLong(maxCharacters: AIAnalysisService.maximumInputCharacters)
+            )
+        }
+        XCTAssertTrue(client.lastMessages.isEmpty)
+    }
 }
 
-private final class MockCompletionClient: AICompletionClient {
+private final class MockCompletionClient: AICompletionClient, @unchecked Sendable {
     let completion: DeepSeekCompletion
     private(set) var lastMessages: [DeepSeekMessage] = []
     private(set) var lastResponseFormat: DeepSeekResponseFormat?
