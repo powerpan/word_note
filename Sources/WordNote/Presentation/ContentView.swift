@@ -18,14 +18,16 @@ struct ContentView: View {
                     )
                     .layoutPriority(3)
 
-                DetailRouter(selection: selection)
+                DetailRouter(selection: $selection)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Color(nsColor: .windowBackgroundColor))
+                    .background(WordNoteTheme.canvas)
                     .layoutPriority(1)
             }
             .animation(.smooth(duration: 0.18), value: sidebarPresentation)
         }
         .frame(minWidth: AppLayoutMetrics.minWindowWidth, minHeight: AppLayoutMetrics.minWindowHeight)
+        .background(WordNoteTheme.canvas)
+        .tint(WordNoteTheme.brand)
     }
 }
 
@@ -33,7 +35,7 @@ private enum AppLayoutMetrics {
     static let minWindowWidth: CGFloat = 980
     static let minWindowHeight: CGFloat = 680
     static let sidebarCompactBreakpoint: CGFloat = 1180
-    static let expandedSidebarWidth: CGFloat = 252
+    static let expandedSidebarWidth: CGFloat = 232
     static let compactSidebarWidth: CGFloat = 72
 }
 
@@ -68,22 +70,22 @@ private struct SidebarView: View {
             if presentation.isCompact {
                 Image(systemName: "book.closed.fill")
                     .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(WordNoteTheme.brand)
                     .frame(width: 40, height: 40)
                     .padding(.top, 24)
                     .help("Word Note")
             } else {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Word Note")
-                        .font(.title2.bold())
+                        .font(WordNoteTheme.editorialFont(size: 27, weight: .semibold))
                         .lineLimit(1)
                     Text("AI / CS Vocabulary")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(WordNoteTheme.mutedInk)
                         .lineLimit(1)
                 }
-                .padding(.horizontal, 18)
-                .padding(.top, 24)
+                .padding(.horizontal, 22)
+                .padding(.top, 28)
             }
 
             VStack(spacing: 4) {
@@ -112,10 +114,10 @@ private struct SidebarView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Label("Local-first", systemImage: "lock.shield")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(WordNoteTheme.mutedInk)
                     Text("DeepSeek is used only when you analyze a record.")
                         .font(.caption2)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(WordNoteTheme.mutedInk.opacity(0.8))
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -123,9 +125,11 @@ private struct SidebarView: View {
                 .padding(.bottom, 18)
             }
         }
-        .background(.thinMaterial)
+        .background(WordNoteTheme.sidebar)
         .overlay(alignment: .trailing) {
-            Divider()
+            Rectangle()
+                .fill(WordNoteTheme.line)
+                .frame(width: 1)
         }
     }
 }
@@ -139,18 +143,21 @@ private struct SidebarRow: View {
     var body: some View {
         Button(action: action) {
             if presentation.isCompact {
-                Image(systemName: destination.systemImage)
-                    .font(.system(size: 15, weight: .medium))
-                    .frame(width: 42, height: 38)
-                    .foregroundStyle(isSelected ? Color.white : Color.primary)
-                    .background {
-                        if isSelected {
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(Color.accentColor)
-                        }
-                    }
+                ZStack(alignment: .leading) {
+                    Rectangle()
+                        .fill(isSelected ? WordNoteTheme.brand : .clear)
+                        .frame(width: 3, height: 24)
+                    Image(systemName: destination.systemImage)
+                        .font(.system(size: 15, weight: .medium))
+                        .frame(width: 42, height: 38)
+                        .foregroundStyle(isSelected ? WordNoteTheme.brand : Color.primary)
+                        .padding(.leading, 3)
+                }
             } else {
                 HStack(spacing: 10) {
+                    Rectangle()
+                        .fill(isSelected ? WordNoteTheme.brand : .clear)
+                        .frame(width: 3, height: 24)
                     Image(systemName: destination.systemImage)
                         .font(.system(size: 15, weight: .medium))
                         .frame(width: 20)
@@ -159,15 +166,10 @@ private struct SidebarRow: View {
                         .lineLimit(1)
                     Spacer()
                 }
-                .foregroundStyle(isSelected ? Color.white : Color.primary)
-                .padding(.horizontal, 10)
-                .frame(height: 36)
-                .background {
-                    if isSelected {
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(Color.accentColor)
-                    }
-                }
+                .foregroundStyle(isSelected ? WordNoteTheme.brand : Color.primary)
+                .padding(.trailing, 12)
+                .frame(height: 39)
+                .background(isSelected ? WordNoteTheme.brand.opacity(0.055) : .clear)
             }
         }
         .buttonStyle(.plain)
@@ -178,12 +180,15 @@ private struct SidebarRow: View {
 }
 
 private struct DetailRouter: View {
-    let selection: SidebarDestination
+    @Binding var selection: SidebarDestination
 
     var body: some View {
         switch selection {
         case .dashboard:
-            DashboardView()
+            DashboardView(
+                onOpenReview: { selection = .review },
+                onOpenInbox: { selection = .inbox }
+            )
         case .quickAdd:
             QuickAddView()
         case .inbox:

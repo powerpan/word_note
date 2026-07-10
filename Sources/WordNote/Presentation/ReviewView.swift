@@ -261,8 +261,8 @@ private struct ReviewCard: View {
                         .fixedSize(horizontal: false, vertical: true)
 
                     HStack(spacing: 10) {
-                        TagChip(title: term.termType.displayTitle, tint: .blue)
-                        TagChip(title: term.masteryLevel.displayTitle, tint: .purple)
+                        TagChip(title: term.termType.displayTitle, tint: WordNoteTheme.teal)
+                        TagChip(title: term.masteryLevel.displayTitle, tint: WordNoteTheme.brand)
                         if let courseName {
                             Text(courseName)
                                 .lineLimit(1)
@@ -325,8 +325,8 @@ private struct ReviewCard: View {
         }
         .padding(22)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.regularMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .wordNoteSurface(elevated: true)
+        .groupBoxStyle(WordNoteGroupBoxStyle())
     }
 
     private func feedbackButton(
@@ -366,7 +366,7 @@ private struct ReviewCompletionView: View {
         VStack(alignment: .leading, spacing: 18) {
             Label("Session Complete", systemImage: "checkmark.circle.fill")
                 .font(.title2.bold())
-                .foregroundStyle(.green)
+                .foregroundStyle(WordNoteTheme.green)
 
             HStack(spacing: 24) {
                 ForEach(ReviewFeedback.allCases) { feedback in
@@ -387,7 +387,6 @@ private struct ReviewCompletionView: View {
         }
         .padding(22)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.regularMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .wordNoteSurface(elevated: true)
     }
 }

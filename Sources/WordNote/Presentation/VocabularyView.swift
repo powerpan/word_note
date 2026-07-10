@@ -50,6 +50,8 @@ struct VocabularyView: View {
                                 .tag(term.id)
                         }
                     }
+                    .scrollContentBackground(.hidden)
+                    .background(WordNoteTheme.surface)
                     .overlay {
                         if filteredTerms.isEmpty {
                             EmptyStateView(
@@ -66,7 +68,7 @@ struct VocabularyView: View {
                     }
                 }
                 .frame(width: listWidth)
-                .background(Color(nsColor: .controlBackgroundColor))
+                .background(WordNoteTheme.surface)
 
                 Divider()
 
@@ -163,8 +165,8 @@ private struct VocabularyRow: View {
                 .font(.headline)
                 .lineLimit(1)
             HStack(spacing: 8) {
-                TagChip(title: term.masteryLevel.displayTitle, tint: .blue)
-                TagChip(title: term.importance.displayTitle, tint: .orange)
+                TagChip(title: term.masteryLevel.displayTitle, tint: WordNoteTheme.teal)
+                TagChip(title: term.importance.displayTitle, tint: WordNoteTheme.amber)
                 if let courseName {
                     Text(courseName)
                         .lineLimit(1)

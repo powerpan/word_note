@@ -151,6 +151,7 @@ struct InboxView: View {
                 }
             }
         }
+        .scrollContentBackground(.hidden)
         .safeAreaInset(edge: .top, spacing: 0) {
             PageHeader(
                 title: "Inbox",
@@ -173,7 +174,7 @@ struct InboxView: View {
                 }
             }
             .padding(18)
-            .background(Color(nsColor: .controlBackgroundColor))
+            .background(WordNoteTheme.surface)
         }
         .overlay {
             if selectableRecords.isEmpty {
@@ -187,7 +188,7 @@ struct InboxView: View {
                 .allowsHitTesting(false)
             }
         }
-        .background(Color(nsColor: .controlBackgroundColor))
+        .background(WordNoteTheme.surface)
     }
 
     @ViewBuilder

@@ -125,6 +125,7 @@ struct InputRecordDetailView: View {
             .padding(28)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .groupBoxStyle(WordNoteGroupBoxStyle())
     }
 
     @ViewBuilder

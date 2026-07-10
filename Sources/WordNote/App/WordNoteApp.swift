@@ -71,6 +71,7 @@ struct WordNoteApp: App {
                 }
             }
             .modelContainer(modelContainer)
+            .preferredColorScheme(.light)
         }
         .defaultSize(width: 1320, height: 800)
         .windowResizability(.contentMinSize)
@@ -101,6 +102,7 @@ struct WordNoteApp: App {
         Settings {
             SettingsView()
                 .modelContainer(modelContainer)
+                .preferredColorScheme(.light)
         }
         .defaultSize(width: 760, height: 560)
         .windowResizability(.contentMinSize)

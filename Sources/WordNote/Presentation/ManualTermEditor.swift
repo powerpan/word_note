@@ -55,8 +55,7 @@ struct ManualTermEditor: View {
             }
         }
         .padding(12)
-        .background(Color(nsColor: .controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .wordNoteSurface(elevated: true)
     }
 
     private func save() {

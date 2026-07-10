@@ -43,11 +43,11 @@ struct QuickAddView: View {
                             .scrollContentBackground(.hidden)
                             .frame(minHeight: 300)
                             .padding(12)
-                            .background(Color(nsColor: .textBackgroundColor))
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                            .background(WordNoteTheme.field)
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
                             .overlay {
-                                RoundedRectangle(cornerRadius: 8)
-                                    .stroke(Color.secondary.opacity(0.18), lineWidth: 1)
+                                RoundedRectangle(cornerRadius: 6)
+                                    .stroke(WordNoteTheme.line, lineWidth: 1)
                             }
                             .overlay(alignment: .topLeading) {
                                 if rawText.isEmpty {
@@ -118,8 +118,7 @@ struct QuickAddView: View {
                     }
                     .padding(16)
                     .frame(width: 280, alignment: .topLeading)
-                    .background(Color(nsColor: .controlBackgroundColor))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .wordNoteSurface()
                 }
 
                 if let statusMessage = statusMessage ?? analysisQueue.statusMessage {
@@ -215,7 +214,7 @@ struct QuickAddView: View {
                                 Text(candidate.term)
                                     .font(.subheadline.weight(.semibold))
                                 Spacer()
-                                TagChip(title: candidate.importance.displayTitle, tint: .orange)
+                                TagChip(title: candidate.importance.displayTitle, tint: WordNoteTheme.amber)
                             }
 
                             if let chineseMeaning = candidate.chineseMeaning {
@@ -239,8 +238,7 @@ struct QuickAddView: View {
                             }
                         }
                         .padding(10)
-                        .background(.regularMaterial)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .wordNoteSurface(elevated: true)
                     }
                 }
             } else {
@@ -252,7 +250,6 @@ struct QuickAddView: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(nsColor: .controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .wordNoteSurface()
     }
 }

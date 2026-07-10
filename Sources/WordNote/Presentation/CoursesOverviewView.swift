@@ -49,6 +49,8 @@ struct CoursesOverviewView: View {
                         .tag(course.id)
                     }
                 }
+                .scrollContentBackground(.hidden)
+                .background(WordNoteTheme.surface)
                 .overlay {
                     if courses.isEmpty {
                         ContentUnavailableView(
@@ -61,7 +63,7 @@ struct CoursesOverviewView: View {
                 }
             }
                 .frame(width: listWidth)
-                .background(Color(nsColor: .controlBackgroundColor))
+                .background(WordNoteTheme.surface)
 
                 Divider()
 
@@ -187,7 +189,7 @@ private struct CourseEditor: View {
             VStack(alignment: .leading, spacing: 18) {
                 HStack {
                     Text(mode == .create ? "New Course" : "Course Detail")
-                        .font(.largeTitle.bold())
+                        .font(WordNoteTheme.editorialFont(size: 25, weight: .semibold))
                     Spacer()
                     Button("Save") {
                         save()
@@ -247,6 +249,7 @@ private struct CourseEditor: View {
             .padding(28)
         }
         .frame(minWidth: 560, maxWidth: .infinity, maxHeight: .infinity)
+        .groupBoxStyle(WordNoteGroupBoxStyle())
         .onAppear(perform: load)
         .onChange(of: course?.id) {
             load()
@@ -336,7 +339,6 @@ private struct CourseMetric: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
-        .background(.regularMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .wordNoteSurface()
     }
 }

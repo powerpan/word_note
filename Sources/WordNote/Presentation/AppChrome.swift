@@ -32,12 +32,12 @@ struct PageHeader<Actions: View>: View {
     private var titleBlock: some View {
         VStack(alignment: .leading, spacing: 5) {
             Text(title)
-                .font(.system(size: 30, weight: .bold))
+                .font(WordNoteTheme.editorialFont(size: 25, weight: .semibold))
                 .lineLimit(1)
                 .minimumScaleFactor(0.86)
             Text(subtitle)
-                .font(.callout)
-                .foregroundStyle(.secondary)
+                .font(.system(size: 13))
+                .foregroundStyle(WordNoteTheme.mutedInk)
                 .lineLimit(2)
         }
     }
@@ -57,10 +57,10 @@ struct EmptyStateView<Actions: View>: View {
 
             VStack(spacing: 5) {
                 Text(title)
-                    .font(.title2.bold())
+                    .font(WordNoteTheme.editorialFont(size: 21, weight: .semibold))
                 Text(message)
                     .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(WordNoteTheme.mutedInk)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 380)
             }
@@ -69,37 +69,6 @@ struct EmptyStateView<Actions: View>: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(32)
-    }
-}
-
-struct MetricCard: View {
-    let title: String
-    let value: Int
-    let systemImage: String
-    let tint: Color
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                Image(systemName: systemImage)
-                    .foregroundStyle(tint)
-                    .font(.system(size: 18, weight: .semibold))
-                Spacer()
-            }
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(value, format: .number)
-                    .font(.system(size: 28, weight: .bold))
-                    .monospacedDigit()
-                Text(title)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.regularMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }
 
@@ -123,11 +92,11 @@ struct StatusBanner: View {
         var tint: Color {
             switch self {
             case .success:
-                .green
+                WordNoteTheme.green
             case .warning:
-                .orange
+                WordNoteTheme.amber
             case .info:
-                .blue
+                WordNoteTheme.teal
             }
         }
     }
@@ -142,8 +111,12 @@ struct StatusBanner: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 9)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(kind.tint.opacity(0.12))
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .background(kind.tint.opacity(0.09))
+            .clipShape(RoundedRectangle(cornerRadius: 5))
+            .overlay {
+                RoundedRectangle(cornerRadius: 5)
+                    .stroke(kind.tint.opacity(0.35), lineWidth: 1)
+            }
     }
 }
 
@@ -156,9 +129,13 @@ struct TagChip: View {
             .font(.caption)
             .foregroundStyle(tint)
             .lineLimit(1)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(tint.opacity(0.12))
-            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(tint.opacity(0.06))
+            .clipShape(RoundedRectangle(cornerRadius: 4))
+            .overlay {
+                RoundedRectangle(cornerRadius: 4)
+                    .stroke(tint.opacity(0.65), lineWidth: 1)
+            }
     }
 }

@@ -66,11 +66,12 @@ struct FloatingQuickAddPanelView: View {
             height: preferredPanelHeight,
             alignment: .topLeading
         )
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18))
+        .background(WordNoteTheme.raisedSurface, in: RoundedRectangle(cornerRadius: 14))
         .overlay {
-            RoundedRectangle(cornerRadius: 18)
-                .stroke(Color.secondary.opacity(0.18), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(WordNoteTheme.strongLine, lineWidth: 1)
         }
+        .preferredColorScheme(.light)
         .onAppear {
             focusInput()
             onHeightChange(preferredPanelHeight)
@@ -105,11 +106,11 @@ struct FloatingQuickAddPanelView: View {
                 .onSubmit(submit)
                 .padding(.horizontal, 13)
                 .frame(height: 40)
-                .background(Color(nsColor: .textBackgroundColor).opacity(0.88))
+                .background(WordNoteTheme.field)
                 .clipShape(Capsule())
                 .overlay {
                     Capsule()
-                        .stroke(Color.secondary.opacity(0.18), lineWidth: 1)
+                        .stroke(WordNoteTheme.line, lineWidth: 1)
                 }
 
             Button(action: submit) {
@@ -118,7 +119,7 @@ struct FloatingQuickAddPanelView: View {
             }
             .buttonStyle(.plain)
             .disabled(!canSubmit)
-            .foregroundStyle(canSubmit ? Color.accentColor : Color.secondary.opacity(0.45))
+            .foregroundStyle(canSubmit ? WordNoteTheme.brand : WordNoteTheme.mutedInk.opacity(0.45))
             .help("Add term or analyze input")
         }
     }
@@ -252,8 +253,12 @@ private struct FloatingChineseExplanationView: View {
                                 .fixedSize(horizontal: false, vertical: true)
                                 .padding(9)
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(Color(nsColor: .controlBackgroundColor).opacity(0.72))
-                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                                .background(WordNoteTheme.surface)
+                                .clipShape(RoundedRectangle(cornerRadius: 6))
+                                .overlay {
+                                    RoundedRectangle(cornerRadius: 6)
+                                        .stroke(WordNoteTheme.line, lineWidth: 1)
+                                }
                         }
                     }
 
@@ -269,6 +274,7 @@ private struct FloatingChineseExplanationView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .tint(WordNoteTheme.brand)
     }
 }
 

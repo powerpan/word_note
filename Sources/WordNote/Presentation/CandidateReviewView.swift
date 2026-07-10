@@ -105,6 +105,7 @@ struct CandidateReviewView: View {
                 }
             }
         }
+        .groupBoxStyle(WordNoteGroupBoxStyle())
         .onAppear(perform: selectDefaultCandidates)
         .onChange(of: candidates.map(\.id)) {
             selectDefaultCandidates()
@@ -222,8 +223,7 @@ private struct CandidateEditorRow: View {
             }
         }
         .padding(12)
-        .background(.regularMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .wordNoteSurface(elevated: true)
     }
 
     private func optionalBinding(_ binding: Binding<String?>) -> Binding<String> {

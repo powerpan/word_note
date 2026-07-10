@@ -57,6 +57,7 @@ struct TermDetailEditor: View {
             }
             .padding(28)
         }
+        .groupBoxStyle(WordNoteGroupBoxStyle())
         .onAppear(perform: loadTerm)
         .onChange(of: term.id) { loadTerm() }
     }

@@ -200,3 +200,21 @@ P1 Review 先做三件事：
 
 - SwiftData model 關聯目前以 UUID 表示，不能依賴資料庫自動維護引用完整性。
 - 部分保存和孤兒事件會使 Inbox、Vocabulary、Dashboard 和 Review 對同一資料得出不同結果。
+
+## Decision 012: 主界面採用固定淺色研究編輯台視覺
+
+日期：2026-07-10
+
+決策：
+
+- 主窗口、Settings 和 Quick Add 浮窗使用同一套淺色外觀，不跟隨系統深色模式自動反色。
+- Dashboard 從彩色 KPI 卡片改為 briefing、metric ledger、review table 和 recent activity 組成的工作台。
+- 全局使用冷灰白 surface、酒紅主色、礦物青輔色和細分隔線；serif 只用於品牌、日期和詞條。
+- 側欄保留穩定選擇模型，以細色條取代大面積藍色選中塊；窄窗口自動切換圖標側欄。
+- 共享 surface、GroupBox、Tag 和狀態色集中在 `WordNoteTheme`，功能頁不再自行使用任意 material 或紫色/藍色卡片。
+
+原因：
+
+- 原界面由等寬 KPI 卡、彩色圖標和大標題構成，容易呈現通用 Dashboard 模板感，與個人研究詞庫的產品定位不符。
+- 用戶選定的第一版視覺依賴穩定的淺色紙墨關係；直接自動反色會回到原本不喜歡的深色工作台。
+- 統一視覺 token 能降低跨頁漂移，也使後續增加功能時有明確約束。

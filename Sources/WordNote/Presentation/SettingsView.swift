@@ -32,6 +32,7 @@ struct SettingsView: View {
                     .frame(maxWidth: 420, alignment: .leading)
                     .padding(.vertical, 4)
                 }
+                .groupBoxStyle(WordNoteGroupBoxStyle())
 
                 GroupBox("DeepSeek") {
                     VStack(alignment: .leading, spacing: 14) {
@@ -73,6 +74,7 @@ struct SettingsView: View {
                     }
                     .padding(.vertical, 4)
                 }
+                .groupBoxStyle(WordNoteGroupBoxStyle())
             }
             .padding(28)
             .frame(maxWidth: 760, alignment: .leading)
