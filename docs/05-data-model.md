@@ -30,7 +30,7 @@ Term 1 --- n ReviewEvent
 | normalizedText | String | yes | 去空格和大小寫規範化後文本 |
 | inputType | InputType? | no | AI 或本地判斷結果 |
 | status | InputRecordStatus | yes | draft/analyzing/analyzed/completed/failed/ignored |
-| sentenceMeaning | String? | no | AI 對整句或整段的中文含義 |
+| sentenceMeaning | String? | no | 英文查中文時為整句中文含義；中文查英文時為完整英文表達 |
 | courseID | UUID? | no | 所屬課程 |
 | sourceType | SourceType | yes | class/paper/slides/assignment/book/other |
 | note | String? | no | 用戶備註 |

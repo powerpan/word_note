@@ -118,6 +118,52 @@ final class QuickAddAnalysisQueueTests: XCTestCase {
         XCTAssertTrue(try context.fetch(FetchDescriptor<InputRecordModel>()).isEmpty)
     }
 
+    func testChineseLookupCreatesInboxRecordWithEnglishCandidate() async throws {
+        let context = ModelContext(try makeInMemoryContainer())
+        var capturedDirection: LookupDirection?
+        let queue = QuickAddAnalysisQueue(modelContext: context) { request in
+            capturedDirection = request.lookupDirection
+            return AIAnalysisResult(
+                inputType: .word,
+                sentenceMeaning: nil,
+                candidates: [
+                    AIAnalysisCandidate(
+                        term: "overfitting",
+                        termType: .word,
+                        needToLearn: true,
+                        importance: .high,
+                        category: .aiML,
+                        chineseMeaning: "過擬合"
+                    )
+                ],
+                model: "test-model",
+                rawResponseID: nil
+            )
+        }
+
+        let enqueueResult = try queue.enqueue(
+            rawText: "過擬合",
+            courseID: nil,
+            courseName: nil,
+            sourceType: .class,
+            note: nil
+        )
+        guard case .queued = enqueueResult else {
+            return XCTFail("Expected Chinese input to enter the Inbox queue.")
+        }
+
+        try await queue.waitUntilIdle()
+
+        let records = try context.fetch(FetchDescriptor<InputRecordModel>())
+        let candidates = try context.fetch(FetchDescriptor<CandidateTermModel>())
+        XCTAssertEqual(capturedDirection, .chineseToEnglish)
+        XCTAssertEqual(records.count, 1)
+        XCTAssertEqual(records.first?.rawText, "過擬合")
+        XCTAssertEqual(records.first?.status, .analyzed)
+        XCTAssertEqual(candidates.map(\.term), ["overfitting"])
+        XCTAssertEqual(candidates.first?.chineseMeaning, "過擬合")
+    }
+
     private static func result(for rawText: String) -> AIAnalysisResult {
         AIAnalysisResult(
             inputType: rawText.contains(" ") ? .phrase : .word,

@@ -2,7 +2,7 @@
 
 ## 目標
 
-AI 集成的目標是把用戶輸入的英文內容轉換成可確認、可編輯、可保存的候選詞條。AI 不直接決定最終詞庫內容。
+AI 集成的目標是把用戶輸入的英文內容，或中文查英文意圖，轉換成可確認、可編輯、可保存的英文候選詞條。AI 不直接決定最終詞庫內容。
 
 ## DeepSeek 集成原則
 
@@ -32,13 +32,14 @@ protocol AIAnalysisService {
 | sourceType | 來源 |
 | userNote | 用戶備註 |
 | preferredLanguage | 解釋語言，MVP 固定 zh-Hant 或 zh-Hans 需統一 |
+| lookupDirection | 本地識別的 englishToChinese / chineseToEnglish；默認由 rawText 推導 |
 
 ### AIAnalysisResult
 
 | 字段 | 說明 |
 |---|---|
 | inputType | word/phrase/sentence/paragraph/unknown |
-| sentenceMeaning | 如果輸入是句子或段落，給出中文含義 |
+| sentenceMeaning | 英文查中文時為中文含義；中文查英文句子/段落時為完整英文表達 |
 | candidates | CandidateTerm draft |
 | model | 使用模型 |
 | rawResponseID | 可選 request id，不保存全文 |
@@ -78,7 +79,7 @@ AI 期望返回：
 | input_type | word/phrase/sentence/paragraph/unknown |
 | sentence_meaning | sentence/paragraph 時建議非空 |
 | items | 可以為空，但不能缺失 |
-| term | 非空 |
+| term | 非空；中文查英文時必須含英文字母且不能含漢字 |
 | term_type | word/phrase/expression/sentence_pattern |
 | importance | low/medium/high |
 | category | general/academic/AI/ML/DL/NLP/CV/math/programming |
@@ -97,6 +98,8 @@ AI 期望返回：
 6. 返回嚴格 JSON，不輸出 Markdown。
 7. 候選數量要克制，通常 1 到 5 個。
 8. 解釋要適合中文母語的 AI / CS 研究生。
+9. 中文查英文時，中文輸入是 source meaning，所有 `items[].term` 必須是英文，`chinese_meaning` 解釋英文候選。
+10. 多個英文候選只在語義、語域或專業用法確有差異時返回，最自然常用的候選排第一。
 
 ## Prompt 模板
 
@@ -118,6 +121,7 @@ User input:
 {{rawText}}
 
 Metadata:
+- Lookup direction: {{lookupDirection}}
 - Course: {{courseName}}
 - Source: {{sourceType}}
 - User note: {{userNote}}
@@ -130,6 +134,7 @@ Metadata:
 - trim。
 - 限制最大長度。
 - 偵測空輸入。
+- 按 Han scalar 與 ASCII 字母數量識別查詢方向。
 - 查詢 Term.normalizedTerm 是否精確命中既有正式詞條。
 - 偵測過長段落並提示用戶縮短。
 
@@ -145,7 +150,9 @@ Save & Analyze 前必須先執行正式詞庫精確命中檢查：
 normalized(rawText) == Term.normalizedTerm
 ```
 
-若命中：
+只有英文查中文執行此精確命中。中文查英文必須建立 Inbox 記錄，不以中文釋義模糊命中正式詞庫。
+
+若英文輸入命中：
 
 - 不發 DeepSeek request。
 - 不建立新的 InputRecord。
@@ -222,12 +229,22 @@ normalized(rawText) == Term.normalizedTerm
 
 詞庫層：
 
-- Save & Analyze 前優先查正式 Term，精確命中則跳過 AI。
+- 英文查中文 Save & Analyze 前優先查正式 Term，精確命中則跳過 AI；中文查英文不短路。
 - 保存 CandidateTerm 為 Term 前檢查現有 Term.normalizedTerm。
 - MVP 提示已存在，不強制合併。
 - P1 增加合併流程；但 Quick Add 的精確命中短路不等待合併功能。
 
 重複命中後的釋義 preview 應復用 AI preview 結構，使主 Quick Add、浮窗 Quick Add 和菜單欄入口顯示一致。
+
+### 中文查英文結果校驗
+
+AI JSON 解析完成後執行方向校驗：
+
+- `term` 至少包含一個 ASCII 英文字母。
+- `term` 不得包含 Han scalar，禁止 `overfitting（過擬合）` 這類中英混合主體。
+- `chinese_meaning` 必須非空。
+- 不合格候選可被移除；全部不合格時返回 schemaMismatch，原 InputRecord 標記 failed 並保留在 Inbox。
+- Candidate Review 保存前由 VocabularyService 再次執行英文主體校驗。
 
 ## 成本控制
 

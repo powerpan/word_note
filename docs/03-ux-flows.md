@@ -8,7 +8,9 @@ Word Note 是學習和整理工具，不是營銷型網站，也不是卡片堆�
 
 採用「研究編輯台」方向，而不是通用 SaaS Dashboard：
 
-- 主窗口固定使用淺色外觀，確保紙墨式編輯台在不同系統模式下保持一致；深色主題留待後續單獨設計，不做自動反色。
+- 外觀支持跟隨系統、淺色和深色三種模式；主窗口、設置窗口與 Quick Add 浮窗必須同步切換。
+- 淺色與深色模式使用各自定義的紙墨式語義色，不依賴系統自動反色生成產品配色。
+- 深色模式的基礎 surface 使用中性黑灰階，側欄接近黑色、主 canvas 為炭灰色，不使用帶綠、藍或棕色偏向的灰。
 - 冷灰白 canvas、接近紙張的 surface、深墨色正文，主色使用克制的酒紅，輔色使用礦物青、琥珀和學習綠。
 - 品牌、日期和詞條可使用系統 serif；控制、狀態和資料使用系統 sans serif。
 - 側欄選中態使用細色條、文字和極淡底色，不使用大面積藍色圓角塊。
@@ -66,6 +68,8 @@ Dashboard 不做大型視覺化圖表。首版只展示必要指標和入口。
 交互要求：
 
 - raw text 為唯一必填。
+- raw text 以漢字與英文字母數量判斷查詢方向；漢字佔主導時使用中文查英文，否則沿用英文查中文。
+- 主 Quick Add 在輸入框下方顯示當前識別方向；浮窗提交後以隊列狀態提示方向。
 - course/source/note 不阻塞保存。
 - 用戶按 Command + Enter 觸發 Save & Analyze。
 - 保存成功後清空輸入，並展示最近保存狀態。
@@ -78,6 +82,7 @@ Dashboard 不做大型視覺化圖表。首版只展示必要指標和入口。
 - Save & Analyze 前先做本地詞庫精確命中檢查。
 - 若輸入和既有 Term.normalizedTerm 完全一致，不調用 DeepSeek，直接展示既有中文釋義。
 - 命中已有詞條時提示該詞已加入今日復習隊列。
+- 中文查英文不使用英文 term 精確命中短路，必須建立 InputRecord 並在分析完成後進入 Inbox。
 
 ### Inbox
 
@@ -98,6 +103,7 @@ Inbox 是未整理原始記錄列表。
 - status。
 - createdAt。
 - candidate count。
+- 中文查英文記錄的第二行預覽第一個英文候選；英文查中文仍預覽中文釋義。
 
 操作：
 
@@ -161,7 +167,9 @@ Candidate Review 是從 InputRecord 到 Term 的確認界面。
 
 搜索和篩選：
 
-- term 搜索。
+- 英文 term 和英文定義使用大小寫不敏感的包含搜索。
+- 中文釋義搜索先統一為簡體搜索鍵並移除空白、標點，再做子串匹配；簡體查詢可以命中繁體釋義，反之亦然。
+- 中文模糊搜索不做拼音、同義詞、語義向量或編輯距離擴展。
 - course 篩選。
 - masteryLevel 篩選。
 - sourceType 篩選。
@@ -221,6 +229,7 @@ Candidate Review 是從 InputRecord 到 Term 的確認界面。
 
 首版必需：
 
+- 外觀模式：跟隨系統 / 淺色 / 深色，選擇後立即生效並持久化。
 - DeepSeek API Key。
 - Test API Key。
 - 默認課程。
@@ -251,6 +260,8 @@ P1 再加入：
 打開 Quick Add
   -> 輸入 raw text
   -> 點 Save & Analyze
+  -> 本地識別 English to Chinese / Chinese to English
+  -> 中文查英文：跳過英文 Term 精確命中，直接建立 analyzing InputRecord
   -> 本地查找 Term.normalizedTerm
   -> 若精確命中：跳過 AI，展示既有釋義，提升復習優先級
   -> 若未命中：繼續 AI 分析流程
@@ -327,6 +338,22 @@ P1 再加入：
 ```
 
 補全與重複詞命中是不同階段：補全可以做前綴匹配，提交後仍只允許 `normalized(rawText) == Term.normalizedTerm` 進入重複詞短路。
+
+### 流程 8：中文查英文
+
+```text
+打開 Quick Add 或浮窗 Quick Add
+  -> 輸入中文詞義、短語或句子
+  -> 本地識別為 Chinese to English
+  -> 建立 InputRecord(status=analyzing)，rawText 保留中文原文
+  -> DeepSeek 返回一到多個真正有區別的英文候選
+  -> 服務層移除中文 term 或缺少中文釋義的候選
+  -> InputRecord(status=analyzed)，在 Inbox 預覽英文候選
+  -> 用戶編輯並確認
+  -> Term.term 保存英文；Term.chineseMeaning 保存中文釋義；contextSentence 保留中文原文
+```
+
+若模型沒有返回合格英文候選，InputRecord 轉為 failed 並允許 Retry，不把中文查詢本身保存成 Term。
 
 ## 狀態與空狀態
 

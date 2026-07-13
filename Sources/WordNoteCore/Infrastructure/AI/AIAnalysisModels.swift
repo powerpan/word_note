@@ -6,19 +6,22 @@ public struct AIAnalysisRequest: Equatable, Sendable {
     public let sourceType: SourceType
     public let userNote: String?
     public let preferredLanguage: String
+    public let lookupDirection: LookupDirection
 
     public init(
         rawText: String,
         courseName: String? = nil,
         sourceType: SourceType = .other,
         userNote: String? = nil,
-        preferredLanguage: String = "Traditional Chinese"
+        preferredLanguage: String = "Traditional Chinese",
+        lookupDirection: LookupDirection? = nil
     ) {
         self.rawText = rawText
         self.courseName = courseName
         self.sourceType = sourceType
         self.userNote = userNote
         self.preferredLanguage = preferredLanguage
+        self.lookupDirection = lookupDirection ?? LookupDirectionDetector.detect(rawText)
     }
 }
 

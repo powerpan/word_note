@@ -21,10 +21,12 @@ struct VocabularyView: View {
 
     private var filteredTerms: [TermModel] {
         terms.filter { term in
-            let matchesSearch = searchText.isEmpty
-                || term.normalizedTerm.contains(TextNormalizer.normalized(searchText))
-                || (term.chineseMeaning ?? "").localizedCaseInsensitiveContains(searchText)
-                || (term.englishDefinition ?? "").localizedCaseInsensitiveContains(searchText)
+            let matchesSearch = VocabularySearchMatcher.matches(
+                query: searchText,
+                term: term.term,
+                chineseMeaning: term.chineseMeaning,
+                englishDefinition: term.englishDefinition
+            )
             let matchesCourse = selectedCourseID == nil || term.courseID == selectedCourseID
             let matchesMastery = selectedMasteryRaw == "all" || term.masteryLevel.rawValue == selectedMasteryRaw
             return matchesSearch && matchesCourse && matchesMastery
@@ -107,7 +109,7 @@ struct VocabularyView: View {
                 EmptyView()
             }
 
-            TextField("Search terms", text: $searchText)
+            TextField("Search English or Chinese meanings", text: $searchText)
                 .textFieldStyle(.roundedBorder)
 
             HStack(spacing: 8) {

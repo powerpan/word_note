@@ -33,6 +33,75 @@ final class AIAnalysisServiceTests: XCTestCase {
         XCTAssertTrue(promptText.contains("general Chinese meaning or meanings"))
         XCTAssertTrue(promptText.contains("AI/CS-specific explanation only when"))
         XCTAssertTrue(promptText.contains("do not force AI-context wording"))
+        XCTAssertTrue(promptText.contains("English-to-Chinese lookup"))
+    }
+
+    func testChineseLookupRequestsEnglishCandidates() async throws {
+        let client = MockCompletionClient(
+            completion: DeepSeekCompletion(
+                id: "mock-id",
+                model: "mock-model",
+                content: """
+                {
+                  "input_type": "word",
+                  "sentence_meaning": "",
+                  "items": [
+                    {
+                      "term": "overfitting",
+                      "term_type": "word",
+                      "need_to_learn": true,
+                      "importance": "high",
+                      "category": "AI/ML",
+                      "chinese_meaning": "過擬合；模型過度貼合訓練資料而泛化能力下降。"
+                    }
+                  ]
+                }
+                """
+            )
+        )
+        let service = AIAnalysisService(client: client)
+
+        let result = try await service.analyze(AIAnalysisRequest(rawText: "過擬合"))
+
+        XCTAssertEqual(result.candidates.map(\.term), ["overfitting"])
+        XCTAssertEqual(result.candidates.first?.chineseMeaning, "過擬合；模型過度貼合訓練資料而泛化能力下降。")
+        let promptText = client.lastMessages.map(\.content).joined(separator: "\n")
+        XCTAssertTrue(promptText.contains("Chinese-to-English lookup"))
+        XCTAssertTrue(promptText.contains("Every items[].term must be an English"))
+        XCTAssertTrue(promptText.contains("Lookup direction: Chinese to English"))
+    }
+
+    func testChineseLookupRejectsChineseVocabularySubject() async throws {
+        let client = MockCompletionClient(
+            completion: DeepSeekCompletion(
+                id: nil,
+                model: "mock-model",
+                content: """
+                {
+                  "input_type": "word",
+                  "sentence_meaning": "",
+                  "items": [
+                    {
+                      "term": "過擬合",
+                      "term_type": "word",
+                      "chinese_meaning": "過擬合"
+                    }
+                  ]
+                }
+                """
+            )
+        )
+
+        do {
+            _ = try await AIAnalysisService(client: client).analyze(
+                AIAnalysisRequest(rawText: "過擬合")
+            )
+            XCTFail("Expected a Chinese vocabulary subject to be rejected.")
+        } catch let error as AIAnalysisError {
+            guard case .schemaMismatch = error else {
+                return XCTFail("Expected schema mismatch, got \(error).")
+            }
+        }
     }
 
     func testAnalyzeRejectsOverlongInputBeforeCallingClient() async throws {

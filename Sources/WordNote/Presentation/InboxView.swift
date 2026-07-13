@@ -109,7 +109,7 @@ struct InboxView: View {
                     ForEach(activeRecords, id: \.id) { record in
                         InboxRow(
                             record: record,
-                            previewText: chineseMeaningPreview(for: record),
+                            previewText: previewText(for: record),
                             batchSelection: batchSelectionBinding(for: record),
                             batchSelectionEnabled: confirmableRecordIDs.contains(record.id)
                         )
@@ -140,7 +140,7 @@ struct InboxView: View {
                         ForEach(confirmedRecords, id: \.id) { record in
                             InboxRow(
                                 record: record,
-                                previewText: chineseMeaningPreview(for: record),
+                                previewText: previewText(for: record),
                                 batchSelection: nil,
                                 batchSelectionEnabled: false,
                                 isConfirmed: true
@@ -231,13 +231,22 @@ struct InboxView: View {
         candidates(for: record).filter { $0.status == .pending }
     }
 
-    private func chineseMeaningPreview(for record: InputRecordModel) -> String {
-        let meaning = candidates(for: record)
-            .compactMap { normalizedPreviewText($0.chineseMeaning) }
-            .first ?? normalizedPreviewText(record.sentenceMeaning)
+    private func previewText(for record: InputRecordModel) -> String {
+        let lookupDirection = LookupDirectionDetector.detect(record.rawText)
+        let preview: String?
+        switch lookupDirection {
+        case .englishToChinese:
+            preview = candidates(for: record)
+                .compactMap { normalizedPreviewText($0.chineseMeaning) }
+                .first ?? normalizedPreviewText(record.sentenceMeaning)
+        case .chineseToEnglish:
+            preview = candidates(for: record)
+                .compactMap { normalizedPreviewText($0.term) }
+                .first ?? normalizedPreviewText(record.sentenceMeaning)
+        }
 
-        guard let meaning else { return record.status.displayTitle }
-        return String(meaning.prefix(18))
+        guard let preview else { return record.status.displayTitle }
+        return String(preview.prefix(18))
     }
 
     private func normalizedPreviewText(_ value: String?) -> String? {

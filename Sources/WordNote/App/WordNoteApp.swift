@@ -6,11 +6,16 @@ import WordNoteCore
 @MainActor
 struct WordNoteApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    @AppStorage(AppAppearancePreference.storageKey) private var appearanceRawValue = AppAppearancePreference.system.rawValue
     @State private var analysisQueue: QuickAddAnalysisQueue
     @State private var quickAddPanelController: QuickAddPanelController
 
     private let modelContainer: ModelContainer
     private let startupIssue: AppStartupIssue?
+
+    private var selectedAppearance: AppAppearancePreference {
+        AppAppearancePreference.resolved(from: appearanceRawValue)
+    }
 
     init() {
         let schema = Schema(versionedSchema: WordNoteSchemaV1.self)
@@ -71,7 +76,7 @@ struct WordNoteApp: App {
                 }
             }
             .modelContainer(modelContainer)
-            .preferredColorScheme(.light)
+            .preferredColorScheme(selectedAppearance.preferredColorScheme)
         }
         .defaultSize(width: 1320, height: 800)
         .windowResizability(.contentMinSize)
@@ -102,7 +107,7 @@ struct WordNoteApp: App {
         Settings {
             SettingsView()
                 .modelContainer(modelContainer)
-                .preferredColorScheme(.light)
+                .preferredColorScheme(selectedAppearance.preferredColorScheme)
         }
         .defaultSize(width: 760, height: 560)
         .windowResizability(.contentMinSize)

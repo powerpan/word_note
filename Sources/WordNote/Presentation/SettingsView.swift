@@ -2,6 +2,7 @@ import SwiftUI
 import WordNoteCore
 
 struct SettingsView: View {
+    @AppStorage(AppAppearancePreference.storageKey) private var appearanceRawValue = AppAppearancePreference.system.rawValue
     @AppStorage("defaultSourceType") private var defaultSourceType = "other"
     @State private var apiKey = ""
     @State private var keyStatusMessage: String?
@@ -9,15 +10,35 @@ struct SettingsView: View {
 
     private let environmentFileStore = DeepSeekEnvironmentFileStore()
 
+    private var appearanceSelection: Binding<AppAppearancePreference> {
+        Binding(
+            get: { AppAppearancePreference.resolved(from: appearanceRawValue) },
+            set: { appearanceRawValue = $0.rawValue }
+        )
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
                 PageHeader(
                     title: "Settings",
-                    subtitle: "Configure capture defaults and the DeepSeek credential used by analysis."
+                    subtitle: "Configure appearance, capture defaults, and the DeepSeek credential used by analysis."
                 ) {
                     EmptyView()
                 }
+
+                GroupBox("Appearance") {
+                    Picker("Theme", selection: appearanceSelection) {
+                        ForEach(AppAppearancePreference.allCases) { appearance in
+                            Label(appearance.displayTitle, systemImage: appearance.systemImage)
+                                .tag(appearance)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(maxWidth: 420, alignment: .leading)
+                    .padding(.vertical, 4)
+                }
+                .groupBoxStyle(WordNoteGroupBoxStyle())
 
                 GroupBox("Defaults") {
                     Picker("Default source", selection: $defaultSourceType) {

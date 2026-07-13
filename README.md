@@ -8,16 +8,17 @@ The current implementation follows the engineering plan in [docs](docs/README.md
 
 - Native macOS SwiftUI app shell.
 - Versioned local SwiftData persistence with one-time legacy-store backup and migration.
-- Quick Add for saving raw English input.
+- Quick Add for English analysis and Chinese-to-English lookup, with English retained as the vocabulary subject.
 - Local vocabulary prefix completion in the main and floating Quick Add inputs, with Tab acceptance.
 - Non-blocking, persistent AI analysis queue shared by the main window and menu bar panel.
 - DeepSeek-powered analysis through OpenAI-compatible chat completions.
 - Candidate review with editable AI-generated terms.
 - Manual term creation when AI returns no useful candidate.
-- Vocabulary list, search, filters, detail editing, and deletion.
+- Vocabulary list, English and normalized Chinese-meaning search, filters, detail editing, and deletion.
 - Course creation, editing, deletion guard, and course statistics.
 - Adaptive review queues, bidirectional cards, keyboard shortcuts, and session statistics.
 - Menu bar Quick Add panel with temporary Chinese explanation preview.
+- System, light, and neutral black-gray dark appearance modes shared by all app windows.
 - Environment-file storage for DeepSeek API key, with `DEEPSEEK_API_KEY` process environment fallback.
 
 ## Requirements
@@ -66,7 +67,17 @@ The default suite skips paid network tests. Explicitly enable the live DeepSeek 
 RUN_LIVE_DEEPSEEK_TESTS=1 swift test --filter LiveDeepSeekSmokeTests
 ```
 
-The live test calls DeepSeek with `latent representation` and verifies that a structured candidate is returned.
+The live test covers both `latent representation` (English to Chinese) and `過擬合` (Chinese to English), and verifies that structured candidates obey the direction contract.
+
+## Tencent Cloud Access
+
+The project-local SSH entrypoint is:
+
+```bash
+./script/tencent_cloud_ssh.sh
+```
+
+It connects to `ubuntu@134.175.182.221` with the Git-ignored private key under `.local_secrets/ssh/`. See [docs/12-tencent-cloud-server-access.md](docs/12-tencent-cloud-server-access.md) for remote-command usage and the direct SSH fallback.
 
 ## DeepSeek Key Handling
 
@@ -92,7 +103,7 @@ Implemented:
 - M5: Course management and filters.
 - M6: Review loop.
 - M7: QA and release polish.
-- P1: duplicate-term AI bypass, adaptive review, weak-term queue, bidirectional cards, shortcuts, and session statistics.
+- P1: duplicate-term AI bypass, adaptive review, weak-term queue, bidirectional cards, shortcuts, session statistics, local completion, Chinese-to-English lookup, bilingual vocabulary search, and appearance preferences.
 
 ## Known Limits
 

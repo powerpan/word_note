@@ -8,6 +8,7 @@ struct FloatingQuickAddPanelView: View {
     let onHeightChange: (CGFloat) -> Void
     let onClose: () -> Void
 
+    @AppStorage(AppAppearancePreference.storageKey) private var appearanceRawValue = AppAppearancePreference.system.rawValue
     @AppStorage("defaultSourceType") private var defaultSourceType = SourceType.other.rawValue
     @Query private var storedTerms: [TermModel]
     @State private var rawText = ""
@@ -26,6 +27,10 @@ struct FloatingQuickAddPanelView: View {
 
     private var selectedSourceType: SourceType {
         SourceType(rawValue: defaultSourceType) ?? .other
+    }
+
+    private var selectedAppearance: AppAppearancePreference {
+        AppAppearancePreference.resolved(from: appearanceRawValue)
     }
 
     private var latestExplanationKey: String {
@@ -72,7 +77,7 @@ struct FloatingQuickAddPanelView: View {
             RoundedRectangle(cornerRadius: 14)
                 .stroke(WordNoteTheme.strongLine, lineWidth: 1)
         }
-        .preferredColorScheme(.light)
+        .preferredColorScheme(selectedAppearance.preferredColorScheme)
         .onAppear {
             focusInput()
             onHeightChange(preferredPanelHeight)
@@ -103,7 +108,7 @@ struct FloatingQuickAddPanelView: View {
             VocabularyCompletionEditor(
                 text: $rawText,
                 vocabulary: storedTerms.map(\.term),
-                placeholder: "Add word, phrase, or sentence",
+                placeholder: "English or Chinese lookup",
                 style: .singleLine,
                 focusRequestID: inputFocusRequestID,
                 onSubmit: submit,

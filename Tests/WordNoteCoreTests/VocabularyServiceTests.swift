@@ -382,6 +382,101 @@ final class VocabularyServiceTests: XCTestCase {
         XCTAssertEqual(record.status, .completed)
     }
 
+    func testChineseLookupSavesEnglishVocabularySubjectWithChineseMeaning() throws {
+        let context = ModelContext(try makeInMemoryContainer())
+        let inputService = InputRecordService(modelContext: context)
+        let service = VocabularyService(modelContext: context)
+        let record = try inputService.createDraft(
+            rawText: "過擬合",
+            courseID: nil,
+            sourceType: .class,
+            note: nil
+        )
+        let candidate = CandidateTermModel(
+            inputRecordID: record.id,
+            term: "overfitting",
+            termType: .word,
+            needToLearn: true,
+            importance: .high,
+            category: .aiML,
+            chineseMeaning: "過擬合；模型過度貼合訓練資料。"
+        )
+        context.insert(candidate)
+        try context.save()
+
+        let term = try service.createTerms(from: [candidate], sourceRecord: record).first
+
+        XCTAssertEqual(term?.term, "overfitting")
+        XCTAssertEqual(term?.chineseMeaning, "過擬合；模型過度貼合訓練資料。")
+        XCTAssertEqual(term?.contextSentence, "過擬合")
+    }
+
+    func testChineseLookupRejectsChineseVocabularySubjectAtConfirmation() throws {
+        let context = ModelContext(try makeInMemoryContainer())
+        let inputService = InputRecordService(modelContext: context)
+        let service = VocabularyService(modelContext: context)
+        let record = try inputService.createDraft(
+            rawText: "過擬合",
+            courseID: nil,
+            sourceType: .class,
+            note: nil
+        )
+        let candidate = CandidateTermModel(
+            inputRecordID: record.id,
+            term: "過擬合",
+            termType: .word,
+            needToLearn: true,
+            importance: .high,
+            category: .aiML,
+            chineseMeaning: "過擬合"
+        )
+        context.insert(candidate)
+        try context.save()
+
+        XCTAssertThrowsError(
+            try service.createTerms(from: [candidate], sourceRecord: record)
+        ) { error in
+            guard case VocabularyServiceError.englishTermRequired = error else {
+                return XCTFail("Expected English-term validation, got \(error).")
+            }
+        }
+        XCTAssertTrue(try context.fetch(FetchDescriptor<TermModel>()).isEmpty)
+        XCTAssertEqual(candidate.status, .pending)
+    }
+
+    func testChineseLookupRequiresChineseMeaningAtConfirmation() throws {
+        let context = ModelContext(try makeInMemoryContainer())
+        let inputService = InputRecordService(modelContext: context)
+        let service = VocabularyService(modelContext: context)
+        let record = try inputService.createDraft(
+            rawText: "過擬合",
+            courseID: nil,
+            sourceType: .class,
+            note: nil
+        )
+        let candidate = CandidateTermModel(
+            inputRecordID: record.id,
+            term: "overfitting",
+            termType: .word,
+            needToLearn: true,
+            importance: .high,
+            category: .aiML,
+            englishDefinition: "Fitting training data too closely."
+        )
+        context.insert(candidate)
+        try context.save()
+
+        XCTAssertThrowsError(
+            try service.createTerms(from: [candidate], sourceRecord: record)
+        ) { error in
+            guard case VocabularyServiceError.chineseMeaningRequired = error else {
+                return XCTFail("Expected Chinese-meaning validation, got \(error).")
+            }
+        }
+        XCTAssertTrue(try context.fetch(FetchDescriptor<TermModel>()).isEmpty)
+        XCTAssertEqual(candidate.status, .pending)
+    }
+
     private func makeInMemoryContainer() throws -> ModelContainer {
         let schema = Schema([
             CourseModel.self,

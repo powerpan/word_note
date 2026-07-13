@@ -4,7 +4,7 @@
 
 採用垂直切片，而不是先把所有 UI 或所有資料模型一次寫完。每個里程碑都應該能運行、能保存資料、能被手工驗收。
 
-截至 2026-07-10，M1-M7、P1-A、P1-B、P1-C 和下列可靠性加固均已落地。後續變更應維持本文件定義的資料一致性與測試門檻。
+截至 2026-07-13，M1-M7、P1-A 至 P1-G 和下列可靠性加固均已落地。後續變更應維持本文件定義的資料一致性與測試門檻。
 
 ## M1: Project Foundation
 
@@ -241,6 +241,65 @@
 - 主窗口和浮窗共用同一 matcher，不複製排序規則。
 - 補全不讀寫業務資料、不調用 DeepSeek。
 
+## P1-E: Chinese-To-English Lookup
+
+狀態：已完成。
+
+目標：允許用戶用中文詞義、短語或句子查找自然英文表達，並沿用既有 Inbox 確認流程。
+
+任務：
+
+- 增加純 `LookupDirectionDetector`，由原始輸入穩定推導查詢方向。
+- 為 DeepSeek request 增加方向契約與中文查英文 prompt。
+- 過濾中文或中英混合的候選 term，以及缺少中文釋義的候選。
+- 中文查英文不走英文精確重複短路，仍建立可恢復的 InputRecord。
+- VocabularyService 保存前再次驗證英文主體與中文釋義。
+
+完成標準：
+
+- 中文輸入可產生一到多個真正有語義差別的英文候選。
+- `Term.term` 永遠保存英文，`Term.chineseMeaning` 保存中文解釋，中文原文只保留為上下文。
+- 無合格英文候選時記錄轉為 failed 並可重試，不把中文查詢保存成正式詞條。
+- live DeepSeek smoke test 同時覆蓋英文查中文與中文查英文。
+
+## P1-F: Bilingual Vocabulary Search
+
+狀態：已完成。
+
+目標：讓用戶可以從英文詞條、英文定義或中文釋義找回正式詞條。
+
+任務：
+
+- 將搜索規則下沉為純 `VocabularySearchMatcher`。
+- 英文使用規範化、大小寫不敏感的 contains 搜索。
+- 中文釋義使用 ICU 簡繁轉換，移除空白與標點後做子串匹配。
+- 保持搜索、Quick Add 補全與 duplicate detection 三套語義彼此獨立。
+
+完成標準：
+
+- 簡體查詢能命中繁體釋義，繁體查詢也能命中簡體釋義。
+- 只有標點的查詢不會錯誤匹配全部詞條。
+- 搜索不改寫持久化資料，也不觸發 AI。
+
+## P1-G: Appearance Preferences
+
+狀態：已完成。
+
+目標：在保留研究編輯台視覺語言的前提下，支持系統、淺色與深色三種外觀。
+
+任務：
+
+- 使用 `AppAppearancePreference` 定義穩定的 `system | light | dark` 持久化值。
+- Settings 提供三態 segmented picker。
+- 主窗口、Settings scene 與 Quick Add 浮窗共享同一偏好。
+- 深色 token 改為中性黑灰，避免墨綠、藍灰或棕色偏向。
+
+完成標準：
+
+- 三種模式可即時切換並在重啟後保留。
+- 所有窗口外觀一致，切換不重置導航、輸入或分析隊列。
+- 未知舊偏好安全回退到跟隨系統。
+
 ## Reliability Hardening
 
 狀態：已完成。
@@ -307,6 +366,8 @@ WordNoteUITests/
 6. 再做 Review mode / keyboard / session 統計。
 7. 最後替換固定排程為簡化自適應排程。
 8. 在重複詞短路穩定後增加本地詞庫輸入補全，復用同一正式詞庫資料源。
+9. 補全穩定後增加中文查英文，使用服務層雙重校驗守住英文詞條主體。
+10. 再把雙語搜索和外觀偏好下沉為可獨立測試的 core 規則。
 
 這樣可以避免一開始被 API 不穩定或本機 secrets 文件細節拖慢。
 

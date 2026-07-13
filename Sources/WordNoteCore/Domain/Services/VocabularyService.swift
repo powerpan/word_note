@@ -6,6 +6,8 @@ public enum VocabularyServiceError: LocalizedError, Equatable {
     case missingDefinition(String)
     case emptySelection
     case candidateSourceMismatch(String)
+    case englishTermRequired(String)
+    case chineseMeaningRequired(String)
 
     public var errorDescription: String? {
         switch self {
@@ -17,6 +19,10 @@ public enum VocabularyServiceError: LocalizedError, Equatable {
             return "Select at least one candidate."
         case .candidateSourceMismatch(let term):
             return "'\(term)' does not belong to this input record."
+        case .englishTermRequired(let term):
+            return "'\(term)' must be an English term for a Chinese-to-English lookup."
+        case .chineseMeaningRequired(let term):
+            return "'\(term)' needs a Chinese meaning for a Chinese-to-English lookup."
         }
     }
 }
@@ -110,6 +116,15 @@ public struct VocabularyService {
                 guard candidate.inputRecordID == confirmation.sourceRecord.id else {
                     throw VocabularyServiceError.candidateSourceMismatch(candidate.term)
                 }
+                try validateVocabularySubject(
+                    candidate.term,
+                    sourceRecord: confirmation.sourceRecord
+                )
+                try validateChineseMeaningIfNeeded(
+                    candidate.chineseMeaning,
+                    term: candidate.term,
+                    sourceRecord: confirmation.sourceRecord
+                )
 
                 let hasDefinition = !TextNormalizer.isBlank(candidate.chineseMeaning ?? "") ||
                     !TextNormalizer.isBlank(candidate.englishDefinition ?? "")
@@ -179,6 +194,12 @@ public struct VocabularyService {
         guard !TextNormalizer.isBlank(trimmedTerm) else {
             throw InputRecordValidationError.blankRawText
         }
+        try validateVocabularySubject(trimmedTerm, sourceRecord: sourceRecord)
+        try validateChineseMeaningIfNeeded(
+            chineseMeaning,
+            term: trimmedTerm,
+            sourceRecord: sourceRecord
+        )
 
         let normalizedTerm = TextNormalizer.normalized(trimmedTerm)
         guard try findExactTerm(normalizedTerm: normalizedTerm) == nil else {
@@ -312,6 +333,31 @@ public struct VocabularyService {
     private func normalizedOptional(_ value: String?) -> String? {
         let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed?.isEmpty == true ? nil : trimmed
+    }
+
+    private func validateVocabularySubject(
+        _ term: String,
+        sourceRecord: InputRecordModel
+    ) throws {
+        guard LookupDirectionDetector.detect(sourceRecord.rawText) == .chineseToEnglish else {
+            return
+        }
+        guard LookupDirectionDetector.isEnglishVocabularyTerm(term) else {
+            throw VocabularyServiceError.englishTermRequired(term)
+        }
+    }
+
+    private func validateChineseMeaningIfNeeded(
+        _ chineseMeaning: String?,
+        term: String,
+        sourceRecord: InputRecordModel
+    ) throws {
+        guard LookupDirectionDetector.detect(sourceRecord.rawText) == .chineseToEnglish else {
+            return
+        }
+        guard !TextNormalizer.isBlank(chineseMeaning ?? "") else {
+            throw VocabularyServiceError.chineseMeaningRequired(term)
+        }
     }
 
     private func bumpedImportance(_ importance: Importance) -> Importance {

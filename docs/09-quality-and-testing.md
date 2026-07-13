@@ -22,6 +22,9 @@ MVP 的質量重點：
 - duplicate detection。
 - duplicate Quick Add hit priority bump。
 - vocabulary prefix completion matching and ranking。
+- vocabulary English and normalized Chinese meaning search。
+- appearance preference raw values and unknown-value fallback。
+- Chinese/English lookup direction detection and English-subject validation。
 - review scheduler。
 - adaptive review scheduler。
 - AI response parser。
@@ -34,6 +37,8 @@ MVP 的質量重點：
 - Save & Analyze 成功。
 - Save & Analyze 失敗。
 - Save & Analyze 精確命中既有 Term 時不調用 AI。
+- 中文查英文不走英文 term 精確命中，建立 Inbox 記錄並保存英文候選。
+- 中文查英文確認入詞本時 Term.term 為英文，中文原文只保留為 contextSentence。
 - Candidate save to Term。
 - Term delete。
 - Review feedback update。
@@ -189,6 +194,19 @@ UI 手動回歸必須覆蓋：
 - 中文輸入法輸入 `qui` 時，第一次 Enter 先提交 marked text 到輸入框，不觸發 Quick Add；組合結束後再次 Enter 才提交。
 - 接受完整既有詞後提交，仍走精確重複命中，不調用 DeepSeek。
 
+## Chinese-To-English Lookup Tests
+
+核心與整合測試必須覆蓋：
+
+- 純簡體、繁體中文識別為 `chineseToEnglish`，純英文識別為 `englishToChinese`。
+- 中英混合輸入按 Han scalar 與 ASCII 英文字母數量穩定判斷。
+- 中文查英文 prompt 明確要求所有 `items[].term` 為英文，`chinese_meaning` 為中文解釋。
+- 模型返回中文 term 或中英混合 term 時不寫入 CandidateTerm；全部不合格時原 InputRecord 標記 failed。
+- 中文輸入不走正式英文詞庫的 duplicate short circuit，先建立 analyzing InputRecord，完成後出現在 Inbox。
+- 確認中文查英文候選時，Term.term 保存英文、Term.chineseMeaning 保存中文釋義、contextSentence 保留中文原文。
+- Candidate Review 把 term 改成中文後，VocabularyService 拒絕保存且不部分寫入。
+- Candidate Review 清空中文釋義後，即使仍有英文 definition，VocabularyService 也拒絕保存。
+
 ## Persistence Tests
 
 要求：
@@ -234,6 +252,8 @@ UI 手動回歸必須覆蓋：
 - 輸入既有 Term 時該詞出現在今日 Review。
 - 輸入正式詞條前綴時顯示灰色後綴，Tab 只補全不提交。
 - 主 Quick Add 和浮窗 Quick Add 的候選與排序一致。
+- 輸入 `過擬合` 時方向提示為 Chinese to English，提交後立即清空並建立 Inbox 記錄。
+- 中文查英文不因詞庫已有相同中文釋義而跳過 DeepSeek。
 
 ### AI
 
@@ -242,6 +262,8 @@ UI 手動回歸必須覆蓋：
 - 成功解析 sentence。
 - 網絡失敗後 InputRecord 保留。
 - Retry 可再次請求。
+- 中文查英文返回英文候選，第一候選為最自然常用表達；沒有真正差異時不硬湊多個候選。
+- 中文查英文沒有合格英文 term 時顯示 failed，允許 Retry。
 
 ### Candidate Review
 
@@ -250,13 +272,17 @@ UI 手動回歸必須覆蓋：
 - 可編輯候選字段。
 - 保存後生成 Term。
 - 忽略後不生成 Term。
+- 中文查英文時 term 編輯框預設為英文；改成中文後保存顯示英文主體校驗錯誤。
 
 ### Vocabulary
 
-- 搜索可找到詞條。
+- 英文 term 和英文定義搜索可找到詞條。
+- 簡體查詢可命中繁體中文釋義，繁體查詢也可命中簡體釋義。
+- 中文搜索忽略釋義中的標點與空白，但不匹配無關詞條或只有標點的查詢。
 - 編輯後更新。
 - 刪除後列表移除。
 - 按 course 篩選正確。
+- 中文查英文確認後，詞條標題為英文，中文原文只出現在 context，中文釋義仍正常展示。
 
 ### Review
 
@@ -267,6 +293,12 @@ UI 手動回歸必須覆蓋：
 - 中文 -> 英文模式展示中文提示並在背面展示英文答案。
 - 空格和 1/2/3/4 快捷鍵可用。
 - 完成頁展示本輪統計。
+
+### Settings
+
+- 跟隨系統、淺色、深色三種外觀均可選擇並在重啟後保留。
+- 主窗口、獨立 Settings 窗口和 Quick Add 浮窗同步使用選定外觀。
+- 切換外觀不影響當前導航、輸入內容、分析隊列或本地詞庫資料。
 
 ## Definition Of Done
 
@@ -281,10 +313,10 @@ UI 手動回歸必須覆蓋：
 
 ## 目前驗證基線
 
-2026-07-10 完整加固驗證：
+2026-07-13 完整功能與文檔同步驗證：
 
-- `swift test`：63 tests，0 failures；付費 live 測試按預設閘門跳過 1 項。
-- `RUN_LIVE_DEEPSEEK_TESTS=1 swift test --filter LiveDeepSeekSmokeTests`：1 test，0 failures。
+- `swift test`：82 tests，0 failures；付費 live 測試按預設閘門跳過 1 項。
+- `RUN_LIVE_DEEPSEEK_TESTS=1 swift test --filter LiveDeepSeekSmokeTests`：1 test，0 failures；同一閘門覆蓋英文查中文與中文查英文。
 - `swift build -Xswiftc -warnings-as-errors`：通過。
 - 全新 scratch path 的 `strict-concurrency=complete` + `warn-concurrency` + `warnings-as-errors`：通過。
 - App bundle 啟動、首屏可訪問性樹、舊 store 備份/遷移、SQLite `quick_check`、孤兒資料修復與 `0700/0600` 權限：通過。

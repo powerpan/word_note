@@ -53,12 +53,20 @@ struct InputRecordDetailView: View {
 
     @State private var isDeleteConfirmationPresented = false
 
+    private var lookupDirection: LookupDirection {
+        LookupDirectionDetector.detect(record.rawText)
+    }
+
+    private var sentenceMeaningTitle: String {
+        lookupDirection == .chineseToEnglish ? "English Rendering" : "Sentence Meaning"
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 PageHeader(
                     title: "Input Record",
-                    subtitle: record.sourceType.displayTitle
+                    subtitle: "\(record.sourceType.displayTitle) - \(lookupDirection.displayTitle)"
                 ) {
                     Button {
                         onAnalyze(record)
@@ -113,7 +121,7 @@ struct InputRecordDetailView: View {
                 }
 
                 optionalTextGroup("Note", value: record.note)
-                optionalTextGroup("Sentence Meaning", value: record.sentenceMeaning)
+                optionalTextGroup(sentenceMeaningTitle, value: record.sentenceMeaning)
                 optionalTextGroup("AI Error", value: record.aiErrorSummary)
 
                 if !candidates.isEmpty || [.draft, .analyzed, .failed].contains(record.status) {

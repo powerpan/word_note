@@ -2,14 +2,14 @@ import AppKit
 import SwiftUI
 
 enum WordNoteTheme {
-    static let canvas = adaptive(light: 0xF6F7F5, dark: 0x151614)
-    static let sidebar = adaptive(light: 0xEFF1EE, dark: 0x1A1C19)
-    static let surface = adaptive(light: 0xFBFCFA, dark: 0x1E201D)
-    static let raisedSurface = adaptive(light: 0xFFFFFF, dark: 0x252723)
-    static let field = adaptive(light: 0xFFFFFF, dark: 0x20221F)
-    static let line = adaptive(light: 0xD8DCD6, dark: 0x383C35)
-    static let strongLine = adaptive(light: 0xBEC4BB, dark: 0x4A5046)
-    static let mutedInk = adaptive(light: 0x66706A, dark: 0x9CA49D)
+    static let canvas = adaptive(light: 0xF6F7F5, dark: 0x1E1E1E)
+    static let sidebar = adaptive(light: 0xEFF1EE, dark: 0x171717)
+    static let surface = adaptive(light: 0xFBFCFA, dark: 0x232323)
+    static let raisedSurface = adaptive(light: 0xFFFFFF, dark: 0x2A2A2A)
+    static let field = adaptive(light: 0xFFFFFF, dark: 0x242424)
+    static let line = adaptive(light: 0xD8DCD6, dark: 0x3A3A3A)
+    static let strongLine = adaptive(light: 0xBEC4BB, dark: 0x505050)
+    static let mutedInk = adaptive(light: 0x66706A, dark: 0xA6A6A6)
 
     static let brand = adaptive(light: 0x842D37, dark: 0xD98289)
     static let teal = adaptive(light: 0x0D6472, dark: 0x69B7C2)

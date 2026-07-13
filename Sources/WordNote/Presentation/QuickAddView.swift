@@ -24,12 +24,16 @@ struct QuickAddView: View {
         !TextNormalizer.isBlank(rawText)
     }
 
+    private var detectedLookupDirection: LookupDirection? {
+        canSave ? LookupDirectionDetector.detect(rawText) : nil
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
                 PageHeader(
                     title: "Quick Add",
-                    subtitle: "Capture a phrase, lecture sentence, slide excerpt, or paper term before turning it into candidates."
+                    subtitle: "Capture English text, or enter Chinese when you need the right English expression."
                 ) {
                     EmptyView()
                 }
@@ -42,7 +46,7 @@ struct QuickAddView: View {
                         VocabularyCompletionEditor(
                             text: $rawText,
                             vocabulary: storedTerms.map(\.term),
-                            placeholder: "Paste English text from class, papers, slides, or assignments",
+                            placeholder: "Enter English text or a Chinese meaning to look up",
                             style: .multiline
                         )
                             .frame(minHeight: 300)
@@ -52,6 +56,15 @@ struct QuickAddView: View {
                                 RoundedRectangle(cornerRadius: 6)
                                     .stroke(WordNoteTheme.line, lineWidth: 1)
                             }
+
+                        if let detectedLookupDirection {
+                            Label(
+                                detectedLookupDirection.displayTitle,
+                                systemImage: "arrow.left.arrow.right"
+                            )
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        }
 
                         TextField("Optional note", text: $note, axis: .vertical)
                             .lineLimit(2...4)

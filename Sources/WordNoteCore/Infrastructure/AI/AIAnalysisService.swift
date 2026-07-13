@@ -17,21 +17,24 @@ public struct AIAnalysisService {
         }
 
         let messages = [
-            DeepSeekMessage(role: "system", content: systemPrompt),
+            DeepSeekMessage(role: "system", content: systemPrompt(for: request.lookupDirection)),
             DeepSeekMessage(role: "user", content: userPrompt(for: request))
         ]
         let completion = try await client.complete(messages: messages, responseFormat: .jsonObject)
-        return try parser.parse(
+        let result = try parser.parse(
             content: completion.content,
             model: completion.model,
             responseID: completion.id
         )
+        return try validatedResult(result, for: request.lookupDirection)
     }
 
-    private var systemPrompt: String {
+    private func systemPrompt(for lookupDirection: LookupDirection) -> String {
         """
         You are an English learning assistant for a Chinese-native graduate student who often reads AI/CS material.
         Analyze the user's input without assuming every word has a special AI/CS meaning.
+
+        \(directionInstructions(for: lookupDirection))
 
         Rules:
         - If the input is a word, explain the word directly.
@@ -49,6 +52,25 @@ public struct AIAnalysisService {
         - The response must be a JSON object with keys: input_type, sentence_meaning, items.
         - Keep the candidate list concise, usually 1 to 5 items.
         """
+    }
+
+    private func directionInstructions(for lookupDirection: LookupDirection) -> String {
+        switch lookupDirection {
+        case .englishToChinese:
+            return """
+            This is an English-to-Chinese lookup. Treat the English input as the vocabulary subject and explain it in Chinese.
+            """
+        case .chineseToEnglish:
+            return """
+            This is a Chinese-to-English lookup. Treat the Chinese input as the source meaning or expression the learner wants to say in English.
+            - Every items[].term must be an English word, phrase, expression, or sentence pattern. Never copy Chinese source text into term.
+            - Put the most idiomatic and generally useful English candidate first.
+            - Include multiple candidates only when they are genuine alternatives with useful differences in meaning, register, or AI/CS usage.
+            - chinese_meaning must explain the English candidate in Chinese and distinguish it from alternatives when needed.
+            - english_definition and example_sentence must remain English.
+            - For a Chinese sentence or paragraph, sentence_meaning contains a natural English rendering of the full input.
+            """
+        }
     }
 
     private func userPrompt(for request: AIAnalysisRequest) -> String {
@@ -77,6 +99,7 @@ public struct AIAnalysisService {
         }
 
         Preferred explanation language: \(request.preferredLanguage)
+        Lookup direction: \(request.lookupDirection.displayTitle)
         Course: \(request.courseName ?? "unspecified")
         Source: \(request.sourceType.displayTitle)
         User note: \(request.userNote ?? "none")
@@ -84,5 +107,30 @@ public struct AIAnalysisService {
         User input:
         \(request.rawText)
         """
+    }
+
+    private func validatedResult(
+        _ result: AIAnalysisResult,
+        for lookupDirection: LookupDirection
+    ) throws -> AIAnalysisResult {
+        guard lookupDirection == .chineseToEnglish else { return result }
+
+        let candidates = result.candidates.filter { candidate in
+            LookupDirectionDetector.isEnglishVocabularyTerm(candidate.term) &&
+                !TextNormalizer.isBlank(candidate.chineseMeaning ?? "")
+        }
+        guard !candidates.isEmpty else {
+            throw AIAnalysisError.schemaMismatch(
+                "Chinese-to-English analysis returned no English candidate with a Chinese meaning."
+            )
+        }
+
+        return AIAnalysisResult(
+            inputType: result.inputType,
+            sentenceMeaning: result.sentenceMeaning,
+            candidates: candidates,
+            model: result.model,
+            rawResponseID: result.rawResponseID
+        )
     }
 }

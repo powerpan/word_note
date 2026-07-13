@@ -49,8 +49,10 @@ public final class QuickAddAnalysisQueue {
         sourceType: SourceType,
         note: String?
     ) throws -> QuickAddEnqueueResult {
+        let lookupDirection = LookupDirectionDetector.detect(rawText)
         let vocabularyService = VocabularyService(modelContext: modelContext)
-        if let existingTerm = try vocabularyService.findExactTerm(rawText: rawText) {
+        if lookupDirection == .englishToChinese,
+           let existingTerm = try vocabularyService.findExactTerm(rawText: rawText) {
             let bumpedTerm = try vocabularyService.bumpDuplicateHit(existingTerm)
             latestAIExplanation = AIExplanationPreview(
                 rawText: rawText,
@@ -63,7 +65,7 @@ public final class QuickAddAnalysisQueue {
 
         let normalizedText = TextNormalizer.normalized(rawText)
         if let queuedRecord = try findPersistedQueuedRecord(normalizedText: normalizedText) {
-            statusMessage = "Already queued for AI analysis: \(queuedRecord.rawText)"
+            statusMessage = "Already queued for \(lookupDirection.displayTitle.lowercased()): \(queuedRecord.rawText)"
             errorMessage = nil
             return .alreadyQueued(queuedRecord)
         }
@@ -79,7 +81,7 @@ public final class QuickAddAnalysisQueue {
         queuedRecords.append(
             QueuedAnalysisRecord(record: createdRecord, courseName: courseName)
         )
-        statusMessage = "Queued for AI analysis: \(createdRecord.rawText)"
+        statusMessage = "Queued for \(lookupDirection.displayTitle.lowercased()): \(createdRecord.rawText)"
         errorMessage = nil
         processNextQueuedAnalysisIfNeeded()
         return .queued(createdRecord)
@@ -137,6 +139,7 @@ public final class QuickAddAnalysisQueue {
 
         processingTask = Task { @MainActor in
             let service = InputRecordService(modelContext: modelContext)
+            let lookupDirection = LookupDirectionDetector.detect(queuedRecord.record.rawText)
 
             do {
                 let result = try await analysisHandler(
@@ -144,7 +147,8 @@ public final class QuickAddAnalysisQueue {
                         rawText: queuedRecord.record.rawText,
                         courseName: queuedRecord.courseName,
                         sourceType: queuedRecord.record.sourceType,
-                        userNote: queuedRecord.record.note
+                        userNote: queuedRecord.record.note,
+                        lookupDirection: lookupDirection
                     )
                 )
                 let candidates = try service.applyAnalysisResult(result, to: queuedRecord.record)
@@ -154,7 +158,9 @@ public final class QuickAddAnalysisQueue {
                     sentenceMeaning: result.sentenceMeaning,
                     candidates: result.candidates.map(AIExplanationCandidatePreview.init(candidate:))
                 )
-                statusMessage = "Analyzed \(queuedRecord.record.rawText). Candidates: \(candidates.count)"
+                statusMessage = lookupDirection == .chineseToEnglish
+                    ? "English candidates are ready in Inbox: \(candidates.count)"
+                    : "Analyzed \(queuedRecord.record.rawText). Candidates: \(candidates.count)"
                 errorMessage = nil
             } catch {
                 if queuedRecord.record.status != .failed {

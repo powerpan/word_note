@@ -151,6 +151,8 @@ WordNoteApp
 
 - env 文件 API Key 存取。
 - default course/source。
+- 使用 `AppStorage` / `UserDefaults` 持久化 `system | light | dark` 外觀偏好；未知舊值回退為 `system`。
+- 將同一外觀偏好套用到 WindowGroup、Settings Scene 和獨立 NSHostingView Quick Add 浮窗。
 - test API connectivity。
 
 ### QuickAddAnalysisQueue
@@ -162,6 +164,22 @@ WordNoteApp
 - 依序處理多個請求，單次失敗不阻塞後續項目。
 - App 啟動時恢復仍為 `analyzing` 的記錄。
 - 同一 normalizedText 已在分析中時直接返回既有排隊記錄，不重複調用 AI。
+- 使用 `LookupDirectionDetector` 識別方向；中文查英文跳過英文 term 的 duplicate short circuit，但仍沿用同一持久化隊列與恢復流程。
+- 中文查英文完成後把英文 candidates 寫入既有 CandidateTerm/Inbox 流程，不直接建立 Term。
+
+### LookupDirectionDetector
+
+職責：
+
+- 統計 rawText 中 CJK Han scalar 與 ASCII 英文字母，漢字非零且不少於英文字母時判定為 `chineseToEnglish`。
+- 無漢字、英文佔主導或空輸入時使用既有 `englishToChinese` 流程。
+- 提供英文詞本主體校驗：至少包含一個 ASCII 英文字母且不能包含漢字。
+
+方向只由原始輸入確定，不新增 SwiftData 字段；Inbox、重試和 App 重啟恢復時可由 `InputRecord.rawText` 得到相同結果。
+
+### Chinese-to-English Result Guard
+
+`AIAnalysisService` 在解析 JSON 後只保留英文 `term` 且具有 `chineseMeaning` 的候選。`VocabularyService` 在 Candidate Review 和手動加入時再次校驗，防止用戶編輯或替代分析器把中文查詢保存為詞本主體。
 
 ### VocabularyCompletionMatcher
 
@@ -174,6 +192,17 @@ WordNoteApp
 - 保留用戶已輸入文本，只追加正式詞條中的剩餘後綴。
 
 匹配器屬於 `WordNoteCore` 純邏輯，不依賴 SwiftUI、AppKit、SwiftData 或網絡。Presentation 層只把 `Term.term` 快照傳入匹配器。
+
+### VocabularySearchMatcher
+
+職責：
+
+- 對英文 term 和 englishDefinition 保持 normalized、大小寫不敏感的 contains 搜索。
+- 對查詢和 chineseMeaning 使用 ICU `Hant-Hans` 統一為簡體搜索鍵。
+- 中文搜索鍵移除空白、標點和符號後執行子串匹配。
+- 空查詢匹配全部；只有標點的非空查詢不能退化成匹配全部。
+
+搜索 matcher 屬於 `WordNoteCore` 純邏輯。它不改寫持久化資料，也不與 duplicate detection、Quick Add completion 或 AI 請求共用模糊規則。
 
 ## 依賴方向
 
@@ -190,8 +219,10 @@ Views -> Observation state / Services -> SwiftData Models / Infrastructure Clien
 ```text
 QuickAddView
   -> QuickAddAnalysisQueue.enqueue()
-  -> VocabularyService.findExactTerm(normalized(rawText))
-  -> if existing Term:
+  -> LookupDirectionDetector.detect(rawText)
+  -> if englishToChinese:
+       -> VocabularyService.findExactTerm(normalized(rawText))
+  -> if englishToChinese and existing Term:
        -> VocabularyService.bumpDuplicateHit(term)
        -> QuickAddAnalysisQueue.latestAIExplanation = existing term preview
        -> stop, no DeepSeek request
@@ -207,6 +238,7 @@ QuickAddView
 
 精確命中規則：
 
+- 只在 `englishToChinese` 方向執行；`chineseToEnglish` 必須進入 AI 分析與 Inbox 確認。
 - 只比較 normalized(rawText) 和 Term.normalizedTerm。
 - 不做包含匹配、模糊匹配或 stemming。
 - 輸入句子包含既有詞條時仍走 DeepSeek，因為句子可能包含新詞或新的上下文。
