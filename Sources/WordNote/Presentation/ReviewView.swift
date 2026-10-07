@@ -3,6 +3,7 @@ import SwiftUI
 import WordNoteCore
 
 struct ReviewView: View {
+    private var memberships = AppCourseMemberships()
     @Environment(\.modelContext) private var modelContext
     @Query private var terms: [TermModel]
     @Query private var storedCourses: [CourseModel]
@@ -24,9 +25,8 @@ struct ReviewView: View {
 
     private var availableTerms: [TermModel] {
         ReviewQueuePolicy().terms(
-            from: terms,
-            scope: queueScope,
-            courseID: selectedCourseID
+            from: terms.filter { memberships.matches($0, courseID: selectedCourseID) },
+            scope: queueScope
         )
     }
 
@@ -64,7 +64,7 @@ struct ReviewView: View {
             if let activeTerm {
                 ReviewCard(
                     term: activeTerm,
-                    courseName: courseName(for: activeTerm.courseID),
+                    courseName: memberships.names(for: activeTerm, courses: courses),
                     mode: reviewMode,
                     isAnswerVisible: isAnswerVisible,
                     onShowAnswer: { isAnswerVisible = true },

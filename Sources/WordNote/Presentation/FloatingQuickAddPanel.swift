@@ -143,7 +143,8 @@ struct FloatingQuickAddPanelView: View {
                 courseID: nil,
                 courseName: nil,
                 sourceType: selectedSourceType,
-                note: nil
+                note: nil,
+                capturedVia: .floatingQuickAdd
             )
             rawText = ""
             focusInput()

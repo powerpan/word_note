@@ -3,6 +3,7 @@ import SwiftUI
 import WordNoteCore
 
 struct CoursesOverviewView: View {
+    private var memberships = AppCourseMemberships()
     @Query private var storedCourses: [CourseModel]
     @Query private var terms: [TermModel]
     @Query private var records: [InputRecordModel]
@@ -108,12 +109,12 @@ struct CoursesOverviewView: View {
     }
 
     private func termCount(for courseID: UUID) -> Int {
-        terms.filter { $0.courseID == courseID }.count
+        terms.filter { memberships.matches($0, courseID: courseID) }.count
     }
 
     private func pendingRecordCount(for courseID: UUID) -> Int {
         records.filter { record in
-            record.courseID == courseID && [.draft, .analyzed, .failed].contains(record.status)
+            record.courseID == courseID && !record.analysisPending && [.draft, .analyzed, .failed].contains(record.status)
         }.count
     }
 
@@ -177,6 +178,7 @@ private struct CourseEditor: View {
     let onDeleted: () -> Void
 
     @State private var courseName = ""
+    @State private var editRevision = 0
     @State private var courseCode = ""
     @State private var instructor = ""
     @State private var semester = ""
@@ -266,6 +268,7 @@ private struct CourseEditor: View {
     }
 
     private func load() {
+        editRevision = course?.editRevision ?? 0
         courseName = course?.courseName ?? ""
         courseCode = course?.courseCode ?? ""
         instructor = course?.instructor ?? ""
@@ -276,7 +279,7 @@ private struct CourseEditor: View {
     }
 
     private func save() {
-        let service = CourseService(modelContext: modelContext)
+        let service = CourseService(modelContext: modelContext, expectedRevision: editRevision)
 
         do {
             let savedCourse: CourseModel
@@ -299,6 +302,7 @@ private struct CourseEditor: View {
                     description: description
                 )
             }
+            editRevision = savedCourse.editRevision
             statusMessage = "Saved."
             errorMessage = nil
             onSaved(savedCourse)
@@ -310,7 +314,7 @@ private struct CourseEditor: View {
 
     private func delete() {
         guard let course else { return }
-        let service = CourseService(modelContext: modelContext)
+        let service = CourseService(modelContext: modelContext, expectedRevision: editRevision)
 
         do {
             try service.delete(course)

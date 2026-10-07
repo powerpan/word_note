@@ -2,6 +2,7 @@ import SwiftData
 import SwiftUI
 import WordNoteCore
 
+#if !WORDNOTE_V2_VALIDATION
 @main
 @MainActor
 struct WordNoteApp: App {
@@ -185,3 +186,4 @@ struct WordNoteApp: App {
         try store.acknowledgePreferences(for: session.generation)
     }
 }
+#endif

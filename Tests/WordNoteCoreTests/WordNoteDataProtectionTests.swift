@@ -238,6 +238,8 @@ final class WordNoteDataProtectionTests: XCTestCase {
         XCTAssertEqual(h.controller.snapshots.first?.schemaVersion, .v2)
         do { _ = try await h.controller.previewRestore(id: saved.snapshot.id); XCTFail("V1 app must not accept a V2 restore.") }
         catch { XCTAssertEqual(error as? WordNoteSnapshotError, .unsupportedSchema) }
+        do { _ = try await h.controller.previewVersionedRestore(id: saved.snapshot.id); XCTFail("Versioned UI must also enforce the active V1 runtime.") }
+        catch { XCTAssertEqual(error as? WordNoteSnapshotError, .unsupportedSchema) }
         XCTAssertEqual(h.controller.restorePhase, .idle)
         XCTAssertFalse(h.controller.isRestoring)
         XCTAssertFalse(try h.store.hasPreparedRestore(for: h.session.generation))

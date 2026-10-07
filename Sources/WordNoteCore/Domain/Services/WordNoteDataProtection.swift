@@ -8,6 +8,11 @@ public struct WordNoteRestorePreview: Identifiable, Sendable {
     public let snapshot: DecodedWordNoteSnapshot
 }
 
+public struct WordNoteVersionedRestorePreview: Identifiable, Sendable {
+    public var id: UUID { snapshot.summary.id }
+    public let snapshot: VersionedWordNoteSnapshot
+}
+
 public enum WordNoteDataOperationError: LocalizedError {
     case busy
     case protectedDestination
@@ -40,7 +45,8 @@ public final class WordNoteDataProtection {
     @ObservationIgnored private let store: WordNoteRestoreStore
     @ObservationIgnored private let generation: WordNoteStoreGeneration
     @ObservationIgnored private let vault: WordNoteBackupVault
-    @ObservationIgnored private let queue: QuickAddAnalysisQueue
+    @ObservationIgnored private let queue: DataProtectionAnalysisQueue
+    @ObservationIgnored private let schemaVersion: WordNoteDataSchemaVersion
     @ObservationIgnored private let preferences: @MainActor () -> WordNoteSnapshotPayload.Preferences
     @ObservationIgnored private var restoreTicket: WordNoteWriteGate.Ticket?
     @ObservationIgnored private var autosaveBeforeRestore = true
@@ -51,12 +57,29 @@ public final class WordNoteDataProtection {
     @ObservationIgnored private var automaticNeedsCheck = true
     @ObservationIgnored private var automaticCheckNotBefore = Date.distantPast
 
-    public init(
+    public convenience init(
         session: WordNoteStoreSession, store: WordNoteRestoreStore, vault: WordNoteBackupVault,
         queue: QuickAddAnalysisQueue,
         preferences: @escaping @MainActor () -> WordNoteSnapshotPayload.Preferences
     ) {
+        self.init(session: session, store: store, vault: vault, queue: .v1(queue), preferences: preferences)
+    }
+
+    public convenience init(
+        session: WordNoteStoreSession, store: WordNoteRestoreStore, vault: WordNoteBackupVault,
+        queue: WordNoteV2AnalysisQueue,
+        preferences: @escaping @MainActor () -> WordNoteSnapshotPayload.Preferences
+    ) {
+        self.init(session: session, store: store, vault: vault, queue: .v2(queue), preferences: preferences)
+    }
+
+    private init(
+        session: WordNoteStoreSession, store: WordNoteRestoreStore, vault: WordNoteBackupVault,
+        queue: DataProtectionAnalysisQueue,
+        preferences: @escaping @MainActor () -> WordNoteSnapshotPayload.Preferences
+    ) {
         container = session.container
+        schemaVersion = session.schemaVersion
         self.store = store
         generation = session.generation
         self.vault = vault
@@ -168,11 +191,13 @@ public final class WordNoteDataProtection {
     }
 
     public func exportVocabulary(
-        terms: [WordNoteSnapshotPayload.Term], courses: [WordNoteSnapshotPayload.Course], to url: URL
+        terms: [WordNoteSnapshotPayload.Term], courses: [WordNoteSnapshotPayload.Course],
+        courseMemberships: [UUID: Set<UUID>]? = nil, to url: URL
     ) async throws {
         try await perform {
             try self.validateExportDestination(url)
-            try await self.vault.exportCSV(terms: terms, courses: courses, to: url)
+            if self.schemaVersion == .v2, courseMemberships == nil { throw WordNoteV2ContentError.invalidValue }
+            try await self.vault.exportCSV(terms: terms, courses: courses, courseMemberships: courseMemberships, to: url)
             self.statusMessage = "Exported \(terms.count) vocabulary entries."
         }
     }
@@ -185,6 +210,25 @@ public final class WordNoteDataProtection {
         try await perform { WordNoteRestorePreview(snapshot: try await self.vault.readSnapshot(id: id)) }
     }
 
+    public func previewVersionedRestore(url: URL) async throws -> WordNoteVersionedRestorePreview {
+        try await perform {
+            try self.validatedPreview(await self.vault.readVersionedSnapshot(at: url))
+        }
+    }
+
+    public func previewVersionedRestore(id: UUID) async throws -> WordNoteVersionedRestorePreview {
+        try await perform {
+            try self.validatedPreview(await self.vault.readVersionedSnapshot(id: id))
+        }
+    }
+
+    private func validatedPreview(_ snapshot: VersionedWordNoteSnapshot) throws -> WordNoteVersionedRestorePreview {
+        guard schemaVersion == .v2 || snapshot.payload.schemaVersion == .v1 else {
+            throw WordNoteSnapshotError.unsupportedSchema
+        }
+        return WordNoteVersionedRestorePreview(snapshot: snapshot)
+    }
+
     public func deleteBackup(id: UUID) async throws {
         try await perform {
             try await self.vault.delete(id: id)
@@ -194,7 +238,18 @@ public final class WordNoteDataProtection {
     }
 
     public func prepareRestore(_ preview: WordNoteRestorePreview) async throws {
+        try await prepareRestore(WordNoteVersionedRestorePreview(snapshot: .v1(preview.snapshot)))
+    }
+
+    public func prepareRestore(_ preview: WordNoteVersionedRestorePreview) async throws {
         guard !isWorking, !isRestoring else { throw WordNoteDataOperationError.busy }
+        do {
+            _ = try validatedPreview(preview.snapshot)
+            if schemaVersion == .v2, container.mainContext.hasChanges { throw WordNoteV2ContentError.unsavedChanges }
+        } catch {
+            errorMessage = error.localizedDescription
+            throw error
+        }
         isWorking = true
         restorePhase = .preparing
         errorMessage = nil
@@ -209,7 +264,7 @@ public final class WordNoteDataProtection {
             try container.mainContext.save()
             let current = try await currentSnapshot()
             let protection = try await vault.create(current, kind: .beforeRestore)
-            _ = try await vault.readSnapshot(id: protection.snapshot.id)
+            _ = try await vault.readVersionedSnapshot(id: protection.snapshot.id)
             try await store.prepareRestore(preview.snapshot, replacing: generation, protectedBy: protection.snapshot)
             restorePhase = .readyToQuit
             statusMessage = "Restore prepared. Quit Word Note to complete the switch on next launch."
@@ -242,7 +297,8 @@ public final class WordNoteDataProtection {
     public func resumeAnalysis() throws {
         guard !isWorking, !isRestoring else { throw WordNoteDataOperationError.busy }
         do {
-            try store.authorizeAnalysisResume(for: generation)
+            // V2 normalizes interrupted attempts before clearing the durable pause itself.
+            if schemaVersion == .v1 { try store.authorizeAnalysisResume(for: generation) }
             let count = try queue.resumePendingAnalyses()
             statusMessage = "Resumed \(count) pending analysis requests."
             errorMessage = nil
@@ -255,7 +311,13 @@ public final class WordNoteDataProtection {
     }
 
     public func pendingAnalysisCount() throws -> Int {
-        try container.mainContext.fetch(FetchDescriptor<InputRecordModel>()).filter { $0.status == .analyzing }.count
+        switch schemaVersion {
+        case .v1:
+            return try container.mainContext.fetch(FetchDescriptor<InputRecordModel>()).filter { $0.status == .analyzing }.count
+        case .v2:
+            return try container.mainContext.fetch(FetchDescriptor<WordNoteSchemaV2.InputRecordModel>())
+                .filter { ["queued", "running"].contains($0.queueStateRaw) }.count
+        }
     }
 
     private func releaseRestoreGate() throws {
@@ -268,8 +330,8 @@ public final class WordNoteDataProtection {
         noteDataChanged()
     }
 
-    private func currentSnapshot() async throws -> WordNoteSnapshotPayload {
-        try await WordNoteSnapshotCapture(container: container).capture(preferences: preferences())
+    private func currentSnapshot() async throws -> WordNoteVersionedPayload {
+        try await WordNoteSnapshotCapture(container: container).captureVersioned(preferences: preferences())
     }
 
     private func updateInventory() async throws {
@@ -297,6 +359,33 @@ public final class WordNoteDataProtection {
         catch {
             errorMessage = error.localizedDescription
             throw error
+        }
+    }
+}
+
+@MainActor
+private enum DataProtectionAnalysisQueue {
+    case v1(QuickAddAnalysisQueue)
+    case v2(WordNoteV2AnalysisQueue)
+
+    var isSuspended: Bool {
+        switch self {
+        case .v1(let queue): queue.isSuspended
+        case .v2(let queue): queue.isSuspended
+        }
+    }
+
+    func suspendForRestore() {
+        switch self {
+        case .v1(let queue): queue.suspendForRestore()
+        case .v2(let queue): queue.suspendForRestore()
+        }
+    }
+
+    func resumePendingAnalyses() throws -> Int {
+        switch self {
+        case .v1(let queue): try queue.resumePendingAnalyses()
+        case .v2(let queue): try queue.resumePendingAnalyses()
         }
     }
 }

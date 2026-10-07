@@ -4,7 +4,7 @@
 
 A01 后台與性能證據：[后台資料工作](qa/2026-10-08-a01-background-persistence.md)，含當批 188 項嚴格離線回歸、獨立 live 與 1,000/10,000 詞各 30 輪 Release 測量；不代替後續 V2 性能或實機驗收。
 
-A02 最新隔離證據：[持久分析隊列](qa/2026-10-08-a02-analysis-queue.md)，全套 390 項中 387 通過、3 跳過，Release 定向 203 項通過；V2 雙向 live 另行通過，僅兩次真實請求。原始證據保護與啟動修復的歷史測試見 [修復記錄](qa/2026-10-08-a02-startup-repair.md)。V2 核心可測不代表 App 已切換；本批沒有新增 UI 驗收證據。Computer Use 上次重試回報 cgWindowNotFound，不能沿用歷史鎖屏診斷。
+A02 最新隔離證據：[V2 QA App 接入](qa/2026-10-08-a02-app-integration.md)，普通及 V2 QA 嚴格 Debug 全套均為 415 項中 412 通過、3 跳過，Release 定向 249 項通過；受控雙向 live 另行通過，僅兩次真實請求。新增 25 項覆蓋值草稿、revision、原子批量處理、版本化資料保護及旧復習兼容。隊列核心歷史證據見 [持久分析隊列](qa/2026-10-08-a02-analysis-queue.md)。QA 的 V1 -> V2 啟動已核對日誌和進程；普通 App 仍為 V1。Computer Use 仍回報 cgWindowNotFound，沒有本批 UI 驗收證據，不能沿用歷史鎖屏診斷。
 
 ## 質量目標
 
@@ -73,6 +73,8 @@ MVP 的質量重點：
 - 中斷先持久暫停再正規化，二次重啟仍不自動重放；暫停日誌/恢复授权保存失敗不發請求；新即時任務可喚醒退避中的 worker。
 - HTTP envelope 格式失敗不歸為 network；取消/超時/離線分開處理，HTTP 錯誤 body 不出現在用戶錯誤摘要。
 - V2 live 僅用兩個公開測試輸入和內存库；API 完成只進候選區，人工確認後再次精確查詢顯示本地釋義，請求數不增加。
+- V2 QA 條件編譯復用全部頁面；唯一 queue 的捕獲/確認/精確重查與八實體備份串接。候選值草稿不改 context；批量新詞/忽略、課程/詞條編輯、feedback/postpone 在失敗時全量回滾。
+- V1 controller 的版本化預覽仍拒絕 V2；V2 controller 不能代替未提交編輯保存，恢復前保護快照必須為 V2，導入 V1 後仍保持 V2，明確恢復前不自動發送 pending 工作。
 
 ### UI Tests
 

@@ -12,6 +12,7 @@ struct CandidateReviewView: View {
     @State private var statusMessage: String?
     @State private var errorMessage: String?
     @State private var isManualEditorPresented = false
+    @State private var editedCandidateIDs = Set<UUID>()
 
     private var pendingCandidates: [CandidateTermModel] {
         candidates.filter { $0.status == .pending }
@@ -30,6 +31,18 @@ struct CandidateReviewView: View {
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(pendingCandidates, id: \.id) { candidate in
+                        #if WORDNOTE_V2_VALIDATION
+                        V2CandidateEditorRow(
+                            candidate: candidate, record: record,
+                            isSelected: Binding(
+                                get: { selectedCandidateIDs.contains(candidate.id) },
+                                set: { if $0 { selectedCandidateIDs.insert(candidate.id) } else { selectedCandidateIDs.remove(candidate.id) } }
+                            ),
+                            onDirtyChanged: { dirty in
+                                if dirty { editedCandidateIDs.insert(candidate.id) } else { editedCandidateIDs.remove(candidate.id) }
+                            }
+                        )
+                        #else
                         CandidateEditorRow(
                             candidate: candidate,
                             isSelected: Binding(
@@ -43,6 +56,7 @@ struct CandidateReviewView: View {
                                 }
                             )
                         )
+                        #endif
                     }
 
                     HStack {
@@ -51,20 +65,21 @@ struct CandidateReviewView: View {
                         } label: {
                             Label("Save Selected", systemImage: "checkmark.circle")
                         }
-                        .disabled(selectedCandidateIDs.isEmpty)
+                        .disabled(selectedCandidateIDs.isEmpty || !editedCandidateIDs.isEmpty)
 
                         Button {
                             ignoreSelected()
                         } label: {
                             Label("Ignore Selected", systemImage: "archivebox")
                         }
-                        .disabled(selectedCandidateIDs.isEmpty)
+                        .disabled(selectedCandidateIDs.isEmpty || !editedCandidateIDs.isEmpty)
 
                         Button {
                             ignoreAll()
                         } label: {
                             Label("Ignore All", systemImage: "xmark.circle")
                         }
+                        .disabled(!editedCandidateIDs.isEmpty)
 
                         Button {
                             isManualEditorPresented.toggle()
@@ -160,6 +175,7 @@ struct CandidateReviewView: View {
     }
 }
 
+#if !WORDNOTE_V2_VALIDATION
 private struct CandidateEditorRow: View {
     @Environment(\.modelContext) private var modelContext
     @Bindable var candidate: CandidateTermModel
@@ -251,3 +267,4 @@ private struct CandidateEditorRow: View {
         })
     }
 }
+#endif

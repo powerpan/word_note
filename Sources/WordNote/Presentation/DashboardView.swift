@@ -80,7 +80,7 @@ struct DashboardView: View {
 
     private var pendingRecords: [InputRecordModel] {
         inputRecords
-            .filter { [.draft, .analyzed, .failed].contains($0.status) }
+            .filter { !$0.analysisPending && [.draft, .analyzed, .failed].contains($0.status) }
             .sorted { $0.updatedAt > $1.updatedAt }
     }
 
@@ -389,8 +389,8 @@ private struct DashboardRecordLedgerRow: View {
 
     var body: some View {
         HStack(spacing: 11) {
-            Image(systemName: record.status == .failed ? "exclamationmark.triangle" : "doc.text")
-                .foregroundStyle(record.status == .failed ? WordNoteTheme.amber : WordNoteTheme.teal)
+            Image(systemName: record.analysisFailed ? "exclamationmark.triangle" : "doc.text")
+                .foregroundStyle(record.analysisFailed ? WordNoteTheme.amber : WordNoteTheme.teal)
                 .frame(width: 20)
 
             VStack(alignment: .leading, spacing: 4) {
@@ -404,8 +404,8 @@ private struct DashboardRecordLedgerRow: View {
 
             Spacer(minLength: 8)
             TagChip(
-                title: record.status.displayTitle,
-                tint: record.status == .failed ? WordNoteTheme.amber : WordNoteTheme.teal
+                title: record.visibleStatusTitle,
+                tint: record.analysisFailed ? WordNoteTheme.amber : WordNoteTheme.teal
             )
         }
         .padding(.vertical, 12)

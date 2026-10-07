@@ -437,7 +437,7 @@ P2 若做 iCloud，需要先制定資料衝突策略，不能直接把本地模�
 
 中斷留下的 running 先在共用日誌寫 analysisRequiresResume，再正規化成 queued；再次崩潰/重開也不自動付費重放。正規化增加 generation 使舊回調失效，但保留 autoRetryCount；只有明確新一輪重試才重置預算。重新分析同名候選保留原字段和 saved/ignored 狀態，只追加新英文主體；pending 候選同步到目前 generation，失敗或取消後仍可人工確認。C02 的差異採納界面完成前，不自動更新既有釋義。
 
-以上是 A02/B01 的隔離核心，尚未替換主 App 的 V1 queue，也未串接 Quick Add/浮窗/Inbox 的三入口或任務視圖；見 [隊列與真實調用證據](qa/2026-10-08-a02-analysis-queue.md)。
+隊列核心證據見 [隊列與真實調用](qa/2026-10-08-a02-analysis-queue.md)。後續 `WORDNOTE_V2_VALIDATION` QA 編譯已串接 Quick Add/浮窗/Inbox 三入口，持有唯一 queue，並在 Inbox 提供獨立可展開任務視圖。queued/running 不混入待確認列表；取消/重試/暫停均走同一持久隊列。普通 App 仍使用 V1，沒有啟用真實資料遷移；見 [隔離 App 接入](qa/2026-10-08-a02-app-integration.md)。
 
 ### 原子性與撤銷
 
@@ -451,7 +451,9 @@ P2 若做 iCloud，需要先制定資料衝突策略，不能直接把本地模�
 
 `captureID` 識別提交而非相同文字：同次重送返回已保存結果，不重建來源或增加計數；不同提交保留各自課程、note 和捕獲入口。Save Only 建草稿而非查詢事件。精確英文命中不排 AI、不進 Inbox；候選確認只做內容/來源整理，不冒充再次查詞。此批仍保留 `legacyMixed` 的復習反饋，B04 才改新統計。
 
-單項確認支援新建與關聯已有詞，校驗候選/記錄/目標 revision 及分析世代；相同 confirmationOperationID 重送返回原目標，目標已刪除則明確報錯、不重建。這些是 A02 基礎能力，尚無 A04 undo receipt、A05 批次預覽/逐字段補充或 App 接入。刪除與課程引用保護的測試證據見 [V2 內容交易](qa/2026-10-08-a02-content-transactions.md)。
+單項確認支援新建與關聯已有詞，校驗候選/記錄/目標 revision 及分析世代；相同 confirmationOperationID 重送返回原目標，目標已刪除則明確報錯、不重建。QA App 沿用新詞批量確認交互，先核對全部候選/記錄 revision，整批單次保存；遇精確重複仍整批拒絕，不自行關聯。A04 undo receipt、A05 批次預覽/逐字段補充尚未實作。刪除與課程引用保護的基礎證據見 [V2 內容交易](qa/2026-10-08-a02-content-transactions.md)。
+
+V2 QA 的候選輸入綁定值型 `WordNoteV2CandidateEdit`，保存前不碰 SwiftData；已修改未保存的行會阻止該候選區直接確認。Term/Course 表單在載入時保存 revision，正式保存與刪除不能偷偷改用當前 revision。編輯衝突拒絕覆寫，完整離頁/關窗保護和撤銷仍屬 A04。詞條課程成員資格由 TermCourseLink 控制，編輯不改寫原 occurrence 或兼容 courseID；詞庫、課程計數、復習篩選及 CSV 使用相同成員資料。V2 review 只把既有排程搬入原子交易，保留 legacyMixed，不提前啟用 V3 分方向規則。
 
 ### 備份、恢復與啟動
 
@@ -467,7 +469,7 @@ P2 若做 iCloud，需要先制定資料衝突策略，不能直接把本地模�
 
 V2 邏輯快照沿用 formatVersion 1 的 checksum envelope，sourceSchemaVersion 為 2.0.0。payload.content 復用凍結的 V1 字段定義，另有按實體 ID 一對一匹配的 revision/捕獲/候選/計數語義元資料表，以及 occurrence、courseLink、lookupEvent 三類實體。缺行、多行、重複業務鍵和錯誤關聯均拒絕恢復。`WordNoteSnapshotReader` 按 schema 路由 V1/V2 讀取器；`WordNoteVersionedPayload` 共用捕獲、校驗、checksum 與編碼入口，不改兩版既有文件格式。
 
-2026-10-08 的 vault 已能列出、生成及導出 V1/V2，摘要含 schema 與全部八類計數；跨版本保留最新七份自動備份，手動/遷移前/恢復前快照均不自動刪除。只改 V2 關係或元資料也會改變備份 checksum。按 ID 導出使用同一次讀取的驗證 bytes，不能省略新增資料。現行 App coordinator 仍為 V1，舊 `readSnapshot`/`capture` 入口繼續拒絕 V2；只有顯式版本化入口接受兩版。見 [版本化備份證據](qa/2026-10-08-a02-versioned-backups.md)。
+2026-10-08 的 vault 已能列出、生成及導出 V1/V2，摘要含 schema 與全部八類計數；跨版本保留最新七份自動備份，手動/遷移前/恢復前快照均不自動刪除。只改 V2 關係或元資料也會改變備份 checksum。按 ID 導出使用同一次讀取的驗證 bytes，不能省略新增資料。舊 `readSnapshot`/`capture` 入口繼續拒絕 V2；只有顯式版本化入口接受兩版。見 [版本化備份證據](qa/2026-10-08-a02-versioned-backups.md)。App 的 `WordNoteDataProtection` 現可按 session schema 路由捕獲、預覽、備份、恢復和待分析數；V1 runtime 在暫停/備份之前拒絕 V2 導入，V2 runtime 拒絕未提交模型修改。V2 恢復分析由 queue 先正規化中斷工作，再解除日誌暫停，不能由 UI 提前清除標記。
 
 共用 `WordNoteRestoreStore` 現可顯式指定 targetSchema V2，在后台升級舊快照、建八實體 store、重開逐值核對，並在下次啟動驗證後選中它。未指定時仍為 V1，不能隱式激活 V2。`store-generations.json` 的 version 1 和五類 counts 保持兼容；首次準備 V2 時寫 version 2，active/previous/pending 均帶明確 schema，pending 帶八類 counts。回退依 active 的 schema 打開原庫，不重試中斷的 activating。version 2 即使取消/回退仍保留，舊入口直接拒絕，不降版重寫日誌。見 [版本化恢復證據](qa/2026-10-08-a02-versioned-restore.md)。
 
@@ -475,7 +477,7 @@ V2 邏輯快照沿用 formatVersion 1 的 checksum envelope，sourceSchemaVersio
 
 version 2 日誌的 pending.operation 區分 restore/migration，缺值兼容既有 restore；recoveryRequired 在失敗或 activating 中斷後保留。已寫入遷移意圖的失敗不因重啟自動重試，必須顯式 retryMigration；未完成遷移不能直接恢復分析。取消只匹配本次 pending generation，不撤銷競爭操作。原容器保留的 context 仍被屏障阻擋，不能在新庫 ready 後繼續寫舊庫。成功切換清除 recovery 標記，有未完成分析時仍需明確恢復；已有 V2 的 restore 失敗可明確恢復原庫分析。見 [啟動遷移證據](qa/2026-10-08-a02-startup-migration.md)。
 
-上述只在隔離核心使用；V2 App coordinator/worker 接入尚未完成。V2 中 queued/running/failed 工作從備份恢復後持久標記待顯式恢復；恢復和遷移本身不發送網絡請求。新 V2 queue 在隔離測試中已有持久重啟/真實調用證據，但不能把它當作正式 App 啟用或三入口 UI 驗收。
+以上啟動流程已接入 V2 QA App：先檢查測試 bundle 身份，僅使用臨時 fixture 目錄，再由異步 coordinator 返回 ready，最後建立頁面、唯一 queue、資料保護和浮窗。普通編譯仍走 V1；QA 二進制沒有非 QA bundle 的生產回退路徑。V2 中 queued/running/failed 工作從備份恢復後持久標記待顯式恢復；恢復和遷移本身不發送網絡請求。QA 預設使用離線分析替身，真實網絡測試仍顯式 opt-in，不能把核心或啟動證據當作三入口 UI 驗收。
 
 `WordNoteV2IntegrityService` 提供值層檢查及修復預覽：涵蓋全部八實體、四份元資料、業務唯一鍵、來源對應與候選狀態。唯一自動提出的修復是解除指向已不存在記錄的 Term.sourceRecordID、Occurrence.sourceRecordID、LookupEvent.occurrenceID；缺課程、缺詞、孤立內容、跨 capture 關聯及重複關係均要求人工處理。修復方案保留完整來源值，stage 前後比較最新資料與偏好，變動即拒絕舊方案。只產生新 payload、更新受影響 Term.revision，不寫原庫。見 [完整性與啟動防護證據](qa/2026-10-08-a02-integrity.md)。
 

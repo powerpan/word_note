@@ -229,9 +229,10 @@ public actor WordNoteBackupVault {
     }
 
     public func exportCSV(
-        terms: [WordNoteSnapshotPayload.Term], courses: [WordNoteSnapshotPayload.Course], to url: URL
+        terms: [WordNoteSnapshotPayload.Term], courses: [WordNoteSnapshotPayload.Course],
+        courseMemberships: [UUID: Set<UUID>]? = nil, to url: URL
     ) throws {
-        try PrivateFileIO.write(VocabularyCSVExporter.export(terms: terms, courses: courses), to: url)
+        try PrivateFileIO.write(VocabularyCSVExporter.export(terms: terms, courses: courses, courseMemberships: courseMemberships), to: url)
     }
 
     public func delete(id: UUID) throws {

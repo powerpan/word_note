@@ -16,6 +16,18 @@ public enum ReviewQueueScope: String, CaseIterable, Identifiable, Hashable, Send
     }
 }
 
+private protocol ReviewQueueEntry {
+    var nextReviewAt: Date? { get }
+    var wrongCount: Int { get }
+    var duplicateHitCount: Int { get }
+    var masteryLevel: MasteryLevel { get }
+    var importance: Importance { get }
+    var createdAt: Date { get }
+}
+
+extension WordNoteSchemaV1.TermModel: ReviewQueueEntry {}
+extension WordNoteSchemaV2.TermModel: ReviewQueueEntry {}
+
 public struct ReviewQueuePolicy {
     public init() {}
 
@@ -26,15 +38,29 @@ public struct ReviewQueuePolicy {
         courseID: UUID? = nil,
         calendar: Calendar = .current
     ) -> [TermModel] {
+        orderedTerms(
+            terms.filter { courseID == nil || $0.courseID == courseID },
+            scope: scope, asOf: date, calendar: calendar
+        )
+    }
+
+    /// V2 callers filter through TermCourseLink before ordering, never through the legacy course snapshot.
+    public func terms(
+        from terms: [WordNoteSchemaV2.TermModel], scope: ReviewQueueScope = .dueToday,
+        asOf date: Date = Date(), calendar: Calendar = .current
+    ) -> [WordNoteSchemaV2.TermModel] {
+        orderedTerms(terms, scope: scope, asOf: date, calendar: calendar)
+    }
+
+    private func orderedTerms<T: ReviewQueueEntry>(
+        _ terms: [T], scope: ReviewQueueScope, asOf date: Date, calendar: Calendar
+    ) -> [T] {
         let startOfToday = calendar.startOfDay(for: date)
         let startOfTomorrow = calendar.date(byAdding: .day, value: 1, to: startOfToday)
             ?? date.addingTimeInterval(24 * 60 * 60)
 
         return terms
             .filter { term in
-                let courseMatches = courseID == nil || term.courseID == courseID
-                guard courseMatches else { return false }
-
                 switch scope {
                 case .dueToday:
                     guard let nextReviewAt = term.nextReviewAt else { return false }

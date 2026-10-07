@@ -4,6 +4,7 @@ import WordNoteCore
 
 struct InboxView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(QuickAddAnalysisQueue.self) private var analysisQueue
     @Query private var storedRecords: [InputRecordModel]
     @Query private var storedCourses: [CourseModel]
     @Query private var storedCandidates: [CandidateTermModel]
@@ -28,7 +29,7 @@ struct InboxView: View {
 
     private var activeRecords: [InputRecordModel] {
         records.filter { record in
-            record.status != .ignored && record.status != .analyzing && record.status != .completed
+            record.status != .ignored && !record.analysisPending && record.status != .completed
         }
     }
 
@@ -100,6 +101,13 @@ struct InboxView: View {
         .onChange(of: confirmableRecordIDs) {
             pruneBatchSelection()
         }
+        #if WORDNOTE_V2_VALIDATION
+        .onChange(of: storedRecords.map { "\($0.id):\($0.revision)" }) {
+            guard !WordNoteWriteGate.isBlocked(modelContext) else { return }
+            do { try analysisQueue.refreshJobs() }
+            catch { errorMessage = error.localizedDescription }
+        }
+        #endif
     }
 
     private var recordList: some View {
@@ -153,28 +161,33 @@ struct InboxView: View {
         }
         .scrollContentBackground(.hidden)
         .safeAreaInset(edge: .top, spacing: 0) {
-            PageHeader(
-                title: "Inbox",
-                subtitle: "\(activeRecords.count) active, \(confirmedRecords.count) confirmed"
-            ) {
-                HStack(spacing: 8) {
-                    Button {
-                        toggleSelectAllConfirmableRecords()
-                    } label: {
-                        Label(allConfirmableRecordsSelected ? "Clear" : "Select All", systemImage: "checklist")
-                    }
-                    .disabled(confirmableRecords.isEmpty)
+            VStack(spacing: 0) {
+                PageHeader(
+                    title: "Inbox",
+                    subtitle: "\(activeRecords.count) active, \(confirmedRecords.count) confirmed"
+                ) {
+                    HStack(spacing: 8) {
+                        Button {
+                            toggleSelectAllConfirmableRecords()
+                        } label: {
+                            Label(allConfirmableRecordsSelected ? "Clear" : "Select All", systemImage: "checklist")
+                        }
+                        .disabled(confirmableRecords.isEmpty)
 
-                    Button {
-                        confirmSelectedRecords()
-                    } label: {
-                        Label("Confirm Selected", systemImage: "checkmark.circle")
+                        Button {
+                            confirmSelectedRecords()
+                        } label: {
+                            Label("Confirm Selected", systemImage: "checkmark.circle")
+                        }
+                        .disabled(selectedBatchRecordIDs.isEmpty)
                     }
-                    .disabled(selectedBatchRecordIDs.isEmpty)
                 }
+                .padding(18)
+                .background(WordNoteTheme.surface)
+                #if WORDNOTE_V2_VALIDATION
+                V2AnalysisTasksView(queue: analysisQueue)
+                #endif
             }
-            .padding(18)
-            .background(WordNoteTheme.surface)
         }
         .overlay {
             if selectableRecords.isEmpty {
@@ -198,7 +211,7 @@ struct InboxView: View {
                 record: selectedRecord,
                 courseName: courseName(for: selectedRecord.courseID),
                 candidates: candidates.filter { $0.inputRecordID == selectedRecord.id },
-                isAnalyzing: analyzingRecordID == selectedRecord.id,
+                isAnalyzing: analyzingRecordID == selectedRecord.id || selectedRecord.analysisPending,
                 errorMessage: $errorMessage,
                 onAnalyze: analyze,
                 onIgnore: ignore,
@@ -232,7 +245,7 @@ struct InboxView: View {
     }
 
     private func previewText(for record: InputRecordModel) -> String {
-        let lookupDirection = LookupDirectionDetector.detect(record.rawText)
+        let lookupDirection = record.resolvedDirection
         let preview: String?
         switch lookupDirection {
         case .englishToChinese:
@@ -245,7 +258,7 @@ struct InboxView: View {
                 .first ?? normalizedPreviewText(record.sentenceMeaning)
         }
 
-        guard let preview else { return record.status.displayTitle }
+        guard let preview else { return record.visibleStatusTitle }
         return String(preview.prefix(18))
     }
 
@@ -334,6 +347,12 @@ struct InboxView: View {
     }
 
     private func analyze(_ record: InputRecordModel) {
+        #if WORDNOTE_V2_VALIDATION
+        do {
+            try analysisQueue.retry(record.id, expectedRevision: record.revision)
+            errorMessage = nil
+        } catch { errorMessage = error.localizedDescription }
+        #else
         let ticket: WordNoteWriteGate.Ticket
         do { ticket = try WordNoteWriteGate.ticket(for: modelContext) }
         catch {
@@ -361,6 +380,7 @@ struct InboxView: View {
 
             analyzingRecordID = nil
         }
+        #endif
     }
 
     private func maintainSelection() {

@@ -2,7 +2,8 @@ import Foundation
 
 public enum VocabularyCSVExporter {
     public static func export(
-        terms: [WordNoteSnapshotPayload.Term], courses: [WordNoteSnapshotPayload.Course]
+        terms: [WordNoteSnapshotPayload.Term], courses: [WordNoteSnapshotPayload.Course],
+        courseMemberships: [UUID: Set<UUID>]? = nil
     ) -> Data {
         let courseNames = Dictionary(courses.map { ($0.id, $0.courseName) }, uniquingKeysWith: { first, _ in first })
         let formatter = ISO8601DateFormatter()
@@ -10,7 +11,9 @@ public enum VocabularyCSVExporter {
         let rows = terms.map { term -> [String] in
             [
                 term.term, term.chineseMeaning ?? "", term.englishDefinition ?? "",
-                term.courseID.flatMap { courseNames[$0] } ?? "", term.tags.joined(separator: "; "),
+                courseMemberships.map { memberships in
+                    (memberships[term.id] ?? []).compactMap { courseNames[$0] }.sorted().joined(separator: "; ")
+                } ?? term.courseID.flatMap { courseNames[$0] } ?? "", term.tags.joined(separator: "; "),
                 term.sourceTypeRaw, term.categoryRaw, term.importanceRaw, term.masteryLevelRaw,
                 term.nextReviewAt.map(formatter.string) ?? ""
             ]

@@ -54,7 +54,7 @@ struct InputRecordDetailView: View {
     @State private var isDeleteConfirmationPresented = false
 
     private var lookupDirection: LookupDirection {
-        LookupDirectionDetector.detect(record.rawText)
+        record.resolvedDirection
     }
 
     private var sentenceMeaningTitle: String {
@@ -71,9 +71,9 @@ struct InputRecordDetailView: View {
                     Button {
                         onAnalyze(record)
                     } label: {
-                        Label(record.status == .failed ? "Retry" : "Analyze", systemImage: "sparkles")
+                        Label(record.analysisFailed ? "Retry" : "Analyze", systemImage: "sparkles")
                     }
-                    .disabled(isAnalyzing || record.status == .analyzing || record.status == .completed)
+                    .disabled(isAnalyzing || record.analysisPending || record.status == .completed)
 
                     Button {
                         onIgnore(record)
@@ -101,7 +101,7 @@ struct InputRecordDetailView: View {
                 if let errorMessage {
                     StatusBanner(message: errorMessage, kind: .warning)
                 }
-                if isAnalyzing || record.status == .analyzing {
+                if isAnalyzing || record.analysisPending {
                     ProgressView("Analyzing with DeepSeek...")
                 }
 
@@ -113,7 +113,7 @@ struct InputRecordDetailView: View {
                 }
 
                 Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 10) {
-                    detailRow("Status", record.status.displayTitle)
+                    detailRow("Status", record.visibleStatusTitle)
                     detailRow("Source", record.sourceType.displayTitle)
                     detailRow("Course", courseName ?? "No Course")
                     detailRow("Created", record.createdAt.formatted(date: .abbreviated, time: .shortened))
@@ -126,6 +126,8 @@ struct InputRecordDetailView: View {
 
                 if !candidates.isEmpty || [.draft, .analyzed, .failed].contains(record.status) {
                     CandidateReviewView(record: record, candidates: candidates)
+                        .id(record.id)
+                        .disabled(record.analysisPending)
                 }
 
                 Spacer(minLength: 0)

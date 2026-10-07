@@ -4,6 +4,7 @@ import WordNoteCore
 
 struct TermDetailEditor: View {
     @Environment(\.modelContext) private var modelContext
+    private var memberships = AppCourseMemberships()
 
     let term: TermModel
     let courses: [CourseModel]
@@ -16,6 +17,8 @@ struct TermDetailEditor: View {
     @State private var exampleSentence = ""
     @State private var contextSentence = ""
     @State private var courseID: UUID?
+    @State private var selectedCourseIDs = Set<UUID>()
+    @State private var editRevision = 0
     @State private var sourceType: SourceType = .other
     @State private var category: TermCategory = .general
     @State private var importance: Importance = .medium
@@ -104,12 +107,24 @@ struct TermDetailEditor: View {
         GroupBox("Metadata") {
             Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 10) {
                 formRow("Course") {
+                    #if WORDNOTE_V2_VALIDATION
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(courses, id: \.id) { course in
+                            Toggle(course.courseName, isOn: Binding(
+                                get: { selectedCourseIDs.contains(course.id) },
+                                set: { if $0 { selectedCourseIDs.insert(course.id) } else { selectedCourseIDs.remove(course.id) } }
+                            )).toggleStyle(.checkbox)
+                        }
+                        if courses.isEmpty { Text("No Courses").foregroundStyle(.secondary) }
+                    }
+                    #else
                     Picker("Course", selection: $courseID) {
                         Text("No Course").tag(UUID?.none)
                         ForEach(courses, id: \.id) { course in
                             Text(course.courseName).tag(Optional(course.id))
                         }
                     }
+                    #endif
                 }
                 formRow("Source") {
                     Picker("Source", selection: $sourceType) {
@@ -154,6 +169,8 @@ struct TermDetailEditor: View {
     }
 
     private func loadTerm() {
+        editRevision = term.editRevision
+        selectedCourseIDs = memberships.ids(for: term)
         termText = term.term
         termType = term.termType
         chineseMeaning = term.chineseMeaning ?? ""
@@ -172,7 +189,7 @@ struct TermDetailEditor: View {
 
     private func save() {
         do {
-            try VocabularyService(modelContext: modelContext).updateTerm(
+            try VocabularyService(modelContext: modelContext, expectedRevision: editRevision, courseIDs: selectedCourseIDs).updateTerm(
                 term,
                 termText: termText,
                 termType: termType,
@@ -187,6 +204,7 @@ struct TermDetailEditor: View {
                 importance: importance,
                 masteryLevel: masteryLevel
             )
+            editRevision = term.editRevision
             statusMessage = "Saved."
             errorMessage = nil
         } catch {
@@ -197,7 +215,7 @@ struct TermDetailEditor: View {
 
     private func delete() {
         do {
-            try VocabularyService(modelContext: modelContext).delete(term)
+            try VocabularyService(modelContext: modelContext, expectedRevision: editRevision, courseIDs: selectedCourseIDs).delete(term)
             statusMessage = nil
             errorMessage = nil
         } catch {

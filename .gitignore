@@ -2,6 +2,7 @@
 xcuserdata/
 *.xcuserstate
 .build/
+.build-v2-qa/
 .swiftpm/
 dist/
 tmp/

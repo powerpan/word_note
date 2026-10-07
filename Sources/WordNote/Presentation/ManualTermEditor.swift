@@ -13,6 +13,7 @@ struct ManualTermEditor: View {
     @State private var chineseMeaning = ""
     @State private var englishDefinition = ""
     @State private var errorMessage: String?
+    @State private var editRevision: Int
 
     init(
         record: InputRecordModel,
@@ -23,6 +24,7 @@ struct ManualTermEditor: View {
         self.onSaved = onSaved
         self.onCancel = onCancel
         _termText = State(initialValue: record.rawText)
+        _editRevision = State(initialValue: record.editRevision)
     }
 
     var body: some View {
@@ -60,7 +62,7 @@ struct ManualTermEditor: View {
 
     private func save() {
         do {
-            let term = try VocabularyService(modelContext: modelContext).createManualTerm(
+            let term = try VocabularyService(modelContext: modelContext, expectedRevision: editRevision, courseIDs: []).createManualTerm(
                 termText: termText,
                 chineseMeaning: chineseMeaning,
                 englishDefinition: englishDefinition,

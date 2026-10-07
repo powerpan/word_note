@@ -7,19 +7,23 @@ BUNDLE_ID="com.powerpan.WordNote"
 MIN_SYSTEM_VERSION="14.0"
 FIXTURE="${2:-populated}"
 APPEARANCE="${3:-light}"
+BUILD_FLAGS=(-Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency -Xswiftc -warnings-as-errors)
 
 case "$MODE" in
   run|--debug|debug|--logs|logs|--telemetry|telemetry|--verify|verify) ;;
-  --ui-fixture)
+  --ui-fixture|--ui-v2-fixture)
     [[ "$FIXTURE" == "empty" || "$FIXTURE" == "populated" ]] || { echo "Invalid fixture" >&2; exit 2; }
     [[ "$APPEARANCE" == "light" || "$APPEARANCE" == "dark" ]] || { echo "Invalid appearance" >&2; exit 2; }
     QA_SESSION="${4:-$(uuidgen)}"
     [[ "$QA_SESSION" =~ ^[[:xdigit:]]{8}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{12}$ ]] || { echo "Invalid QA session UUID" >&2; exit 2; }
     APP_NAME="WordNoteQA"
     BUNDLE_ID="com.powerpan.WordNote.UITest"
+    if [[ "$MODE" == "--ui-v2-fixture" ]]; then
+      BUILD_FLAGS+=(--scratch-path .build-v2-qa -Xswiftc -DWORDNOTE_V2_VALIDATION)
+    fi
     ;;
   *)
-    echo "usage: $0 [run|--debug|--logs|--telemetry|--verify|--ui-fixture [empty|populated] [light|dark] [session-UUID]]" >&2
+    echo "usage: $0 [run|--debug|--logs|--telemetry|--verify|--ui-fixture|--ui-v2-fixture [empty|populated] [light|dark] [session-UUID]]" >&2
     exit 2
     ;;
 esac
@@ -48,8 +52,8 @@ if [[ ! -f "$APP_ICON_SOURCE"
   "$APP_ICON_GENERATOR" "$APP_ICON_MASTER"
 fi
 
-swift build
-BUILD_BINARY="$(swift build --show-bin-path)/WordNote"
+swift build "${BUILD_FLAGS[@]}"
+BUILD_BINARY="$(swift build "${BUILD_FLAGS[@]}" --show-bin-path)/WordNote"
 
 rm -rf "$APP_BUNDLE"
 mkdir -p "$APP_MACOS" "$APP_RESOURCES"
@@ -104,7 +108,7 @@ case "$MODE" in
     sleep 1
     pgrep -x "$APP_NAME" >/dev/null
     ;;
-  --ui-fixture)
+  --ui-fixture|--ui-v2-fixture)
     echo "QA session: $QA_SESSION"
     /usr/bin/open -n "$APP_BUNDLE" --args --ui-fixture "$FIXTURE" --ui-appearance "$APPEARANCE" --ui-session "$QA_SESSION"
     ;;

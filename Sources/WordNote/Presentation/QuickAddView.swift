@@ -145,6 +145,20 @@ struct QuickAddView: View {
     }
 
     private func saveDraft(statusOverride: String? = nil) {
+        #if WORDNOTE_V2_VALIDATION
+        do {
+            _ = try analysisQueue.enqueue(WordNoteCaptureRequest(
+                rawText: rawText, courseID: selectedCourseID, sourceType: selectedSourceType, note: note, capturedVia: .mainQuickAdd
+            ), analyze: false)
+            rawText = ""
+            note = ""
+            errorMessage = nil
+            statusMessage = statusOverride ?? analysisQueue.statusMessage
+        } catch {
+            statusMessage = nil
+            errorMessage = error.localizedDescription
+        }
+        #else
         let service = InputRecordService(modelContext: modelContext)
 
         do {
@@ -162,6 +176,7 @@ struct QuickAddView: View {
             statusMessage = nil
             errorMessage = error.localizedDescription
         }
+        #endif
     }
 
     private func saveAndAnalyze() {

@@ -3,6 +3,7 @@ import SwiftUI
 import WordNoteCore
 
 struct VocabularyView: View {
+    private var memberships = AppCourseMemberships()
     @Environment(WordNoteDataProtection.self) private var dataProtection
     @Query private var storedTerms: [TermModel]
     @Query private var storedCourses: [CourseModel]
@@ -29,7 +30,7 @@ struct VocabularyView: View {
                 chineseMeaning: term.chineseMeaning,
                 englishDefinition: term.englishDefinition
             )
-            let matchesCourse = selectedCourseID == nil || term.courseID == selectedCourseID
+            let matchesCourse = memberships.matches(term, courseID: selectedCourseID)
             let matchesMastery = selectedMasteryRaw == "all" || term.masteryLevel.rawValue == selectedMasteryRaw
             return matchesSearch && matchesCourse && matchesMastery
         }
@@ -50,7 +51,7 @@ struct VocabularyView: View {
 
                     List(selection: $selectedTermID) {
                         ForEach(filteredTerms, id: \.id) { term in
-                            VocabularyRow(term: term, courseName: courseName(for: term.courseID))
+                            VocabularyRow(term: term, courseName: memberships.names(for: term, courses: courses))
                                 .tag(term.id)
                         }
                     }
@@ -156,12 +157,13 @@ struct VocabularyView: View {
     }
 
     private func export(_ selectedTerms: [TermModel]) {
+        let courseMemberships = Dictionary(uniqueKeysWithValues: selectedTerms.map { ($0.id, memberships.ids(for: $0)) })
         let terms = selectedTerms.map(WordNoteSnapshotPayload.Term.init)
         let courses = courses.map(WordNoteSnapshotPayload.Course.init)
         Task {
             guard let url = await DataFilePicker.exportURL(csvCount: terms.count) else { return }
             do {
-                try await dataProtection.exportVocabulary(terms: terms, courses: courses, to: url)
+                try await dataProtection.exportVocabulary(terms: terms, courses: courses, courseMemberships: courseMemberships, to: url)
                 exportMessage = "Exported \(terms.count) vocabulary entries."
             } catch { exportMessage = error.localizedDescription }
         }
