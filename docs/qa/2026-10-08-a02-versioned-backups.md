@@ -59,3 +59,5 @@ swift build -Xswiftc -strict-concurrency=complete \
 本批未再次操作 Computer Use；最近一次實機嘗試仍是 [前批記錄](2026-10-08-a02-integrity.md) 的 Mac 鎖屏回應。新增 schema 標記沒有視覺驗收，不把建置成功當 UI 通過。
 
 A02 需繼續接入共用版本化 restore journal/staging/bootstrap、遷移保護與 App 讀寫服務，修復預覽還需正式確認/保護流程。正式 App 仍在 V1，QA-06/QA-07 未完成，也未合併主分支。
+
+後續 [版本化恢復記錄](2026-10-08-a02-versioned-restore.md) 已补齊共用日誌、staging 與核心 bootstrap；App 接入及正式遷移閘門仍未完成。本頁保留該批備份驗證的數字與範圍。

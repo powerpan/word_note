@@ -159,7 +159,7 @@ P1 如果做全局快捷鍵或剪貼板增強，需要單獨評估權限。
 
 完整 JSON envelope 包括 formatVersion、sourceSchemaVersion、appVersion、snapshotID、createdAt、各實體數量、payload checksum 和模型 DTO。formatVersion 首版為 1，與資料 schema 分開。payload 使用 JSON 字符串承載序列化 DTO，checksum 對解碼該字符串後的原始 UTF-8 bytes 計算並驗證，再解析其中模型資料，不對任意重排的 JSON 對象求 hash；採標準序列化/雜湊實作。校驗碼只檢測損壞，不宣稱文件經簽名或已加密。
 
-目標契約：V1-V4 各階段提供對應 reader/upgrader；最新版本可恢復受支持舊快照，舊 App 拒絕較新快照。最終包含原文、候選、詞義、課程、來源、卡片、事件和持久化會話；非機密偏好只用明確白名單（外觀、課程/來源預設、學習限額）。現行 App 捕獲/恢復仍為 V1 五類模型；隔離核心的版本化捕獲、vault 目錄與 JSON 導出已另支援 V2 八實體及完整元資料，但 V2 恢復日誌與啟動尚未接入。兩版偏好仍僅 appearance/defaultSource，不虛構尚未實施字段。排除 env、API Key、任意 UserDefaults、SSH 文件、日誌、網絡原始 response 及系統快捷鍵權限狀態。
+目標契約：V1-V4 各階段提供對應 reader/upgrader；最新版本可恢復受支持舊快照，舊 App 拒絕較新快照。最終包含原文、候選、詞義、課程、來源、卡片、事件和持久化會話；非機密偏好只用明確白名單（外觀、課程/來源預設、學習限額）。現行 App 捕獲/恢復仍為 V1 五類模型；隔離核心的版本化捕獲、vault、JSON 導出及共用恢復日誌另支援 V2 八實體及完整元資料，但 V2 App coordinator 和啟動遷移尚未接入。兩版偏好仍僅 appearance/defaultSource，不虛構尚未實施字段。排除 env、API Key、任意 UserDefaults、SSH 文件、日誌、網絡原始 response 及系統快捷鍵權限狀態。
 
 混合 V1/V2 vault 按完整版本內容檢測變更，輪替不丟棄新關係。未知 schema、損壞數量或文件名/內嵌 ID 不一致的文件不列為有效備份，也不自動清除；舊 V1 恢復入口在修改日誌或原庫前拒絕 V2。V2 未提交的直接模型編輯不能由備份順帶保存。上述是 [備份回歸](qa/2026-10-08-a02-versioned-backups.md) 的邊界，不是全倉敏感資訊審核或 V2 實機恢復驗收。
 
@@ -180,6 +180,8 @@ CSV 只導出所選或當前篩選詞表，明示範圍及行數；字段為英�
 7. 新庫啟動後重新驗證計數與關係，展示成功；queue 的 running 轉為待恢復狀態，所有未完成網絡任務需用戶明確恢復，不直接重播付費請求。
 
 無 active generation 清單時仍用既有 `WordNote.store`；切換清單使用臨時文件落盤後原子替換，保留上一個有效 generation。遷移和恢復共享 bootstrap/復原日誌，禁止各有一套競爭的切庫規則。恢復前後的 storeGeneration token 必須不同，舊 AI 回調不能落入新庫。第一次成功恢復前任何階段失敗都能開回原庫。
+
+隔離核心的 [V2 恢復實作](qa/2026-10-08-a02-versioned-restore.md) 延續同一份日誌：版本化日誌明確記錄 active/previous/pending schema，V1 模式在改文件前拒絕 version 2。V2 模式恢復 V1 快照時在后台轉成 V2，不降級當前庫；V2 來源和關係也參與 stage/啟動的完整比較及 checksum。保護快照 schema 必須對應目前 active 庫。低層仍要求呼叫方持有寫入屏障、剛驗證的當前庫保護快照；不能直接綁到 UI 按鈕。V2 的 queued/running/failed 均持久暫停，尚需後續 App queue 接入，不以日誌旗標代替端到端不重播驗收。
 
 完整性維護不能先破壞證據：V1 啟動現在只讀檢查引用，發現問題顯示存儲錯誤，不刪孤立候選或復習事件。V2 報告只含 ID、字段、問題分類，不寫原文到日誌；可選失效引用的修復僅產生隔離副本方案，原庫不得覆寫。正常快照仍拒絕非法關係；不能把內部完整性讀取器當作繞過校驗的導入入口。V2 修復 UI、原庫保護與共用 staged 日誌尚待接入，不能把純值預覽當成已完成恢復。
 

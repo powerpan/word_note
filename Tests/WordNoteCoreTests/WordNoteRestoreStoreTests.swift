@@ -337,7 +337,7 @@ final class WordNoteRestoreStoreTests: XCTestCase {
     }
 }
 
-private final class BlockingRestoreCheckpoint: @unchecked Sendable {
+final class BlockingRestoreCheckpoint: @unchecked Sendable {
     private let condition = NSCondition()
     private var waiting = false
     private var released = false

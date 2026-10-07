@@ -459,7 +459,11 @@ P2 若做 iCloud，需要先制定資料衝突策略，不能直接把本地模�
 
 V2 邏輯快照沿用 formatVersion 1 的 checksum envelope，sourceSchemaVersion 為 2.0.0。payload.content 復用凍結的 V1 字段定義，另有按實體 ID 一對一匹配的 revision/捕獲/候選/計數語義元資料表，以及 occurrence、courseLink、lookupEvent 三類實體。缺行、多行、重複業務鍵和錯誤關聯均拒絕恢復。`WordNoteSnapshotReader` 按 schema 路由 V1/V2 讀取器；`WordNoteVersionedPayload` 共用捕獲、校驗、checksum 與編碼入口，不改兩版既有文件格式。
 
-2026-10-08 的 vault 已能列出、生成及導出 V1/V2，摘要含 schema 與全部八類計數；跨版本保留最新七份自動備份，手動/遷移前/恢復前快照均不自動刪除。只改 V2 關係或元資料也會改變備份 checksum。按 ID 導出使用同一次讀取的驗證 bytes，不能省略新增資料。現行 App coordinator 與切庫日誌仍為 V1，舊 `readSnapshot`/`capture` 入口繼續拒絕 V2；只有顯式版本化入口接受兩版。見 [版本化備份證據](qa/2026-10-08-a02-versioned-backups.md)，這不代表已完成 V2 恢復或正式啟用。
+2026-10-08 的 vault 已能列出、生成及導出 V1/V2，摘要含 schema 與全部八類計數；跨版本保留最新七份自動備份，手動/遷移前/恢復前快照均不自動刪除。只改 V2 關係或元資料也會改變備份 checksum。按 ID 導出使用同一次讀取的驗證 bytes，不能省略新增資料。現行 App coordinator 仍為 V1，舊 `readSnapshot`/`capture` 入口繼續拒絕 V2；只有顯式版本化入口接受兩版。見 [版本化備份證據](qa/2026-10-08-a02-versioned-backups.md)。
+
+共用 `WordNoteRestoreStore` 現可顯式指定 targetSchema V2，在后台升級舊快照、建八實體 store、重開逐值核對，並在下次啟動驗證後選中它。未指定時仍為 V1，不能隱式激活 V2。`store-generations.json` 的 version 1 和五類 counts 保持兼容；首次準備 V2 時寫 version 2，active/previous/pending 均帶明確 schema，pending 帶八類 counts。回退依 active 的 schema 打開原庫，不重試中斷的 activating。version 2 即使取消/回退仍保留，舊入口直接拒絕，不降版重寫日誌。見 [版本化恢復證據](qa/2026-10-08-a02-versioned-restore.md)。
+
+V2-capable bootstrap 遇無待恢復的 V1 庫仍返回 V1 session，不自行在原庫遷移；session 的 schema 必須由後續啟動協調器處理後再建立對應 UI。V2 中 queued/running/failed 工作恢复後持久標記待顯式恢復，底層不發送網絡請求。遷移前保護、修復方案套用及 V2 App coordinator/worker 接入尚未完成，不能把隔離 restore 通過當正式啟用。
 
 `WordNoteV2IntegrityService` 提供值層檢查及修復預覽：涵蓋全部八實體、四份元資料、業務唯一鍵、來源對應與候選狀態。唯一自動提出的修復是解除指向已不存在記錄的 Term.sourceRecordID、Occurrence.sourceRecordID、LookupEvent.occurrenceID；缺課程、缺詞、孤立內容、跨 capture 關聯及重複關係均要求人工處理。修復方案保留完整來源值，stage 前比較最新資料與偏好，變動即拒絕舊方案。只產生新 payload、更新受影響 Term.revision，不寫原庫；正式使用仍需接入共用 staged store/日誌，不能另建一套修復切庫流程。見 [完整性與啟動防護證據](qa/2026-10-08-a02-integrity.md)。
 

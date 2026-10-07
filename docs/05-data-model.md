@@ -332,7 +332,7 @@ Occurrence 的業務唯一鍵為 `(termID, captureID)`。一條原句生成兩�
 
 2026-10-08 隔離服務已實作上述捕獲和單項確認交易，詳見 [內容交易記錄](qa/2026-10-08-a02-content-transactions.md)。捕獲入口標記現亦保存在 InputRecord 及 V2 快照元資料；來源有 sourceRecordID 時，其 captureID/capturedVia 必須與記錄一致。歷史轉換一律 legacy；新提交不允許自行偽裝成 legacy。V2 尚未正式啟用，這次補充不改凍結的 V1 類型或 fixture。
 
-版本化備份入口現已保留完整八實體與元資料；`WordNoteBackupCounts` 只作混合版本目錄摘要，不取代 V1/V2 各自凍結的 on-disk counts。V1 reader 明確拒絕 V2，不能用 `payload.content` 當作完整備份或恢复。后台 V2 捕獲亦不會自動保存未經服務 revision 校驗的直接模型修改。詳見 [版本化備份記錄](qa/2026-10-08-a02-versioned-backups.md)；恢復日誌與 App 接入仍待完成。
+版本化備份入口現已保留完整八實體與元資料；`WordNoteBackupCounts` 用於混合版本摘要及 version 2 切庫日誌，不取代 V1/V2 快照各自凍結的 on-disk counts。V1 reader 明確拒絕 V2，不能用 `payload.content` 當作完整備份或恢复。后台 V2 捕獲亦不會自動保存未經服務 revision 校驗的直接模型修改。詳見 [版本化備份記錄](qa/2026-10-08-a02-versioned-backups.md)。共用日誌/staging 已完成隔離 [版本化恢復](qa/2026-10-08-a02-versioned-restore.md)，App 接入和正式啟動遷移仍待完成。
 
 相同 captureID 的重送必須保留原文、note、課程、來源類型和入口；已有 InputRecord 還須保持原查詢意圖，返回當前任務狀態而不自動重新分析。已刪 occurrence 但仍有 LookupEvent 的重送被拒絕，不恢復被明確刪掉的來源。此保護基於仍在庫中的記錄/事件，不承諾在全部相關資料明確刪除後永久保存提交收據。
 

@@ -7,7 +7,7 @@ public enum WordNoteDataSchemaVersion: String, Codable, Sendable {
 }
 
 /// Inventory counts, not a replacement for either version's frozen on-disk document.
-public struct WordNoteBackupCounts: Equatable, Sendable {
+public struct WordNoteBackupCounts: Codable, Equatable, Sendable {
     public let courses: Int
     public let inputRecords: Int
     public let candidates: Int
@@ -71,6 +71,29 @@ public enum WordNoteVersionedPayload: Equatable, Sendable {
         switch self {
         case .v1(let payload): try payload.validate()
         case .v2(let payload): try payload.validate()
+        }
+    }
+
+    var canonicalized: Self {
+        switch self {
+        case .v1(let payload): .v1(payload.canonicalized)
+        case .v2(let payload): .v2(payload.canonicalized)
+        }
+    }
+
+    var requiresAnalysisResume: Bool {
+        switch self {
+        case .v1(let payload): payload.inputRecords.contains { $0.statusRaw == "analyzing" }
+        case .v2(let payload):
+            payload.content.inputRecords.contains { $0.statusRaw == "analyzing" }
+                || payload.recordStates.contains { ["queued", "running", "failed"].contains($0.queueStateRaw) }
+        }
+    }
+
+    func populateEmptyStore(_ context: ModelContext) throws {
+        switch self {
+        case .v1(let payload): try payload.populateEmptyStore(context)
+        case .v2(let payload): try payload.populateEmptyStore(context)
         }
     }
 
