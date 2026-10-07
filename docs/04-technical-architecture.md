@@ -457,7 +457,13 @@ V2 QA 的候選輸入綁定值型 `WordNoteV2CandidateEdit`，保存前不碰 Sw
 
 A04 編輯保護：每個主窗口持有 `WordNoteEditProtection`，表單使用引用生命週期穩定、內容為值型的 `WordNoteEditDraft`。保護器在決策時讀取當前值，不等 SwiftUI 的 onChange，避免漏掉最後一次輸入；草稿不是 SwiftData 模型。導航/篩選/列表切換/Inbox 整理操作先處理保存、放棄或取消，sheet 完全關閉後才執行待處理動作。保存失敗保留草稿和原目的地，第二個請求不能覆蓋第一個。其他窗口移除模型時，髒草稿仍留在當前窗口，可查看並複製文字；保存按 ID 重查並拒絕已刪除/過期的目標，不重建已刪內容。
 
-原生 NSWindow 代理只攔截關閉並轉發原有 SwiftUI delegate；取消時嘗試恢復原控件與文字選區。正常退出由 `WordNoteQuitProtection` 逐窗口處理，任何取消/保存失敗都阻止退出，過程中新窗口也重新納入；已明確準備的資料恢復沿用既有受控退出流程。同記錄的候選草稿整批一次交易保存，各候選 revision 增加一次，來源 revision 只增加一次。這些代碼僅在 V2 QA 注入窗口保護，不啟用生產遷移；UI 尚未實機通過，字段差異對比仍待補，見 [A04 證據](qa/2026-10-08-a04-edit-protection.md)。
+原生 NSWindow 代理只攔截關閉並轉發原有 SwiftUI delegate；取消時嘗試恢復原控件與文字選區。正常退出由 `WordNoteQuitProtection` 逐窗口處理，任何取消/保存失敗都阻止退出，過程中新窗口也重新納入；已明確準備的資料恢復沿用既有受控退出流程。同記錄的候選草稿整批一次交易保存，各候選 revision 增加一次，來源 revision 只增加一次。這些代碼僅在 V2 QA 注入窗口保護，不啟用生產遷移；UI 尚未實機通過，見 [A04 證據](qa/2026-10-08-a04-edit-protection.md)。
+
+`WordNoteEditComparison<Value>` 凍結 baseline/local/current 和雙方 revision，字段以強型別 getter/key path 比較，不依賴顯示名稱或拼接字串相等。只有一方改的字段保留該方；相同修改不算衝突；不同修改須逐字段選擇。readonly 字段與未編輯的元資料保留 current，課程集合不自動聯集。apply 前同時重查草稿的值/基線/revision 與目前庫中值/revision/阻塞狀態，任一不符則保留全部原草稿。
+
+回填只更新 `WordNoteEditDraft` 的 value、baseline 和預期 revision，不保存 SwiftData、不建立 undo receipt。正式保存再次走原有校驗與單次交易；因此「接受最新版本」不能跳過英文主體、課程存在性或下一次版本衝突。V2 draft reader 受恢復屏障保護，拒絕把 mainContext 的未提交模型當成庫中值；讀取缺失的實體不重建。Term/Course 保存後以正式規範化值更新基線，不把裁切前文字當作已保存值。
+
+候選比較按原 ID 讀取，包括已處理候選，另保留同來源新出現的 pending 候選；已處理、分析中或不同世代時禁止回填，刪除/跨來源/重複 ID 拒絕讀取。回填後每個候選使用最新 candidate/source revision，整批仍一次保存。手動建詞有獨立只讀來源草稿，比較只更新來源版本，不重新生成英文/中文字段。比較 UI 在表單內展開，避免與窗口離開確認 sheet 競爭；見 [三方字段比較證據](qa/2026-10-08-a04-field-comparison.md)。
 
 `WordNoteV2UndoHistory` 每個 V2 container 一份，所有主窗口共享，只保留最近一次成功且實際有變更的可撤銷交易。receipt 是記憶體中的局部 DTO 集合及引用標記，不是完整快照或備份；未注入 history 的原有服務不做捕獲。before/body/after/save 同步完成，保存失敗不覆蓋上一張 receipt；幂等確認重送不製造可刪除既有詞的偽 receipt。
 

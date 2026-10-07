@@ -2,6 +2,8 @@ import SwiftData
 import SwiftUI
 import WordNoteCore
 
+private typealias CourseEditorValues = WordNoteCourseEditValues
+
 struct CoursesOverviewView: View {
     @Environment(\.editProtection) private var editProtection
     private var memberships = AppCourseMemberships()
@@ -230,7 +232,12 @@ private struct CourseEditor: View {
                 }
                 if isDirty {
                     if let course, editRevision != course.editRevision {
+                        #if WORDNOTE_V2_VALIDATION
+                        DraftConflictView(draft: values, fields: CourseEditorValues.comparisonFields,
+                                          loadCurrent: { try storedVersion(id: course.id) }, onApplied: { errorMessage = nil; statusMessage = nil })
+                        #else
                         StatusBanner(message: "This course changed in another operation. Your draft has not been overwritten.", kind: .warning)
+                        #endif
                     }
                     Button("Discard Changes", action: load)
                 }
@@ -287,13 +294,27 @@ private struct CourseEditor: View {
     }
 
     private func load() {
-        editRevision = course?.editRevision ?? 0
-        draft = CourseEditorValues(courseName: course?.courseName ?? "", courseCode: course?.courseCode ?? "",
-                                   instructor: course?.instructor ?? "", semester: course?.semester ?? "",
-                                   description: course?.courseDescription ?? "")
-        original = draft
-        statusMessage = nil
-        errorMessage = nil
+        do {
+            let version = try course.map { try storedVersion(id: $0.id) } ?? WordNoteDraftVersion(CourseEditorValues(), revision: 0)
+            editRevision = version.revision
+            draft = version.value
+            original = draft
+            statusMessage = nil
+            errorMessage = nil
+        } catch { errorMessage = error.localizedDescription }
+    }
+
+    private func storedVersion(id: UUID) throws -> WordNoteDraftVersion<CourseEditorValues> {
+        #if WORDNOTE_V2_VALIDATION
+        return try WordNoteV2ContentService(container: modelContext.container).courseDraftVersion(id)
+        #else
+        guard let current = try modelContext.fetch(FetchDescriptor<CourseModel>()).first(where: { $0.id == id }) else {
+            throw WordNoteV2ContentError.missingEntity
+        }
+        return WordNoteDraftVersion(CourseEditorValues(courseName: current.courseName, courseCode: current.courseCode ?? "",
+                                                       instructor: current.instructor ?? "", semester: current.semester ?? "",
+                                                       description: current.courseDescription ?? ""), revision: current.editRevision)
+        #endif
     }
 
     private func save() {
@@ -334,8 +355,10 @@ private struct CourseEditor: View {
                     description: value.description
                 )
             }
-            editRevision = savedCourse.editRevision
-            original = value
+            let saved = try storedVersion(id: savedCourse.id)
+            editRevision = saved.revision
+            draft = saved.value
+            original = saved.value
             statusMessage = "Saved."
             errorMessage = nil
             onSaved(savedCourse)
@@ -362,15 +385,6 @@ private struct CourseEditor: View {
             errorMessage = error.localizedDescription
         }
     }
-}
-
-private struct CourseEditorValues: Equatable {
-    var courseName = ""
-    var courseCode = ""
-    var instructor = ""
-    var semester = ""
-    var description = ""
-    var preview: String { [courseName, courseCode, instructor, semester, description].filter { !$0.isEmpty }.joined(separator: "\n") }
 }
 
 private struct CourseMetric: View {

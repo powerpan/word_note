@@ -16,6 +16,10 @@ struct ManualTermEditor: View {
     private var original: ManualTermValues { get { values.baseline } nonmutating set { values.baseline = newValue } }
     @State private var draftID = UUID()
     @State private var errorMessage: String?
+    #if WORDNOTE_V2_VALIDATION
+    @State private var sourceValues: WordNoteEditDraft<WordNoteManualSourceValues>
+    @Query private var courses: [CourseModel]
+    #endif
 
     init(
         record: InputRecordModel,
@@ -27,6 +31,9 @@ struct ManualTermEditor: View {
         self.onCancel = onCancel
         let value = ManualTermValues(termText: record.rawText)
         _values = State(initialValue: WordNoteEditDraft(value, revision: record.editRevision))
+        #if WORDNOTE_V2_VALIDATION
+        _sourceValues = State(initialValue: WordNoteEditDraft(WordNoteManualSourceValues(record), revision: record.revision))
+        #endif
     }
 
     var body: some View {
@@ -43,6 +50,18 @@ struct ManualTermEditor: View {
             if let errorMessage {
                 StatusBanner(message: errorMessage, kind: .warning)
             }
+            #if WORDNOTE_V2_VALIDATION
+            if values.revision != record.revision {
+                DraftConflictView(draft: sourceValues, fields: WordNoteManualSourceValues.comparisonFields(
+                    courseNames: Dictionary(uniqueKeysWithValues: courses.map { ($0.id, "\($0.courseName) [\($0.id.uuidString.prefix(8))]") })
+                ), loadCurrent: {
+                    try WordNoteV2ContentService(container: modelContext.container).manualSourceDraftVersion(record.id)
+                }, applyTitle: "Use Latest Source", onApplied: {
+                    values.revision = sourceValues.revision
+                    errorMessage = nil
+                })
+            }
+            #endif
 
             HStack {
                 Button("Cancel") { protectingEdits(editProtection, perform: onCancel) }

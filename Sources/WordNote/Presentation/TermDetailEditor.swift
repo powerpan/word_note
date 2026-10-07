@@ -2,6 +2,8 @@ import SwiftData
 import SwiftUI
 import WordNoteCore
 
+private typealias TermEditorValues = WordNoteTermEditValues
+
 struct TermDetailEditor: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.savedChangeHistory) private var undoHistory
@@ -50,7 +52,12 @@ struct TermDetailEditor: View {
                     StatusBanner(message: errorMessage, kind: .warning)
                 }
                 if hasConflict && isDirty {
+                    #if WORDNOTE_V2_VALIDATION
+                    DraftConflictView(draft: values, fields: TermEditorValues.comparisonFields(courseNames: courseNames),
+                                      loadCurrent: { try storedVersion(id: term.id) }, onApplied: { errorMessage = nil; statusMessage = nil })
+                    #else
                     StatusBanner(message: "This term changed in another operation. Your draft has not been overwritten.", kind: .warning)
+                    #endif
                 }
                 if isDirty {
                     Button("Discard Changes", action: loadTerm)
@@ -173,17 +180,36 @@ struct TermDetailEditor: View {
     }
 
     private func loadTerm() {
-        editRevision = term.editRevision
-        draft = TermEditorValues(
-            termText: term.term, termType: term.termType, chineseMeaning: term.chineseMeaning ?? "",
-            englishDefinition: term.englishDefinition ?? "", aiContextExplanation: term.aiContextExplanation ?? "",
-            exampleSentence: term.exampleSentence ?? "", contextSentence: term.contextSentence ?? "",
-            courseID: term.courseID, courseIDs: memberships.ids(for: term), sourceType: term.sourceType,
-            category: term.category, importance: term.importance, masteryLevel: term.masteryLevel
+        do {
+            let version = try storedVersion(id: term.id)
+            editRevision = version.revision
+            draft = version.value
+            original = draft
+            statusMessage = nil
+            errorMessage = nil
+        } catch { errorMessage = error.localizedDescription }
+    }
+
+    private var courseNames: [UUID: String] {
+        Dictionary(uniqueKeysWithValues: courses.map { ($0.id, "\($0.courseName) [\($0.id.uuidString.prefix(8))]") })
+    }
+
+    private func storedVersion(id: UUID) throws -> WordNoteDraftVersion<TermEditorValues> {
+        #if WORDNOTE_V2_VALIDATION
+        return try WordNoteV2ContentService(container: modelContext.container).termDraftVersion(id)
+        #else
+        guard let current = try modelContext.fetch(FetchDescriptor<TermModel>()).first(where: { $0.id == id }) else {
+            throw WordNoteV2ContentError.missingEntity
+        }
+        let value = TermEditorValues(
+            termText: current.term, termType: current.termType, chineseMeaning: current.chineseMeaning ?? "",
+            englishDefinition: current.englishDefinition ?? "", aiContextExplanation: current.aiContextExplanation ?? "",
+            exampleSentence: current.exampleSentence ?? "", contextSentence: current.contextSentence ?? "",
+            courseID: current.courseID, courseIDs: memberships.ids(for: current), sourceType: current.sourceType,
+            category: current.category, importance: current.importance, masteryLevel: current.masteryLevel
         )
-        original = draft
-        statusMessage = nil
-        errorMessage = nil
+        return WordNoteDraftVersion(value, revision: current.editRevision)
+        #endif
     }
 
     private func save() {
@@ -218,9 +244,10 @@ struct TermDetailEditor: View {
                 importance: value.importance,
                 masteryLevel: value.masteryLevel
             )
-            editRevision = current.editRevision
-            draft = value
-            original = value
+            let saved = try storedVersion(id: id)
+            editRevision = saved.revision
+            draft = saved.value
+            original = saved.value
             errorMessage = nil
             statusMessage = "Saved."
         }
@@ -241,25 +268,5 @@ struct TermDetailEditor: View {
             statusMessage = nil
             errorMessage = error.localizedDescription
         }
-    }
-}
-
-private struct TermEditorValues: Equatable {
-    var termText = ""
-    var termType: TermType = .word
-    var chineseMeaning = ""
-    var englishDefinition = ""
-    var aiContextExplanation = ""
-    var exampleSentence = ""
-    var contextSentence = ""
-    var courseID: UUID?
-    var courseIDs = Set<UUID>()
-    var sourceType: SourceType = .other
-    var category: TermCategory = .general
-    var importance: Importance = .medium
-    var masteryLevel: MasteryLevel = .new
-    var preview: String {
-        [termText, chineseMeaning, englishDefinition, aiContextExplanation, exampleSentence, contextSentence]
-            .filter { !$0.isEmpty }.joined(separator: "\n")
     }
 }

@@ -22,12 +22,15 @@ struct V2CandidateDraftEditor: View {
         _selectedIDs = selectedIDs
         _editedIDs = editedIDs
         let values = candidates.map { WordNoteV2CandidateEdit($0, recordRevision: record.revision) }
-        _values = State(initialValue: WordNoteEditDraft(values))
+        _values = State(initialValue: WordNoteEditDraft(values, revision: record.revision))
     }
 
     private var current: [WordNoteV2CandidateEdit] { candidates.map { WordNoteV2CandidateEdit($0, recordRevision: record.revision) } }
     private var changed: [WordNoteV2CandidateEdit] { drafts.filter { edit in original.first(where: { $0.id == edit.id }) != edit } }
     private var isDirty: Bool { drafts != original }
+    private var hasConflict: Bool {
+        Dictionary(uniqueKeysWithValues: original.map { ($0.id, $0) }) != Dictionary(uniqueKeysWithValues: current.map { ($0.id, $0) })
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -46,8 +49,11 @@ struct V2CandidateDraftEditor: View {
                         do { try capturedSave() } catch { errorMessage = error.localizedDescription }
                     }
                 }
-                if original != current {
-                    StatusBanner(message: "This record changed in another operation. Your draft has not been overwritten.", kind: .warning)
+                if hasConflict {
+                    DraftConflictView(draft: values, fields: WordNoteV2CandidateEdit.comparisonFields(for: original), loadCurrent: {
+                        try WordNoteV2ContentService(container: context.container)
+                            .candidateDraftVersion(original.map(\.id), sourceRecordID: record.id)
+                    }, onApplied: { errorMessage = nil; editedIDs = Set(changed.map(\.id)) })
                 }
             }
             if let errorMessage { StatusBanner(message: errorMessage, kind: .warning) }
@@ -73,6 +79,7 @@ struct V2CandidateDraftEditor: View {
     private func reload() {
         drafts = current
         original = current
+        values.revision = record.revision
         errorMessage = nil
         editedIDs = []
     }
