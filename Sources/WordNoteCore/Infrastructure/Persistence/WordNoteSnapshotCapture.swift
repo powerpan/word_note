@@ -74,6 +74,19 @@ public struct WordNoteSnapshotCapture {
         throw WordNoteSnapshotCaptureError.dataKeptChanging
     }
 
+    static func captureForIntegrityInspection(
+        container: ModelContainer, preferences: WordNoteSnapshotPayload.Preferences
+    ) async throws -> WordNoteSnapshotV2Payload {
+        guard container.schema.version == WordNoteSchemaV2.versionIdentifier else { throw WordNoteSnapshotError.unsupportedSchema }
+        let reader = WordNoteSnapshotCapture(versionedContainer: container) { container, preferences in
+            try await readVersionedOnBackgroundExecutor(container: container, preferences: preferences, integrityInspection: true)
+        }
+        guard case .v2(let payload) = try await reader.captureVersioned(preferences: preferences, requireCleanContext: true) else {
+            throw WordNoteSnapshotError.unsupportedSchema
+        }
+        return payload
+    }
+
     nonisolated static func readOnBackgroundExecutor(
         container: ModelContainer, preferences: WordNoteSnapshotPayload.Preferences
     ) async throws -> WordNoteSnapshotPayload {
@@ -85,14 +98,20 @@ public struct WordNoteSnapshotCapture {
     }
 
     nonisolated static func readVersionedOnBackgroundExecutor(
-        container: ModelContainer, preferences: WordNoteSnapshotPayload.Preferences
+        container: ModelContainer, preferences: WordNoteSnapshotPayload.Preferences, integrityInspection: Bool = false
     ) async throws -> WordNoteVersionedPayload {
         let task = Task.detached(priority: .utility) {
             try Task.checkCancellation()
             return try autoreleasepool {
                 let context = ModelContext(container)
                 context.autosaveEnabled = false
-                let payload = try WordNoteVersionedPayload.capture(from: context, preferences: preferences)
+                let payload: WordNoteVersionedPayload
+                if integrityInspection {
+                    guard container.schema.version == WordNoteSchemaV2.versionIdentifier else { throw WordNoteSnapshotError.unsupportedSchema }
+                    payload = .v2(try WordNoteSnapshotV2Payload.captureForIntegrityInspection(from: context, preferences: preferences))
+                } else {
+                    payload = try WordNoteVersionedPayload.capture(from: context, preferences: preferences)
+                }
                 try Task.checkCancellation()
                 return payload
             }

@@ -67,6 +67,7 @@ public final class WordNoteDataProtection {
         switch session.restoreOutcome {
         case .restored: statusMessage = "Backup restored. The previous data store was retained."
         case .migrated: statusMessage = "Data upgrade completed. The previous data store and backup were retained."
+        case .repaired: statusMessage = "Data repair completed. The original data store and repair evidence were retained."
         case .rolledBack: errorMessage = "Restore did not complete. The previous data store is still active."
         case .none: break
         }

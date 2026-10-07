@@ -24,7 +24,7 @@
 
 | 類別 | 覆蓋 |
 |---|---|
-| 完整遷移 | 凍結 V1 真實 fixture 副本、空庫；完整值/關係一致，原檔 bytes 保留，再開不重複備份/回填 |
+| 完整遷移 | 凍結 V1 真實 fixture 副本、空庫；完整值/關係一致，fixture bytes 不變、原庫內容保留，再開不重複備份/回填 |
 | 保護快照 | ENOSPC、目錄寫入失敗、快照寫後被替換；無已驗證相同來源的 beforeMigration 不得 staging |
 | 共用切庫 | staging/activate/commit 故障、prepared 跨啟動完成、activating 中斷回退、後續不自動重試 |
 | 並發取消 | reentrant 拒絕、后台取消、所有源 context 受屏障限制、不能覆寫或撤銷競爭 restore |
@@ -60,3 +60,5 @@ swift build --product WordNote -Xswiftc -strict-concurrency=complete \
 此次 Computer Use 以 QA bundle ID 能讀取 Word Note QA 主窗口可訪問性樹，內容是隔離樣本；截圖返回不可驗收的小型背景縮圖，Raise 未改善，點擊 Settings 後回報 `Sky Computer Use native pipe closed before response`。正式 Word Note 不在當次應用清單。沒有因此標記 UI 通過，也沒有推斷目前鎖屏；現有 QA binary 不是本批新啟動協調器的端到端測試。
 
 A02 尚需受保護的完整性修復套用、V2 App 讀寫/queue/Settings 接入；A01/G00/A03 實機閘門保留。此協調器不自行清理無法正常備份的壞庫，不以純核心測試代替 UI 和原生窗口驗收。不合併 main、不分發；README、產品介紹截圖與全倉敏感資訊審核仍在 C06 後置執行。
+
+後續：[受保護啟動修復](2026-10-08-a02-startup-repair.md) 已補原始證據文件、修復 preview/confirm 及共用切庫。上述測試數字是此遷移批次的歷史結果，正式 App 接入仍待完成。

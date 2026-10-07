@@ -467,9 +467,11 @@ V2 邏輯快照沿用 formatVersion 1 的 checksum envelope，sourceSchemaVersio
 
 version 2 日誌的 pending.operation 區分 restore/migration，缺值兼容既有 restore；recoveryRequired 在失敗或 activating 中斷後保留。已寫入遷移意圖的失敗不因重啟自動重試，必須顯式 retryMigration；未完成遷移不能直接恢復分析。取消只匹配本次 pending generation，不撤銷競爭操作。原容器保留的 context 仍被屏障阻擋，不能在新庫 ready 後繼續寫舊庫。成功切換清除 recovery 標記，有未完成分析時仍需明確恢復；已有 V2 的 restore 失敗可明確恢復原庫分析。見 [啟動遷移證據](qa/2026-10-08-a02-startup-migration.md)。
 
-上述只在隔離核心使用；修復方案套用及 V2 App coordinator/worker 接入尚未完成。V2 中 queued/running/failed 工作恢复後持久標記待顯式恢復，底層不發送網絡請求，不能把隔離啟動通過當正式啟用或端到端隊列驗收。
+上述只在隔離核心使用；V2 App coordinator/worker 接入尚未完成。V2 中 queued/running/failed 工作恢复後持久標記待顯式恢復，底層不發送網絡請求，不能把隔離啟動通過當正式啟用或端到端隊列驗收。
 
-`WordNoteV2IntegrityService` 提供值層檢查及修復預覽：涵蓋全部八實體、四份元資料、業務唯一鍵、來源對應與候選狀態。唯一自動提出的修復是解除指向已不存在記錄的 Term.sourceRecordID、Occurrence.sourceRecordID、LookupEvent.occurrenceID；缺課程、缺詞、孤立內容、跨 capture 關聯及重複關係均要求人工處理。修復方案保留完整來源值，stage 前比較最新資料與偏好，變動即拒絕舊方案。只產生新 payload、更新受影響 Term.revision，不寫原庫；正式使用仍需接入共用 staged store/日誌，不能另建一套修復切庫流程。見 [完整性與啟動防護證據](qa/2026-10-08-a02-integrity.md)。
+`WordNoteV2IntegrityService` 提供值層檢查及修復預覽：涵蓋全部八實體、四份元資料、業務唯一鍵、來源對應與候選狀態。唯一自動提出的修復是解除指向已不存在記錄的 Term.sourceRecordID、Occurrence.sourceRecordID、LookupEvent.occurrenceID；缺課程、缺詞、孤立內容、跨 capture 關聯及重複關係均要求人工處理。修復方案保留完整來源值，stage 前後比較最新資料與偏好，變動即拒絕舊方案。只產生新 payload、更新受影響 Term.revision，不寫原庫。見 [完整性與啟動防護證據](qa/2026-10-08-a02-integrity.md)。
+
+隔離啟動協調器現提供 inspectRepair/repair 兩個分開的入口，open 失敗不代表同意修復。前者只讀、後者消耗當前預覽，持有原庫屏障並寫 recoveryRequired=repair，再將非法關係仍完整保留的 DTO 存入 `WordNoteRepairEvidenceVault`。這是帶獨立 purpose/version、原 generation、八類 counts 和 checksum 的證據文件，不是放寬驗證的備份；普通 snapshot reader 一律拒絕。保存及重讀比對後，合法的修復結果交給同一后台 staging/切庫日誌，pending.operation=repair，sourceSnapshotID/protectionSnapshotID 都指向證據 ID；原庫不動。已有 prepared 可跨啟動完成，activating 中斷則退回原庫、保留修復標記，不自動再做一次。修復標記下恢復分析必須先重新完整校驗當前庫，允許已完成人工修正的原庫在明確確認後解除暫停。見 [受保護修復證據](qa/2026-10-08-a02-startup-repair.md)。此入口仍只用於建立 UI/worker 前的隔離啟動，正式恢復界面未接入。
 
 ### 窗口與性能
 
