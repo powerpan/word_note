@@ -236,31 +236,14 @@ private struct FloatingExplanationResultsView: View {
     let explanation: AIExplanationPreview
     @Binding var contentHeight: CGFloat
 
-    private var chineseCandidates: [AIExplanationCandidatePreview] {
-        explanation.candidates.filter { $0.chineseMeaning != nil }
-    }
-
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 9) {
-                if let sentenceMeaning = explanation.sentenceMeaning {
-                    explanationRow(source: explanation.rawText, meaning: sentenceMeaning)
-                }
-
-                ForEach(chineseCandidates) { candidate in
-                    if let chineseMeaning = candidate.chineseMeaning {
-                        explanationRow(
-                            source: candidateSourceText(for: candidate),
-                            meaning: chineseMeaning
-                        )
-                    }
-                }
-
-                if explanation.sentenceMeaning == nil, chineseCandidates.isEmpty {
+                ForEach(explanation.floatingRows) { row in
                     explanationRow(
-                        source: explanation.rawText,
-                        meaning: "這次分析沒有返回可顯示的中文釋義。",
-                        isMuted: true
+                        source: row.source,
+                        meaning: row.meaning,
+                        isMuted: row.isMuted
                     )
                 }
             }
@@ -270,13 +253,6 @@ private struct FloatingExplanationResultsView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .tint(WordNoteTheme.brand)
-    }
-
-    private func candidateSourceText(for candidate: AIExplanationCandidatePreview) -> String {
-        if explanation.sentenceMeaning == nil, chineseCandidates.count == 1 {
-            return explanation.rawText
-        }
-        return candidate.term
     }
 
     private func explanationRow(source: String, meaning: String, isMuted: Bool = false) -> some View {

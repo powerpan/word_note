@@ -5,6 +5,22 @@ MODE="${1:-run}"
 APP_NAME="WordNote"
 BUNDLE_ID="com.powerpan.WordNote"
 MIN_SYSTEM_VERSION="14.0"
+FIXTURE="${2:-populated}"
+APPEARANCE="${3:-light}"
+
+case "$MODE" in
+  run|--debug|debug|--logs|logs|--telemetry|telemetry|--verify|verify) ;;
+  --ui-fixture)
+    [[ "$FIXTURE" == "empty" || "$FIXTURE" == "populated" ]] || { echo "Invalid fixture" >&2; exit 2; }
+    [[ "$APPEARANCE" == "light" || "$APPEARANCE" == "dark" ]] || { echo "Invalid appearance" >&2; exit 2; }
+    APP_NAME="WordNoteQA"
+    BUNDLE_ID="com.powerpan.WordNote.UITest"
+    ;;
+  *)
+    echo "usage: $0 [run|--debug|--logs|--telemetry|--verify|--ui-fixture [empty|populated] [light|dark]]" >&2
+    exit 2
+    ;;
+esac
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIST_DIR="$ROOT_DIR/dist"
@@ -31,7 +47,7 @@ if [[ ! -f "$APP_ICON_SOURCE"
 fi
 
 swift build
-BUILD_BINARY="$(swift build --show-bin-path)/$APP_NAME"
+BUILD_BINARY="$(swift build --show-bin-path)/WordNote"
 
 rm -rf "$APP_BUNDLE"
 mkdir -p "$APP_MACOS" "$APP_RESOURCES"
@@ -85,6 +101,9 @@ case "$MODE" in
     open_app
     sleep 1
     pgrep -x "$APP_NAME" >/dev/null
+    ;;
+  --ui-fixture)
+    /usr/bin/open -n "$APP_BUNDLE" --args --ui-fixture "$FIXTURE" --ui-appearance "$APPEARANCE"
     ;;
   *)
     echo "usage: $0 [run|--debug|--logs|--telemetry|--verify]" >&2

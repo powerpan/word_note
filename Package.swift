@@ -24,7 +24,8 @@ let package = Package(
         .testTarget(
             name: "WordNoteCoreTests",
             dependencies: ["WordNoteCore"],
-            path: "Tests/WordNoteCoreTests"
+            path: "Tests/WordNoteCoreTests",
+            resources: [.copy("Fixtures")]
         )
     ],
     swiftLanguageVersions: [.v5]

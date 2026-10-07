@@ -20,7 +20,7 @@ public enum VocabularyServiceError: LocalizedError, Equatable {
         case .candidateSourceMismatch(let term):
             return "'\(term)' does not belong to this input record."
         case .englishTermRequired(let term):
-            return "'\(term)' must be an English term for a Chinese-to-English lookup."
+            return "'\(term)' must be an English word or expression. Keep Chinese text in the meaning or context."
         case .chineseMeaningRequired(let term):
             return "'\(term)' needs a Chinese meaning for a Chinese-to-English lookup."
         }
@@ -116,10 +116,7 @@ public struct VocabularyService {
                 guard candidate.inputRecordID == confirmation.sourceRecord.id else {
                     throw VocabularyServiceError.candidateSourceMismatch(candidate.term)
                 }
-                try validateVocabularySubject(
-                    candidate.term,
-                    sourceRecord: confirmation.sourceRecord
-                )
+                try validateVocabularySubject(candidate.term)
                 try validateChineseMeaningIfNeeded(
                     candidate.chineseMeaning,
                     term: candidate.term,
@@ -194,7 +191,7 @@ public struct VocabularyService {
         guard !TextNormalizer.isBlank(trimmedTerm) else {
             throw InputRecordValidationError.blankRawText
         }
-        try validateVocabularySubject(trimmedTerm, sourceRecord: sourceRecord)
+        try validateVocabularySubject(trimmedTerm)
         try validateChineseMeaningIfNeeded(
             chineseMeaning,
             term: trimmedTerm,
@@ -266,6 +263,7 @@ public struct VocabularyService {
         guard !TextNormalizer.isBlank(trimmedTerm) else {
             throw InputRecordValidationError.blankRawText
         }
+        try validateVocabularySubject(trimmedTerm)
 
         let hasDefinition = !TextNormalizer.isBlank(chineseMeaning ?? "") ||
             !TextNormalizer.isBlank(englishDefinition ?? "")
@@ -335,13 +333,7 @@ public struct VocabularyService {
         return trimmed?.isEmpty == true ? nil : trimmed
     }
 
-    private func validateVocabularySubject(
-        _ term: String,
-        sourceRecord: InputRecordModel
-    ) throws {
-        guard LookupDirectionDetector.detect(sourceRecord.rawText) == .chineseToEnglish else {
-            return
-        }
+    private func validateVocabularySubject(_ term: String) throws {
         guard LookupDirectionDetector.isEnglishVocabularyTerm(term) else {
             throw VocabularyServiceError.englishTermRequired(term)
         }

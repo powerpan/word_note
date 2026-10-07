@@ -195,6 +195,13 @@ private struct CandidateEditorRow: View {
                 .frame(width: 150)
             }
 
+            if !TextNormalizer.isBlank(candidate.term),
+               !LookupDirectionDetector.isEnglishVocabularyTerm(candidate.term) {
+                Label("Use an English term; keep Chinese text in the meaning.", systemImage: "exclamationmark.circle")
+                    .font(.caption)
+                    .foregroundStyle(WordNoteTheme.amber)
+            }
+
             Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
                 GridRow {
                     Text("Chinese")

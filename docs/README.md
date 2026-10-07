@@ -12,6 +12,16 @@ Word Note 是一個面向 AI / CS 英文授課場景的 macOS 個人詞彙與術
 
 中文查英文只把中文原文視為查詢上下文；正式 `Term.term` 必須保持英文，中文解釋保存在 `Term.chineseMeaning`。這是跨 AI、Inbox、Vocabulary 和 Review 的資料契約。
 
+## 下一階段計劃
+
+2026-10-07 已補充 [13-supplemental-development-plan.md](13-supplemental-development-plan.md)，以 `56b7c1a` 為代碼基線，拆成基線核驗及 A/B/C 三輪、共 21 個任務。用戶已授權持續實施及里程碑推送，目前從 G00 基線核驗開始；精確狀態以總表為準，此前的測試結果不等於本輪已驗收。
+
+先讀 [領域術語](../CONTEXT.md) 和計劃總綱，再按任務閱讀專題文檔末尾的「2026-10 補充契約」。歷史章節保留已交付版本的需求與行為；新契約只在相應任務完成後生效。新舊反饋語義、排程和資料模型不可混用。
+
+第一批是 WN2-G00 基線、WN2-A01 備份恢復與 WN2-A03 浮窗修復。本輪不做 App 分發、雲同步或直接更換復習算法。
+
+README 項目簡介、新版界面截圖與倉庫敏感資訊檢查已列入 WN2-C06，均為待執行的後置收尾項：代碼修改及測試完成後再做。
+
 ## 文檔目錄
 
 | 文件 | 用途 |
@@ -28,6 +38,8 @@ Word Note 是一個面向 AI / CS 英文授課場景的 macOS 個人詞彙與術
 | [10-implementation-plan.md](10-implementation-plan.md) | 開發階段、任務拆分、交付順序和里程碑 |
 | [11-engineering-decisions.md](11-engineering-decisions.md) | 已確定的工程決策與後續 ADR 記錄 |
 | [12-tencent-cloud-server-access.md](12-tencent-cloud-server-access.md) | 騰訊雲服務器的項目內 SSH 登入方法與憑據約束 |
+| [13-supplemental-development-plan.md](13-supplemental-development-plan.md) | 下一階段任務、依賴、交付順序、風險、驗收與追蹤表 |
+| [CONTEXT.md](../CONTEXT.md) | 詞條、義項、來源、查詢、卡片與復習事件的統一術語 |
 
 ## 開發原則
 

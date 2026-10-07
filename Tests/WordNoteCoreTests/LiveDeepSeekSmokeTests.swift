@@ -9,9 +9,11 @@ final class LiveDeepSeekSmokeTests: XCTestCase {
 
         guard let apiKey = DeepSeekAPIKeyResolver.resolve(), !TextNormalizer.isBlank(apiKey)
         else {
-            throw XCTSkip("Configure DEEPSEEK_API_KEY to run the live DeepSeek smoke test.")
+            XCTFail("Live testing was requested but no DeepSeek API key is configured.")
+            return
         }
 
+        let startedAt = ContinuousClock.now
         let service = AIAnalysisService(client: DeepSeekChatClient(apiKey: apiKey))
         let result = try await service.analyze(
             AIAnalysisRequest(rawText: "latent representation", sourceType: .paper)
@@ -44,5 +46,6 @@ final class LiveDeepSeekSmokeTests: XCTestCase {
             },
             "Expected an overfitting candidate, got \(chineseLookupResult.candidates.map(\.term))"
         )
+        print("Live DeepSeek: models=\(result.model),\(chineseLookupResult.model); requests=2; elapsed=\(ContinuousClock.now - startedAt)")
     }
 }

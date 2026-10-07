@@ -8,7 +8,9 @@ struct SettingsView: View {
     @State private var keyStatusMessage: String?
     @State private var keyErrorMessage: String?
 
-    private let environmentFileStore = DeepSeekEnvironmentFileStore()
+    private let environmentFileStore = DeepSeekEnvironmentFileStore(
+        fileURL: AppRuntime.isUITest ? AppRuntime.fixtureCredentialURL : DeepSeekAPIKeyResolver.defaultEnvironmentFileURL
+    )
 
     private var appearanceSelection: Binding<AppAppearancePreference> {
         Binding(
@@ -108,7 +110,7 @@ struct SettingsView: View {
 
         if environmentFileStore.load() != nil {
             keyStatusMessage = "DeepSeek key is saved in the environment file."
-        } else if DeepSeekAPIKeyResolver.resolve() != nil {
+        } else if !AppRuntime.isUITest, DeepSeekAPIKeyResolver.resolve() != nil {
             keyStatusMessage = "Using DEEPSEEK_API_KEY from the process environment."
         } else {
             keyStatusMessage = nil

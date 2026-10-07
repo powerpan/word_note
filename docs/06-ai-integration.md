@@ -1,5 +1,7 @@
 # 06. AI Integration
 
+版本說明：原有 schema/prompt 為当前基線；文末「2026-10 補充契約」定義 B02 的方向持久化與 C02 的 analysis schema v2，尚未上線。資料 schema 與 AI schema 是不同版本體系。
+
 ## 目標
 
 AI 集成的目標是把用戶輸入的英文內容，或中文查英文意圖，轉換成可確認、可編輯、可保存的英文候選詞條。AI 不直接決定最終詞庫內容。
@@ -308,3 +310,105 @@ Expected:
 - sentence_meaning 非空。
 - items 包含 latent representation。
 - 不包含 the、a、of。
+
+## 2026-10 補充契約
+
+### 方向和輸入邊界（A03、B02）
+
+請求新增 lookupIntent（auto/englishToChinese/chineseToEnglish）、已解析 lookupDirection、detectorVersion、analysisGeneration。方向提交時解析並落庫；重試使用凍結值。用戶改方向屬顯式重新分析，增加 generation、保留已保存候選，不能把正在執行的請求悄悄改向。
+
+自動識別不宣稱能準確理解所有中英混合內容；主/浮窗提供手動覆寫。中文查英文仍產出英文 term；整句英文答案獨立於候選。只查中文含義時不做中文子串匹配後自動認定為某個既有英文，避免一個中文概念錯配多個英文。候選英文確認時才走 A05 的精確關聯。
+
+AI 請求只包含當次原文、必要的課程/備註和用戶選定內容。文字、來源 URL 和例句均是資料，不能當作系統指令；不因輸入含 URL 自動訪問網頁或外部服務。字符/請求大小沿用明確限制，超限先本地提示，不暗中截斷。
+
+### Analysis Schema v2（C01、C02）
+
+仍使用 input_type、sentence_meaning、items 外層，增加顯式版本、方向及義項陣列。以下只是結構示例，不限定每詞只能有一個義項：
+
+```json
+{
+  "analysis_schema_version": 2,
+  "lookup_direction": "englishToChinese",
+  "input_type": "word",
+  "sentence_meaning": null,
+  "items": [
+    {
+      "term": "pixel",
+      "term_type": "word",
+      "need_to_learn": true,
+      "importance": "medium",
+      "category": "CV",
+      "reason": "An image representation term.",
+      "should_auto_select": true,
+      "context_sense_key": null,
+      "senses": [
+        {
+          "sense_key": "s1",
+          "kind": "technical",
+          "part_of_speech": "noun",
+          "chinese_meaning": "像素，數碼影像中可獨立表示顏色或亮度的圖像單元。",
+          "english_definition": "A picture element in a digital image.",
+          "example_sentence": "Each pixel stores color information.",
+          "collocations": ["pixel value", "pixel density"]
+        }
+      ]
+    }
+  ]
+}
+```
+
+義項契約：
+
+- 覆蓋真正常用本義；有詞性差異或不同常用意思時分項，不限定一兩項，不為湊數拆同一意思。
+- kind=general 或 technical；legacy 只由本地遷移產生，模型不可產出。天生專業詞可只含 technical，不虛構普通義。
+- AI/CS 義與普通義實質不同才新增，不能每個詞都以「在 AI 語境中」開頭。上下文對某義的應用不必另造一義。
+- 每義 chinese_meaning 非空；英文定義、詞性、例句可空，不知道不編造；搭配陣列可空。原句與模型例句不得混作同一字段。
+- sense_key 只在單次 item 內唯一，context_sense_key 必須指向該 item 的有效 key；本地保存時分配正式 UUID。
+- 有可靠英文原句才選 context_sense_key；查單個詞、中文意圖不明或多義皆可時保留 null，不能假裝語境已知。
+- term 必須含英文字母且無漢字，允许專業符號；各寫入路徑重复校驗，不能以 should_auto_select 代替人工確認。
+- request 與 response direction 不符、缺必要字段、非法枚舉、重複 key、引用不存在或超出資源限制時整個結果失敗，不把局部殘缺響應當成功。
+- 不用小固定義項數限制語義。仍設總字節/解析深度安全上限；輸出被 token 限制截斷時明示不完整、保留原輸入並允許用戶重試，不靜默省略含義。
+
+舊 schema v1 只由版本化解析器/快照適配器處理，不能把 v1 任意字串按分號猜成 v2。資料 V4 可以先閱讀 legacy 義項，再逐步啟用 v2；持久化遷移本身不調用 AI。
+
+### 重新生成與人工修訂（C02）
+
+1. 用戶明確選擇詞條/義項與重新生成的字段，展示將發送的範圍。
+2. 請求使用當時 baseRevision；結果保存為 proposed ContentRevision，不直接寫正式內容。
+3. 差異界面區分保留、增加、修改、刪除建議。人工字段預設保留，補空字段也需接受；不可把每個同義表述都新增成義項。
+4. 預覽期間正式內容變動時重新比較，不把 stale proposal 覆寫過去。
+5. 接受後原子更新內容、兼容摘要和修訂狀態；拒絕/取消/超時不改正式字段。不自動改 mastery、卡片啟用或排程。
+
+每個生成記錄 model ID、promptVersion、analysisSchemaVersion、生成時間與來源類型。模型自報 confidence 不顯示成「準確率」，也不作繞過人工確認的閘門。
+
+### 固定品質評測（C02）
+
+建立可提交的去私人化 fixture 與人工審定期望，每組可包含多個合理答案；不能只用當前模型輸出當標準答案，也不能以完全相同措辭判分。
+
+| 分組 | 數量 | 核心檢查 |
+|---|---:|---|
+| 常見多義詞 | 10 | 如 stage、class、state、issue；本義覆蓋而非只說技術義 |
+| 主要單義詞 | 8 | 無實質多義時不硬湊，不為每詞附加 AI 段落 |
+| 專業義與普通義 | 8 | 如 attention、token、regularization；技術區分正確 |
+| 短語與自然表達 | 8 | 如 all sorts of、in terms of；不機械拆詞 |
+| 中文查英文 | 8 | 單詞、短語、一對多；英文主體與自然表達 |
+| 中英混合與歧義 | 8 | 自動方向、手動覆寫、未知語境保留不確定 |
+| 句子/段落 | 10 | 整句含義、上下文命中義項、不提取大量功能詞 |
+| 合計 | 60 | 固定 ID、來源說明、期望常用義與不可接受項 |
+
+分兩個閘門：
+
+1. 硬性契約：全部固定 mock 用例的 schema、英文主體、方向、冪等與人工內容保護 100% 通過；live 有任一中文主體或污染人工內容即阻塞切換。
+2. 語義品質：每例按常用義覆蓋、正確性、專業義必要性、自然英文、上下文忠實度五項評 0/1/2（不適用項標 N/A）；正確性及常用義適用時必須 2，其餘適用項至少 1，才算該例通過。至少 54/60 通過，每組不低於 80%；相同固定樣本相比基線，核心錯義/漏常用義的修正比例不得增加。
+
+來源答案由可信詞典/課程上下文核對並記錄來源，不大量複製受版權保護的釋義。主觀項至少一輪盲評，爭議標出後人工裁決；不把单次模型偏好評分當成客觀勝出。60 例只能用作回歸和小樣本對照，不能宣稱覆蓋所有單詞或確定優於基線。
+
+在同一模型和生成參數下先比較 prompt/schema；評估換模型再固定同一題集與流程。記錄測試日期、實际模型、配置、失敗數、p50/p95 延遲、可用 token usage 與人工修正量。服務未提供用量時記 unavailable，不猜價格或費用。
+
+日常測試全部 mock。付費 smoke 維持 `RUN_LIVE_DEEPSEEK_TESTS=1` 顯式閘門；60 例批評測另需明確樣本範圍、請求/金額預算和 opt-in，不能因機器已有 key 自動跑。未達標保留舊模型/prompt 為預設，修訂後重跑；不批量更新用戶現有詞庫。
+
+### 按需練習與連接測試（B08、C04）
+
+連接測試是用戶觸發的獨立小請求，明示會發送網絡請求；不夾帶私人詞庫，返回實際模型、時間及可理解的錯誤類型，不顯示鑰匙。配置變更後舊「成功」標為歷史結果，不能冒充新配置已驗證。
+
+近義辨析、自然表達及單題填空/造句只發選定內容，生成結果清楚標 AI 建議。不完整答案或多種合理表達交由用戶判斷，模型不自動累加錯題。取消、失敗及忽略不改正式詞庫或排程。離線時既有詞庫、確定性填空與普通復習繼續可用。

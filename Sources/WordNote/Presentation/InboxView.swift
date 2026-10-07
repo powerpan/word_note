@@ -341,14 +341,8 @@ struct InboxView: View {
             let service = InputRecordService(modelContext: modelContext)
 
             do {
-                guard let apiKey = DeepSeekAPIKeyResolver.resolve() else {
-                    try service.markFailed(record, summary: AIAnalysisError.missingAPIKey.localizedDescription)
-                    throw AIAnalysisError.missingAPIKey
-                }
-
                 try service.markAnalyzing(record)
-                let analysisService = AIAnalysisService(client: DeepSeekChatClient(apiKey: apiKey))
-                let result = try await analysisService.analyze(
+                let result = try await AppRuntime.analyze(
                     AIAnalysisRequest(
                         rawText: record.rawText,
                         courseName: courseName(for: record.courseID),

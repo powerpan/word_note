@@ -1,5 +1,7 @@
 # 04. Technical Architecture
 
+版本說明：原章節描述目前架構；文末「2026-10 補充契約」是 [補充計劃](13-supplemental-development-plan.md) 的目標邊界，新增類型名為設計名稱而非已存在 API。
+
 ## 技術目標
 
 首版架構應滿足：
@@ -381,3 +383,61 @@ P1 可從 VocabularyService 和 CourseService 導出 JSON/CSV，不應直接讀 
 ### Sync
 
 P2 若做 iCloud，需要先制定資料衝突策略，不能直接把本地模型簡單同步。
+
+## 2026-10 補充契約
+
+### 服務責任與分層
+
+延續 WordNoteCore 與 Presentation 分離，不在這輪更換持久化框架、引入服務端或建立通用插件平台。只在現有服務責任內增加必要協調。
+
+| 邊界 | 責任 | 禁止承擔 |
+|---|---|---|
+| CaptureCoordinator / 現有 QuickAddAnalysisQueue | 凍結捕獲上下文、保存、精確命中、排隊、恢復/取消/退避；所有入口共用 | 自動確認候選、讀取任意 App 內容 |
+| ConfirmationPlanner | 純只讀預檢、重複分類、計數和字段差異 | 提前修改正式模型 |
+| VocabularyService | 按預覽 revision 原子確認、關聯、來源/課程寫入，產生 undo receipt | 直接把 AI 原始字串當正式資料 |
+| ReviewScheduler | 時間、卡片狀態、反饋 -> 排程結果與按鈕預覽的純函數 | 自行寫資料、調用 AI、讀取系統時鐘全局狀態 |
+| ReviewSessionService | 有限隊列、窗口寫入租約、actionID 冪等、事件和卡片同交易保存 | 用頁面生命週期重置會話 |
+| BackupService / RestoreCoordinator | 版本化 DTO 快照、校驗、輪替、恢復日誌、啟動前切庫 | 複製正在寫入的 SQLite 三件套作日常備份 |
+| AIAnalysisService / RevisionProposal | 帶方向的 schema 解析、候選與建議修訂 | 默認覆寫人工內容或改復習排程 |
+| Presentation draft / read model | 未保存編輯、路由、焦點、穩定列表與結果高度 | 跨實體交易、推測錯題數 |
+
+以上可以作為既有服務中的值類型或小型協調器實現；不要求每列都新建大型抽象。依據見 [SwiftData SchemaMigrationPlan](https://developer.apple.com/documentation/swiftdata/schemamigrationplan)：框架提供 schema/stage 契約，但本項目仍須自行驗證歷史資料遷移，不把聲明版本視為遷移已安全。
+
+### 資料流與寫入協調
+
+```text
+主窗口 / 浮窗 / Inbox Retry
+  -> capture context + operationID
+  -> 本地精確查詢
+     -> 命中: occurrence + lookup signal -> 已有釋義
+     -> 未命中: InputRecord -> 共用 queue -> candidate
+  -> read-only confirmation plan
+  -> revision check + atomic save
+  -> Term + links + occurrences + savedTermID
+```
+
+採單一應用級寫入協調器串行化有關聯的交易；不傳遞可變 SwiftData model 穿越不匹配的 actor/context。後台網絡返回 DTO，回到協調器前再次校驗 recordID、analysisGeneration、revision 和 storeGeneration。已取消/刪除/恢復前的回調不能寫進新庫。
+
+持久化 InputRecord 繼續是待分析工作的來源，補充 queued/running/failed/cancelled 的任務狀態與 attemptID，不引入第二份不一致的任務資料庫。失敗有分類：離線、超時、限流、格式、憑據、保存。預設單 worker；可重試的網絡失敗最多自動重試 2 次，遵守 Retry-After 並採有上限退避，格式/鑰匙错误不自動反覆消費。退避上限 60 秒，超過的 Retry-After 保留為下次可手動重試時間，不提前再發。使用者主動重試是新 attempt，不改捕獲上下文。
+
+真正取消 queued 項恢復草稿可再排隊；取消 running 項嘗試終止 URLSession 並阻止舊結果落庫，但不宣稱服務端未執行或不計費。重新分析已完成/部分確認記錄時必須保護 savedTermID，舊候選不在網絡返回前被銷毀。
+
+### 原子性與撤銷
+
+- 確認交易同時寫 Term、候選狀態、savedTermID、課程和 occurrence；任何驗證/保存失敗回到原狀。
+- review 交易同時保存 ReviewEvent、ReviewCard、ReviewSessionItem 和會話游標，actionID 唯一；已完成 action 重試返回既有結果。
+- revision 是整數版本，不用時間戳替代。計劃/編輯快照攜帶 expectedRevision，失配要求重新讀取並處理衝突。
+- 編輯/確認撤銷只在本次 App 運行期提供，receipt 保存受影響 ID、前後 revision 和字段。撤銷前校驗未被後續編輯、正式復習或新來源引用；有衝突拒絕撤銷並說明，不級聯抹除新資料。
+- SwiftData autosave 不能使 UI 草稿提前進庫；表單用值副本，正式保存仍經服務預驗證和交易。
+
+### 備份、恢復與啟動
+
+備份在寫入屏障內取得一致、不可變的 DTO 快照，隨即放開正常讀寫，再原子寫文件；不可在序列化到一半繼續讀取正在變動的 model。恢復按照 [08](08-security-privacy.md) 的 staged store + 恢復日誌實施：先建隔離庫，受控退出後在 ModelContainer 建立前切換，成功後才解除寫入屏障。
+
+每次 schema 改變同時更新 migration、snapshot adapter、刪除/完整性檢查與測試 fixture；先凍結 V1 真實類型形狀，不能讓 V1 指向持續改動的最新類型。V2/V3/V4 的主要寫入切換點見 [05](05-data-model.md)。
+
+### 窗口與性能
+
+全局快捷鍵封裝在單一 AppKit 適配器，只接受已註冊組合鍵；先验证 macOS 14 的可用機制，不預先要求輔助功能或全鍵盤監聽。保持 SwiftUI 命令、菜單欄和浮窗路由一致。
+
+搜索 matcher、補全與精確去重仍分開；列表按穩定 ID 更新，不因篩選改變錯配選中項。性能先測現有查詢與生成資料，再決定索引/分頁/搜索快取；不能為預估大資料量先引入向量庫。時計、Calendar、網絡、store 路徑和偏好可注入，測試不用 sleep 等待真實 10 分鐘。
