@@ -27,7 +27,7 @@ final class WordNoteRestoreStoreTests: XCTestCase {
         let original = try originalPayload()
         let replacement = try replacementSnapshot()
         let protection = try await protectedBackup(original)
-        let generation = try store.prepareRestore(replacement, replacing: .legacy, protectedBy: protection)
+        let generation = try await store.prepareRestore(replacement, replacing: .legacy, protectedBy: protection)
         XCTAssertNotEqual(generation, .legacy)
         XCTAssertEqual(try payload(at: directory.appending(path: "WordNote.store")), original)
         let restored = try store.open()
@@ -50,14 +50,14 @@ final class WordNoteRestoreStoreTests: XCTestCase {
         reordered.terms.reverse()
         reordered.courses.reverse()
         let snapshot = try WordNoteSnapshotCodec.decode(WordNoteSnapshotCodec.encode(reordered, kind: .manual))
-        _ = try store.prepareRestore(snapshot, replacing: .legacy, protectedBy: await protectedBackup(original))
+        _ = try await store.prepareRestore(snapshot, replacing: .legacy, protectedBy: await protectedBackup(original))
         let restored = try store.open()
         XCTAssertEqual(try WordNoteSnapshotPayload.capture(from: restored.container.mainContext, preferences: reordered.preferences), reordered.canonicalized)
     }
 
     func testIncompleteAnalysesAndPreferencesRequireExplicitAcknowledgmentAcrossRestarts() async throws {
         let original = try originalPayload()
-        _ = try store.prepareRestore(replacementSnapshot(), replacing: .legacy, protectedBy: await protectedBackup(original))
+        _ = try await store.prepareRestore(replacementSnapshot(), replacing: .legacy, protectedBy: await protectedBackup(original))
         let restored = try store.open()
         XCTAssertTrue(restored.analysisRequiresResume)
         let restart = try store.open()
@@ -78,7 +78,7 @@ final class WordNoteRestoreStoreTests: XCTestCase {
         let originalSession = try store.open()
         XCTAssertEqual(try WordNoteSnapshotPayload.capture(from: originalSession.container.mainContext), original)
         XCTAssertFalse(FileManager.default.fileExists(atPath: journalURL.path))
-        _ = try store.prepareRestore(snapshot, replacing: .legacy, protectedBy: await protectedBackup(original))
+        _ = try await store.prepareRestore(snapshot, replacing: .legacy, protectedBy: await protectedBackup(original))
         try store.cancelPreparedRestore(replacing: .legacy)
         let reopened = try store.open()
         XCTAssertEqual(reopened.generation, .legacy)
@@ -90,12 +90,12 @@ final class WordNoteRestoreStoreTests: XCTestCase {
         let vault = WordNoteBackupVault(directoryURL: directory.appending(path: "Backups"))
         let manual = try await vault.create(original, kind: .manual)
         let snapshot = try replacementSnapshot()
-        XCTAssertThrowsError(try store.prepareRestore(snapshot, replacing: .legacy, protectedBy: manual.snapshot)) {
+        await assertThrowsAsync({ try await store.prepareRestore(snapshot, replacing: .legacy, protectedBy: manual.snapshot) }) {
             XCTAssertEqual($0 as? WordNoteRestoreError, .protectionRequired)
         }
         let protection = try await protectedBackup(original)
-        _ = try store.prepareRestore(snapshot, replacing: .legacy, protectedBy: protection)
-        XCTAssertThrowsError(try store.prepareRestore(snapshot, replacing: .legacy, protectedBy: protection)) {
+        _ = try await store.prepareRestore(snapshot, replacing: .legacy, protectedBy: protection)
+        await assertThrowsAsync({ try await store.prepareRestore(snapshot, replacing: .legacy, protectedBy: protection) }) {
             XCTAssertEqual($0 as? WordNoteRestoreError, .restoreAlreadyPending)
         }
     }
@@ -108,7 +108,7 @@ final class WordNoteRestoreStoreTests: XCTestCase {
             let failing = WordNoteRestoreStore(directoryURL: directory) { checkpoint in
                 if checkpoint == failure { throw POSIXError(.ENOSPC) }
             }
-            XCTAssertThrowsError(try failing.prepareRestore(snapshot, replacing: .legacy, protectedBy: protection))
+            await assertThrowsAsync { try await failing.prepareRestore(snapshot, replacing: .legacy, protectedBy: protection) }
             let reopened = try store.open()
             XCTAssertEqual(reopened.generation, .legacy)
             XCTAssertEqual(try WordNoteSnapshotPayload.capture(from: reopened.container.mainContext), original)
@@ -120,7 +120,7 @@ final class WordNoteRestoreStoreTests: XCTestCase {
         let snapshot = try replacementSnapshot()
         let protection = try await protectedBackup(original)
         for failure in [WordNoteRestoreStore.Checkpoint.activateJournal, .commitJournal] {
-            _ = try store.prepareRestore(snapshot, replacing: .legacy, protectedBy: protection)
+            _ = try await store.prepareRestore(snapshot, replacing: .legacy, protectedBy: protection)
             let failing = WordNoteRestoreStore(directoryURL: directory) { checkpoint in
                 if checkpoint == failure { throw POSIXError(.ENOSPC) }
             }
@@ -134,7 +134,7 @@ final class WordNoteRestoreStoreTests: XCTestCase {
 
     func testCrashDuringActivationReturnsToOldGenerationOnNextLaunch() async throws {
         let original = try originalPayload()
-        _ = try store.prepareRestore(replacementSnapshot(), replacing: .legacy, protectedBy: await protectedBackup(original))
+        _ = try await store.prepareRestore(replacementSnapshot(), replacing: .legacy, protectedBy: await protectedBackup(original))
         var journal = try journalObject()
         var pending = try XCTUnwrap(journal["pending"] as? [String: Any])
         pending["phase"] = "activating"
@@ -148,7 +148,7 @@ final class WordNoteRestoreStoreTests: XCTestCase {
 
     func testCorruptedStagedDataFailsChecksumAndKeepsOldStore() async throws {
         let original = try originalPayload()
-        let generation = try store.prepareRestore(replacementSnapshot(), replacing: .legacy, protectedBy: await protectedBackup(original))
+        let generation = try await store.prepareRestore(replacementSnapshot(), replacing: .legacy, protectedBy: await protectedBackup(original))
         let url = generationURL(try XCTUnwrap(generation.id))
         try autoreleasepool {
             let container = try container(at: url)
@@ -163,7 +163,7 @@ final class WordNoteRestoreStoreTests: XCTestCase {
 
     func testMissingStagedStoreNeverCreatesAnEmptyReplacement() async throws {
         let original = try originalPayload()
-        let generation = try store.prepareRestore(replacementSnapshot(), replacing: .legacy, protectedBy: await protectedBackup(original))
+        let generation = try await store.prepareRestore(replacementSnapshot(), replacing: .legacy, protectedBy: await protectedBackup(original))
         let url = generationURL(try XCTUnwrap(generation.id))
         try FileManager.default.removeItem(at: url.deletingLastPathComponent())
         let recovered = try store.open()
@@ -175,14 +175,14 @@ final class WordNoteRestoreStoreTests: XCTestCase {
     func testSecondRestoreRetainsPreviousGenerationAndRejectsStaleTokens() async throws {
         let original = try originalPayload()
         let firstSnapshot = try replacementSnapshot()
-        let firstGeneration = try store.prepareRestore(firstSnapshot, replacing: .legacy, protectedBy: await protectedBackup(original))
+        let firstGeneration = try await store.prepareRestore(firstSnapshot, replacing: .legacy, protectedBy: await protectedBackup(original))
         let first = try store.open()
         let firstPayload = try WordNoteSnapshotPayload.capture(from: first.container.mainContext, preferences: firstSnapshot.payload.preferences)
         let protection = try await protectedBackup(firstPayload)
-        XCTAssertThrowsError(try store.prepareRestore(firstSnapshot, replacing: .legacy, protectedBy: protection)) {
+        await assertThrowsAsync({ try await store.prepareRestore(firstSnapshot, replacing: .legacy, protectedBy: protection) }) {
             XCTAssertEqual($0 as? WordNoteRestoreError, .staleGeneration)
         }
-        let secondGeneration = try store.prepareRestore(firstSnapshot, replacing: firstGeneration, protectedBy: protection)
+        let secondGeneration = try await store.prepareRestore(firstSnapshot, replacing: firstGeneration, protectedBy: protection)
         XCTAssertNotEqual(secondGeneration, firstGeneration)
         XCTAssertEqual(try store.open().generation, secondGeneration)
         XCTAssertTrue(FileManager.default.fileExists(atPath: first.storeURL.path))
@@ -200,7 +200,7 @@ final class WordNoteRestoreStoreTests: XCTestCase {
 
     func testSymlinkedStagingDirectoryDoesNotOpenExternalStore() async throws {
         let original = try originalPayload()
-        let generation = try store.prepareRestore(replacementSnapshot(), replacing: .legacy, protectedBy: await protectedBackup(original))
+        let generation = try await store.prepareRestore(replacementSnapshot(), replacing: .legacy, protectedBy: await protectedBackup(original))
         let stagedDirectory = generationURL(try XCTUnwrap(generation.id)).deletingLastPathComponent()
         try FileManager.default.removeItem(at: stagedDirectory)
         try FileManager.default.createSymbolicLink(at: stagedDirectory, withDestinationURL: directory)
@@ -209,8 +209,85 @@ final class WordNoteRestoreStoreTests: XCTestCase {
         XCTAssertEqual(try WordNoteSnapshotPayload.capture(from: recovered.container.mainContext), original)
     }
 
+    func testBackgroundStagingAllowsMainActorWorkAndCancellationLeavesNoPendingRestore() async throws {
+        let original = try originalPayload()
+        let snapshot = try replacementSnapshot()
+        let protection = try await protectedBackup(original)
+        let checkpoint = BlockingRestoreCheckpoint()
+        let backgroundStore = WordNoteRestoreStore(directoryURL: directory) { step in
+            if step == .stagingSaved { try checkpoint.waitForRelease() }
+        }
+        let task = Task { try await backgroundStore.prepareRestore(snapshot, replacing: .legacy, protectedBy: protection) }
+        await waitForCheckpoint(checkpoint)
+        XCTAssertFalse(checkpoint.wasOnMainThread)
+        task.cancel()
+        checkpoint.release()
+        await assertThrowsAsync({ try await task.value }) { XCTAssertTrue($0 is CancellationError) }
+
+        XCTAssertFalse(try store.hasPreparedRestore(for: .legacy))
+        let reopened = try store.open()
+        XCTAssertEqual(reopened.generation, .legacy)
+        XCTAssertEqual(try WordNoteSnapshotPayload.capture(from: reopened.container.mainContext), original)
+    }
+
+    func testPreparationReloadsJournalAfterBackgroundWork() async throws {
+        let original = try originalPayload()
+        let snapshot = try replacementSnapshot()
+        let protection = try await protectedBackup(original)
+        let checkpoint = BlockingRestoreCheckpoint()
+        let backgroundStore = WordNoteRestoreStore(directoryURL: directory) { step in
+            if step == .stagingSaved { try checkpoint.waitForRelease() }
+        }
+        let task = Task { try await backgroundStore.prepareRestore(snapshot, replacing: .legacy, protectedBy: protection) }
+        await waitForCheckpoint(checkpoint)
+        try store.requireAnalysisPause(for: .legacy)
+        checkpoint.release()
+        _ = try await task.value
+        try store.cancelPreparedRestore(replacing: .legacy)
+
+        XCTAssertTrue(try store.open().analysisRequiresResume)
+    }
+
+    func testCompetingPreparedRestoreIsNotOverwrittenAfterBackgroundWork() async throws {
+        let original = try originalPayload()
+        let snapshot = try replacementSnapshot()
+        let protection = try await protectedBackup(original)
+        let checkpoint = BlockingRestoreCheckpoint()
+        let backgroundStore = WordNoteRestoreStore(directoryURL: directory) { step in
+            if step == .stagingSaved { try checkpoint.waitForRelease() }
+        }
+        let first = Task { try await backgroundStore.prepareRestore(snapshot, replacing: .legacy, protectedBy: protection) }
+        await waitForCheckpoint(checkpoint)
+        let winner = try await store.prepareRestore(snapshot, replacing: .legacy, protectedBy: protection)
+        checkpoint.release()
+        await assertThrowsAsync({ try await first.value }) {
+            XCTAssertEqual($0 as? WordNoteRestoreError, .restoreAlreadyPending)
+        }
+
+        XCTAssertEqual(try store.open().generation, winner)
+    }
+
     private var store: WordNoteRestoreStore { WordNoteRestoreStore(directoryURL: directory) }
     private var journalURL: URL { directory.appending(path: "store-generations.json") }
+
+    private func waitForCheckpoint(_ checkpoint: BlockingRestoreCheckpoint) async {
+        for _ in 0..<1_000 {
+            if checkpoint.isWaiting { return }
+            try? await Task.sleep(nanoseconds: 1_000_000)
+        }
+        checkpoint.release()
+        XCTFail("Background staging did not reach its checkpoint.")
+    }
+
+    private func assertThrowsAsync<T>(
+        _ operation: () async throws -> T, verify: (Error) -> Void = { _ in },
+        file: StaticString = #filePath, line: UInt = #line
+    ) async {
+        do {
+            _ = try await operation()
+            XCTFail("Expected operation to fail.", file: file, line: line)
+        } catch { verify(error) }
+    }
 
     private func originalPayload() throws -> WordNoteSnapshotPayload {
         try autoreleasepool {
@@ -257,5 +334,33 @@ final class WordNoteRestoreStoreTests: XCTestCase {
 
     private func journalObject() throws -> [String: Any] {
         try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: journalURL)) as? [String: Any])
+    }
+}
+
+private final class BlockingRestoreCheckpoint: @unchecked Sendable {
+    private let condition = NSCondition()
+    private var waiting = false
+    private var released = false
+    private var mainThread = false
+
+    var isWaiting: Bool { condition.withLock { waiting } }
+    var wasOnMainThread: Bool { condition.withLock { mainThread } }
+
+    func waitForRelease() throws {
+        condition.lock()
+        defer { condition.unlock() }
+        waiting = true
+        mainThread = Thread.isMainThread
+        let deadline = Date().addingTimeInterval(5)
+        while !released {
+            guard condition.wait(until: deadline) else { throw POSIXError(.ETIMEDOUT) }
+        }
+    }
+
+    func release() {
+        condition.lock()
+        released = true
+        condition.broadcast()
+        condition.unlock()
     }
 }

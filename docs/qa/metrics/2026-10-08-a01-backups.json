@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "parentCommit": "7df95beac9b53a143e6a663d719d526416f3bc61",
+  "measuredChange": "A01 background snapshot capture and staged restore",
+  "startedAt": "2026-10-08T01:53:43.714+08:00",
+  "completedAt": "2026-10-08T02:01:59.042+08:00",
+  "elapsedSeconds": 495.327,
+  "environment": {
+    "cpu": "Apple M4",
+    "logicalCores": 10,
+    "memoryBytes": 17179869184,
+    "macOS": "27.0.1 (26A434)",
+    "swift": "6.4 (swiftlang-6.4.0.34.1)",
+    "languageMode": "5",
+    "deploymentTarget": "macOS 14",
+    "powerAndThermalState": "not recorded"
+  },
+  "method": {
+    "warmupPassesPerSize": 1,
+    "measuredPassesPerSize": 30,
+    "mainActorProbeIntervalMilliseconds": 10,
+    "percentiles": "nearest rank",
+    "units": "milliseconds",
+    "source": "synthetic V1 data; each term has one input record, one candidate, and one review event; two shared courses",
+    "restoreDestination": "new private temporary store per pass",
+    "limitations": "Scheduling gaps are not rendered UI latency; vault timing uses a small pre-restore inventory, not seven large historical backups."
+  },
+  "results": [
+    {
+      "configuration": "release",
+      "iterations": 30,
+      "termCount": 1000,
+      "totalEntities": 4002,
+      "snapshotBytes": 2075197,
+      "metrics": {
+        "activate_main_ms": {"max": 127.140292, "p50": 119.879792, "p95": 124.100542},
+        "capture_background_ms": {"max": 102.616, "p50": 98.450125, "p95": 101.765333},
+        "capture_main_actor_max_gap_ms": {"max": 15.123625, "p50": 14.009916, "p95": 15.1235},
+        "capture_main_ms": {"max": 101.998375, "p50": 98.528041, "p95": 101.266791},
+        "decode_ms": {"max": 25.686166, "p50": 24.99025, "p95": 25.624125},
+        "encode_ms": {"max": 25.767333, "p50": 25.221208, "p95": 25.722292},
+        "prepare_background_ms": {"max": 612.808666, "p50": 593.03925, "p95": 604.659792},
+        "prepare_main_actor_max_gap_ms": {"max": 15.11825, "p50": 14.886666, "p95": 15.104083},
+        "vault_create_ms": {"max": 53.945792, "p50": 52.086084, "p95": 52.805459}
+      }
+    },
+    {
+      "configuration": "release",
+      "iterations": 30,
+      "termCount": 10000,
+      "totalEntities": 40002,
+      "snapshotBytes": 20804202,
+      "metrics": {
+        "activate_main_ms": {"max": 1227.258292, "p50": 1203.888084, "p95": 1227.233084},
+        "capture_background_ms": {"max": 1028.86775, "p50": 1000.421625, "p95": 1025.204042},
+        "capture_main_actor_max_gap_ms": {"max": 15.1675, "p50": 14.920375, "p95": 15.15075},
+        "capture_main_ms": {"max": 1010.840834, "p50": 991.13975, "p95": 1008.859666},
+        "decode_ms": {"max": 264.080417, "p50": 254.100834, "p95": 257.031375},
+        "encode_ms": {"max": 276.20225, "p50": 263.535292, "p95": 273.520416},
+        "prepare_background_ms": {"max": 9365.35325, "p50": 9263.649125, "p95": 9328.864292},
+        "prepare_main_actor_max_gap_ms": {"max": 15.131833, "p50": 15.082583, "p95": 15.120625},
+        "vault_create_ms": {"max": 539.792125, "p50": 532.702375, "p95": 539.751833}
+      }
+    }
+  ]
+}

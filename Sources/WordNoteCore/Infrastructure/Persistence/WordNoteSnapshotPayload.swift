@@ -29,7 +29,7 @@ public struct WordNoteSnapshotPayload: Codable, Equatable, Sendable {
         }
     }
 
-    @MainActor
+    /// Synchronous access must stay on the executor that owns this context and its models.
     public static func capture(
         from context: ModelContext, preferences: Preferences = Preferences()
     ) throws -> Self {
@@ -46,7 +46,6 @@ public struct WordNoteSnapshotPayload: Codable, Equatable, Sendable {
     }
 
     // Restore only into an isolated empty context, never overwrite an open live store.
-    @MainActor
     public func populateEmptyStore(_ context: ModelContext) throws {
         try validate()
         let existingCount = try context.fetchCount(FetchDescriptor<CourseModel>())
@@ -78,7 +77,7 @@ public struct WordNoteSnapshotPayload: Codable, Equatable, Sendable {
         public var createdAt: Date
         public var updatedAt: Date
 
-        @MainActor public init(_ model: CourseModel) {
+        public init(_ model: CourseModel) {
             id = model.id
             courseName = model.courseName
             courseCode = model.courseCode
@@ -89,7 +88,7 @@ public struct WordNoteSnapshotPayload: Codable, Equatable, Sendable {
             updatedAt = model.updatedAt
         }
 
-        @MainActor func model() -> CourseModel {
+        func model() -> CourseModel {
             CourseModel(
                 id: id, courseName: courseName, courseCode: courseCode, instructor: instructor,
                 semester: semester, courseDescription: courseDescription, createdAt: createdAt, updatedAt: updatedAt
@@ -112,7 +111,7 @@ public struct WordNoteSnapshotPayload: Codable, Equatable, Sendable {
         public var createdAt: Date
         public var updatedAt: Date
 
-        @MainActor init(_ model: InputRecordModel) {
+        init(_ model: InputRecordModel) {
             id = model.id
             rawText = model.rawText
             normalizedText = model.normalizedText
@@ -128,7 +127,7 @@ public struct WordNoteSnapshotPayload: Codable, Equatable, Sendable {
             updatedAt = model.updatedAt
         }
 
-        @MainActor func model() throws -> InputRecordModel {
+        func model() throws -> InputRecordModel {
             let model = InputRecordModel(
                 id: id, rawText: rawText, inputType: try snapshotEnum(inputTypeRaw),
                 status: try snapshotEnum(statusRaw), sentenceMeaning: sentenceMeaning,
@@ -160,7 +159,7 @@ public struct WordNoteSnapshotPayload: Codable, Equatable, Sendable {
         public var createdAt: Date
         public var updatedAt: Date
 
-        @MainActor init(_ model: CandidateTermModel) {
+        init(_ model: CandidateTermModel) {
             id = model.id
             inputRecordID = model.inputRecordID
             term = model.term
@@ -181,7 +180,7 @@ public struct WordNoteSnapshotPayload: Codable, Equatable, Sendable {
             updatedAt = model.updatedAt
         }
 
-        @MainActor func model() throws -> CandidateTermModel {
+        func model() throws -> CandidateTermModel {
             let model = CandidateTermModel(
                 id: id, inputRecordID: inputRecordID, term: term, termType: try snapshotEnum(termTypeRaw),
                 needToLearn: needToLearn, importance: try snapshotEnum(importanceRaw), category: try snapshotEnum(categoryRaw),
@@ -223,7 +222,7 @@ public struct WordNoteSnapshotPayload: Codable, Equatable, Sendable {
         public var createdAt: Date
         public var updatedAt: Date
 
-        @MainActor public init(_ model: TermModel) {
+        public init(_ model: TermModel) {
             id = model.id
             term = model.term
             normalizedTerm = model.normalizedTerm
@@ -252,7 +251,7 @@ public struct WordNoteSnapshotPayload: Codable, Equatable, Sendable {
             updatedAt = model.updatedAt
         }
 
-        @MainActor func model() throws -> TermModel {
+        func model() throws -> TermModel {
             let model = TermModel(
                 id: id, term: term, termType: try snapshotEnum(termTypeRaw),
                 chineseMeaning: chineseMeaning, englishDefinition: englishDefinition,
@@ -281,7 +280,7 @@ public struct WordNoteSnapshotPayload: Codable, Equatable, Sendable {
         public var newNextReviewAt: Date?
         public var reviewedAt: Date
 
-        @MainActor init(_ model: ReviewEventModel) {
+        init(_ model: ReviewEventModel) {
             id = model.id
             termID = model.termID
             modeRaw = model.modeRaw
@@ -293,7 +292,7 @@ public struct WordNoteSnapshotPayload: Codable, Equatable, Sendable {
             reviewedAt = model.reviewedAt
         }
 
-        @MainActor func model() throws -> ReviewEventModel {
+        func model() throws -> ReviewEventModel {
             ReviewEventModel(
                 id: id, termID: termID, mode: try snapshotEnum(modeRaw), feedback: try snapshotEnum(feedbackRaw),
                 previousMasteryLevel: try snapshotEnum(previousMasteryLevelRaw),

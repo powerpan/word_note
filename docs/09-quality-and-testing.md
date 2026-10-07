@@ -2,6 +2,8 @@
 
 版本說明：原有用例對應 V1/P1；2026-10 新任務用文末 QA-01 至 QA-38 追蹤。實施中的新證據見 [G00/A03 執行記錄](qa/2026-10-07-g00-a03.md)、[A01 核心資料保護](qa/2026-10-08-a01-persistence.md) 和 [A01 App 接入](qa/2026-10-08-a01-app-integration.md)，自動化通過不等於 UI 項已驗收。舊版 82 項結果是歷史證據，不能用作補充計劃已通過的證明。
 
+最新追加證據：[A01 后台資料工作](qa/2026-10-08-a01-background-persistence.md)，含 188 項嚴格離線回歸、獨立 live 與 1,000/10,000 詞各 30 輪 Release 測量；UI 仍受 Mac 鎖屏阻擋。
+
 ## 質量目標
 
 MVP 的質量重點：
@@ -54,6 +56,8 @@ MVP 的質量重點：
 - 同一 ModelContainer 的所有 context 在恢復期間拒絕寫入，其他隔離庫不受影響；取消恢復後舊 AI ticket 仍失效。
 - 已排入 Task 但尚未開始的請求、延遲成功/失敗、忽略取消的 handler 均不能跨恢復屏障提交。
 - 自動備份不依賴視圖存活，保存事件可觸發首次快照；恢復前保護備份失敗保留原庫，日誌狀態不明時保持寫入鎖定。
+- 后台快照在同容器任意 context 保存/未保存修改時整次重試；其他容器保存不誤觸發，連續修改最多三次停止，取消不返回成功快照，每次讀取用新 context。
+- 后台 staging 期間 MainActor 可處理其他工作；返回前重新核對日誌，取消或另一恢復先完成時不覆寫有效 pending/active 狀態。
 - 批量確認先全量驗證，任一錯誤時不部分寫入。
 - 刪除 InputRecord/Term 時按規則級聯或清空外鍵。
 
@@ -406,6 +410,8 @@ swift build --scratch-path /tmp/wordnote-strict-qa -Xswiftc -strict-concurrency=
 scratch path 每輪使用獨立目錄，不能為了通過測試清除生產 store。App bundle 啟動驗證與 UI 截圖/交互是另外一道閘門，單純編譯成功或進程存在不能替代。工具不可用則記為未驗證，提供人工步驟與剩餘风险。
 
 性能測試記錄硬件與 Release 配置，預熱後至少 30 次測量並列 p50/p95/max：1,000 詞時保存到可再輸入 p95 <= 300 ms；10,000 詞時輸入停止到搜索列表穩定（含 debounce）p95 <= 200 ms。超出先定位，不能降低門檻後宣稱原目標通過。AI 延遲獨立量測，不含在本地保存指標中。
+
+A01 另有顯式 opt-in 的備份/恢復性能組，不混入快速單測，也不調 API 或讀真實詞庫：`RUN_BACKUP_PERFORMANCE_TESTS=1 swift test -c release --filter WordNoteBackupPerformanceTests`。默認使用 1,000/10,000 詞、每詞一筆來源/候選/事件的合成庫，預熱後各 30 次；記錄同步捕獲參考、后台捕獲、編解碼、staging、啟動驗證及快照寫入的 p50/p95/max。10 ms MainActor probe 的最大調度間隔只作卡頓代理指標，不等同真實界面的輸入/渲染延遲，也不替代上述保存/搜索門檻。探測可指定 `BACKUP_PERFORMANCE_ITERATIONS` / `BACKUP_PERFORMANCE_SIZE`；少於 30 次不能宣稱正式性能驗收。
 
 ### 階段驗收與證據
 

@@ -16,7 +16,6 @@ final class LiveDeepSeekSmokeTests: XCTestCase {
         }
 
         let startedAt = ContinuousClock.now
-        let service = AIAnalysisService(client: DeepSeekChatClient(apiKey: apiKey))
         let schema = Schema(versionedSchema: WordNoteSchemaV1.self)
         let container = try ModelContainer(for: schema, configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)])
         defer { withExtendedLifetime(container) {} }
@@ -24,7 +23,7 @@ final class LiveDeepSeekSmokeTests: XCTestCase {
         let englishRecord = try inputService.createDraft(rawText: "latent representation", courseID: nil, sourceType: .paper, note: nil)
         let englishOutcome = try await inputService.analyze(
             englishRecord, request: AIAnalysisRequest(rawText: "latent representation", sourceType: .paper),
-            using: { try await service.analyze($0) }
+            using: { try await AIAnalysisService(client: DeepSeekChatClient(apiKey: apiKey)).analyze($0) }
         )
         let result = englishOutcome.analysis
 
@@ -40,7 +39,7 @@ final class LiveDeepSeekSmokeTests: XCTestCase {
                 rawText: "過擬合",
                 courseName: "CS-50",
                 sourceType: .class
-            ), using: { try await service.analyze($0) }
+            ), using: { try await AIAnalysisService(client: DeepSeekChatClient(apiKey: apiKey)).analyze($0) }
         )
         let chineseLookupResult = chineseOutcome.analysis
 

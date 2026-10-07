@@ -131,7 +131,7 @@ public final class WordNoteDataProtection {
                 }
             }
             let revision = changeRevision
-            let snapshot = try currentSnapshot()
+            let snapshot = try await currentSnapshot()
             let result = try await vault.createIfDue(snapshot, now: now)
             automaticNeedsCheck = changeRevision != revision || result?.retentionNeedsAttention == true
             automaticCheckNotBefore = now
@@ -147,7 +147,7 @@ public final class WordNoteDataProtection {
 
     public func createBackup() async throws {
         try await perform {
-            let payload = try self.currentSnapshot()
+            let payload = try await self.currentSnapshot()
             let result = try await self.vault.create(payload, kind: .manual)
             self.statusMessage = "Backup saved."
             if result.retentionNeedsAttention { self.errorMessage = "Backup saved, but automatic backup cleanup needs attention." }
@@ -204,10 +204,10 @@ public final class WordNoteDataProtection {
             queue.suspendForRestore()
             try store.requireAnalysisPause(for: generation)
             try container.mainContext.save()
-            let current = try currentSnapshot()
+            let current = try await currentSnapshot()
             let protection = try await vault.create(current, kind: .beforeRestore)
             _ = try await vault.readSnapshot(id: protection.snapshot.id)
-            try store.prepareRestore(preview.snapshot, replacing: generation, protectedBy: protection.snapshot)
+            try await store.prepareRestore(preview.snapshot, replacing: generation, protectedBy: protection.snapshot)
             restorePhase = .readyToQuit
             statusMessage = "Restore prepared. Quit Word Note to complete the switch on next launch."
             try await updateInventory()
@@ -265,8 +265,8 @@ public final class WordNoteDataProtection {
         noteDataChanged()
     }
 
-    private func currentSnapshot() throws -> WordNoteSnapshotPayload {
-        try WordNoteSnapshotPayload.capture(from: container.mainContext, preferences: preferences())
+    private func currentSnapshot() async throws -> WordNoteSnapshotPayload {
+        try await WordNoteSnapshotCapture(container: container).capture(preferences: preferences())
     }
 
     private func updateInventory() async throws {

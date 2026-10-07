@@ -155,6 +155,8 @@ P1 如果做全局快捷鍵或剪貼板增強，需要單獨評估權限。
 
 日常備份使用應用層一致性邏輯快照，不在 SwiftData 仍寫入時複製 store/WAL/SHM 當作完整備份。歷史一次性 store 備份仍保留，不與新快照混名。
 
+大庫快照在独立后台 context 讀取已保存資料；同容器在此期間保存、主 context 有待保存修改，或因並發變更導致驗證不一致時，必須整次重試，不把部分結果落為快照。最多三次後仍變動即停止並保留已有備份。恢復則維持全窗口寫入屏障，將隔離建庫/重開核對移至后台，返回時再確認日誌沒有被另一操作更新；主線程可處理進度/退出限制，不因建庫長時間卡住。
+
 完整 JSON envelope 包括 formatVersion、sourceSchemaVersion、appVersion、snapshotID、createdAt、各實體數量、payload checksum 和模型 DTO。formatVersion 首版為 1，與資料 schema 分開。payload 使用 JSON 字符串承載序列化 DTO，checksum 對解碼該字符串後的原始 UTF-8 bytes 計算並驗證，再解析其中模型資料，不對任意重排的 JSON 對象求 hash；採標準序列化/雜湊實作。校驗碼只檢測損壞，不宣稱文件經簽名或已加密。
 
 目標契約：V1-V4 各階段提供對應 reader/upgrader；最新版本可恢復受支持舊快照，舊 App 拒絕較新快照。最終包含原文、候選、詞義、課程、來源、卡片、事件和持久化會話；非機密偏好只用明確白名單（外觀、課程/來源預設、學習限額）。目前只支援 V1 五類模型和 appearance/defaultSource，不虛構尚未實施字段。排除 env、API Key、任意 UserDefaults、SSH 文件、日誌、網絡原始 response 及系統快捷鍵權限狀態。

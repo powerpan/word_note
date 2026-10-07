@@ -439,7 +439,11 @@ P2 若做 iCloud，需要先制定資料衝突策略，不能直接把本地模�
 
 ### 備份、恢復與啟動
 
-備份在寫入屏障內取得一致、不可變的 DTO 快照，隨即放開正常讀寫，再原子寫文件；不可在序列化到一半繼續讀取正在變動的 model。恢復按照 [08](08-security-privacy.md) 的 staged store + 恢復日誌實施：先建隔離庫，受控退出後在 ModelContainer 建立前切換，成功後才解除寫入屏障。
+備份取得一致、不可變的 DTO 後才序列化及原子寫文件，不跨 executor 共用可變 ModelContext/model。A01 大庫測量發現 MainActor 全量捕獲會阻塞，因此日常/手動備份改用樂觀一致性讀取：MainActor 先保存當前已修改 context，后台 worker 建自己的唯讀 context，讀取前後同步比較同容器的 willSave/didSave 計數；有任何保存或主 context 待保存修改就丟棄整次讀取並重試，最多三次，仍不穩定則保留舊備份並明確報錯。不能把混合版本或只截取部分實體的結果當成成功快照。
+
+前提是 App 的正式寫入仍由 MainActor 服務串行處理；通知不得延後排入主隊列才計數。新增後台寫入者或另一個寫庫進程時必須重新設計此一致性邊界，不能沿用上述假設。快照 DTO 的同步 adapter 不再強制 MainActor，但呼叫方必須在其 context 所屬 executor 完成全部模型訪問。
+
+恢復仍需要全窗口寫入屏障，按照 [08](08-security-privacy.md) 的 staged store + 恢復日誌實施。建庫、持久化重開驗證和校驗碼計算在后台使用獨立 context，不把它們的模型傳回 UI。worker 完成後回 MainActor 重新讀取 active/pending 日誌，拒絕過期或相競爭的恢復，再寫 prepared；取消不提交 prepared。受控退出後在下一次 ModelContainer 建立前切換，成功後才解除寫入屏障。
 
 每次 schema 改變同時更新 migration、snapshot adapter、刪除/完整性檢查與測試 fixture；先凍結 V1 真實類型形狀，不能讓 V1 指向持續改動的最新類型。V2/V3/V4 的主要寫入切換點見 [05](05-data-model.md)。
 

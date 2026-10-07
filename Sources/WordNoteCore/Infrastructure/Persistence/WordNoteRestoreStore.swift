@@ -104,7 +104,7 @@ public struct WordNoteRestoreStore {
             try fault?(.activateJournal)
             try writeManifest(manifest)
             let url = try storeURL(for: pending.generation)
-            let container = try makeContainer(at: url, requireExisting: true)
+            let container = try Self.makeContainer(at: url, requireExisting: true)
             let payload = try WordNoteSnapshotPayload.capture(from: container.mainContext, preferences: pending.preferences)
             guard payload.counts == pending.counts,
                   try WordNoteSnapshotCodec.contentChecksum(payload) == pending.payloadChecksum else {
@@ -141,37 +141,32 @@ public struct WordNoteRestoreStore {
         _ snapshot: DecodedWordNoteSnapshot,
         replacing expectedGeneration: WordNoteStoreGeneration,
         protectedBy backup: WordNoteBackupSummary
-    ) throws -> WordNoteStoreGeneration {
+    ) async throws -> WordNoteStoreGeneration {
         var manifest = try readManifest()
         guard manifest.active == expectedGeneration else { throw WordNoteRestoreError.staleGeneration }
         guard manifest.pending == nil else { throw WordNoteRestoreError.restoreAlreadyPending }
         guard backup.kind == .beforeRestore else { throw WordNoteRestoreError.protectionRequired }
-        // Revalidate an independently constructed DTO as well as files read by the import picker.
-        try snapshot.payload.validate()
         let generation = WordNoteStoreGeneration(id: UUID())
         let url = try storeURL(for: generation)
-        let canonical = snapshot.payload.canonicalized
-        try autoreleasepool {
-            let staged = try makeContainer(at: url, requireExisting: false)
-            try canonical.populateEmptyStore(staged.mainContext)
-            guard try WordNoteSnapshotPayload.capture(from: staged.mainContext, preferences: canonical.preferences) == canonical else {
-                throw WordNoteRestoreError.stagingMismatch
-            }
+        let fault = self.fault
+        let staging = Task.detached(priority: .utility) {
+            try Self.stage(snapshot.payload, at: url, fault: fault)
         }
-        try secureStore(at: url, requireExisting: true)
-        try fault?(.stagingSaved)
-        // Reopening validates the persisted store, not just SwiftData's in-memory identity map.
-        try autoreleasepool {
-            let reopened = try makeContainer(at: url, requireExisting: true)
-            guard try WordNoteSnapshotPayload.capture(from: reopened.mainContext, preferences: canonical.preferences) == canonical else {
-                throw WordNoteRestoreError.stagingMismatch
-            }
+        let checksum = try await withTaskCancellationHandler {
+            try await staging.value
+        } onCancel: {
+            staging.cancel()
         }
+        try Task.checkCancellation()
+        // Staging yields MainActor; another coordinator must not replace the durable selection meanwhile.
+        manifest = try readManifest()
+        guard manifest.active == expectedGeneration else { throw WordNoteRestoreError.staleGeneration }
+        guard manifest.pending == nil else { throw WordNoteRestoreError.restoreAlreadyPending }
         manifest.pending = PendingRestore(
             phase: .prepared, generation: generation, sourceSnapshotID: snapshot.document.snapshotID,
-            protectionSnapshotID: backup.id, payloadChecksum: try WordNoteSnapshotCodec.contentChecksum(canonical),
-            counts: canonical.counts, preferences: canonical.preferences,
-            analysisRequiresResume: canonical.inputRecords.contains { $0.statusRaw == InputRecordStatus.analyzing.rawValue }
+            protectionSnapshotID: backup.id, payloadChecksum: checksum,
+            counts: snapshot.payload.counts, preferences: snapshot.payload.preferences,
+            analysisRequiresResume: snapshot.payload.inputRecords.contains { $0.statusRaw == InputRecordStatus.analyzing.rawValue }
         )
         try fault?(.prepareJournal)
         try writeManifest(manifest)
@@ -218,7 +213,7 @@ public struct WordNoteRestoreStore {
     ) throws -> WordNoteStoreSession {
         let url = try storeURL(for: manifest.active)
         return WordNoteStoreSession(
-            container: try makeContainer(at: url, requireExisting: requireExisting || manifest.active != .legacy),
+            container: try Self.makeContainer(at: url, requireExisting: requireExisting || manifest.active != .legacy),
             generation: manifest.active, storeURL: url, restoreOutcome: outcome,
             analysisRequiresResume: manifest.analysisRequiresResume, preferencesToApply: manifest.preferencesToApply
         )
@@ -234,7 +229,40 @@ public struct WordNoteRestoreStore {
         return directory.appending(path: "WordNote.store")
     }
 
-    private func makeContainer(at url: URL, requireExisting: Bool) throws -> ModelContainer {
+    private nonisolated static func stage(
+        _ payload: WordNoteSnapshotPayload, at url: URL,
+        fault: (@Sendable (Checkpoint) throws -> Void)?
+    ) throws -> String {
+        try Task.checkCancellation()
+        let canonical = payload.canonicalized
+        // Revalidate DTOs created directly as well as those read by the import picker.
+        try canonical.validate()
+        try autoreleasepool {
+            let container = try makeContainer(at: url, requireExisting: false)
+            let context = ModelContext(container)
+            context.autosaveEnabled = false
+            try canonical.populateEmptyStore(context)
+            guard try WordNoteSnapshotPayload.capture(from: context, preferences: canonical.preferences) == canonical else {
+                throw WordNoteRestoreError.stagingMismatch
+            }
+        }
+        try secureStore(at: url, requireExisting: true)
+        try fault?(.stagingSaved)
+        try Task.checkCancellation()
+        // Reopening validates persisted data, not just the first context's identity map.
+        try autoreleasepool {
+            let container = try makeContainer(at: url, requireExisting: true)
+            let context = ModelContext(container)
+            context.autosaveEnabled = false
+            guard try WordNoteSnapshotPayload.capture(from: context, preferences: canonical.preferences) == canonical else {
+                throw WordNoteRestoreError.stagingMismatch
+            }
+        }
+        try Task.checkCancellation()
+        return try WordNoteSnapshotCodec.contentChecksum(canonical)
+    }
+
+    private nonisolated static func makeContainer(at url: URL, requireExisting: Bool) throws -> ModelContainer {
         try secureStore(at: url, requireExisting: requireExisting)
         let schema = Schema(versionedSchema: WordNoteSchemaV1.self)
         let configuration = ModelConfiguration("WordNote", schema: schema, url: url)
@@ -243,7 +271,7 @@ public struct WordNoteRestoreStore {
         return container
     }
 
-    private func secureStore(at url: URL, requireExisting: Bool) throws {
+    private nonisolated static func secureStore(at url: URL, requireExisting: Bool) throws {
         let exists = try PrivateFileIO.secureExistingFile(url)
         if requireExisting, !exists { throw WordNoteRestoreError.missingStore }
         for suffix in ["-wal", "-shm"] {
