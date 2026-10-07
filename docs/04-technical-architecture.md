@@ -437,6 +437,12 @@ P2 若做 iCloud，需要先制定資料衝突策略，不能直接把本地模�
 - 編輯/確認撤銷只在本次 App 運行期提供，receipt 保存受影響 ID、前後 revision 和字段。撤銷前校驗未被後續編輯、正式復習或新來源引用；有衝突拒絕撤銷並說明，不級聯抹除新資料。
 - SwiftData autosave 不能使 UI 草稿提前進庫；表單用值副本，正式保存仍經服務預驗證和交易。
 
+2026-10-08 隔離實作：`WordNoteV2ContentService` 是 V2 的 MainActor 同步交易入口；同一 container 的服務共用 mainContext 並關閉 autosave，不另建彼此可能過期的寫入 context。入口先檢查恢復屏障，遇未提交的直接模型修改則拒絕操作，不替其他表單保存或回滾。交易內沒有網絡或 await；驗證、插入、關聯、revision 更新只保存一次，失敗全部 rollback，對外返回值/ID 而非可變模型。
+
+`captureID` 識別提交而非相同文字：同次重送返回已保存結果，不重建來源或增加計數；不同提交保留各自課程、note 和捕獲入口。Save Only 建草稿而非查詢事件。精確英文命中不排 AI、不進 Inbox；候選確認只做內容/來源整理，不冒充再次查詞。此批仍保留 `legacyMixed` 的復習反饋，B04 才改新統計。
+
+單項確認支援新建與關聯已有詞，校驗候選/記錄/目標 revision 及分析世代；相同 confirmationOperationID 重送返回原目標，目標已刪除則明確報錯、不重建。這些是 A02 基礎能力，尚無 A04 undo receipt、A05 批次預覽/逐字段補充或 App 接入。刪除與課程引用保護的測試證據見 [V2 內容交易](qa/2026-10-08-a02-content-transactions.md)。
+
 ### 備份、恢復與啟動
 
 備份取得一致、不可變的 DTO 後才序列化及原子寫文件，不跨 executor 共用可變 ModelContext/model。A01 大庫測量發現 MainActor 全量捕獲會阻塞，因此日常/手動備份改用樂觀一致性讀取：MainActor 先保存當前已修改 context，后台 worker 建自己的唯讀 context，讀取前後同步比較同容器的 willSave/didSave 計數；有任何保存或主 context 待保存修改就丟棄整次讀取並重試，最多三次，仍不穩定則保留舊備份並明確報錯。不能把混合版本或只截取部分實體的結果當成成功快照。

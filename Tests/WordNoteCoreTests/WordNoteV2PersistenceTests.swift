@@ -199,6 +199,12 @@ final class WordNoteV2PersistenceTests: XCTestCase {
         payload.termStates[0].revision = 4
         payload.recordStates[0].revision = 2
         payload.recordStates[0].analysisGeneration = 3
+        payload.recordStates[0].capturedViaRaw = "floatingQuickAdd"
+        let capturedRecordID = payload.recordStates[0].id
+        for index in payload.occurrences.indices where payload.occurrences[index].sourceRecordID == capturedRecordID {
+            payload.occurrences[index].capturedViaRaw = "floatingQuickAdd"
+            payload.occurrences[index].legacy = false
+        }
         payload.recordStates[0].lookupIntentRaw = "englishToChinese"
         payload.recordStates[0].resolvedLookupDirectionRaw = "englishToChinese"
         payload.recordStates[0].directionDetectorVersion = "explicit-v1"
@@ -330,6 +336,19 @@ final class WordNoteV2PersistenceTests: XCTestCase {
         var missingCourse = payload
         missingCourse.courseLinks[0].courseID = UUID()
         assertInvalid(missingCourse, .missingReference)
+    }
+
+    func testV2SnapshotRejectsUnknownOrMismatchedCaptureSurface() throws {
+        let payload = try WordNoteV1ToV2Migration.convert(sourceWithOccurrences()).payload
+        var unknown = payload
+        unknown.recordStates[0].capturedViaRaw = "unknown"
+        assertInvalid(unknown, .invalidEnum)
+
+        var mismatched = payload
+        let recordID = try XCTUnwrap(mismatched.occurrences[0].sourceRecordID)
+        let index = try XCTUnwrap(mismatched.recordStates.firstIndex { $0.id == recordID })
+        mismatched.recordStates[index].capturedViaRaw = "floatingQuickAdd"
+        assertInvalid(mismatched, .missingReference)
     }
 
     func testV2SnapshotRejectsInvalidNewDatesAndOversizedSourceText() throws {

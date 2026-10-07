@@ -6,6 +6,7 @@ extension WordNoteSchemaV2 {
     public final class InputRecordModel {
         @Attribute(.unique) public var id: UUID
         public var captureID: UUID = UUID()
+        public var capturedViaRaw: String = "legacy"
         public var lookupIntentRaw: String = "auto"
         public var resolvedLookupDirectionRaw: String = "englishToChinese"
         public var directionDetectorVersion: String = "han-latin-v1"

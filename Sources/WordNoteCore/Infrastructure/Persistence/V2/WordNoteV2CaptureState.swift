@@ -9,6 +9,7 @@ public extension WordNoteSnapshotV2Payload {
     struct RecordState: Codable, Equatable, Sendable {
         public var id: UUID
         public var captureID: UUID
+        public var capturedViaRaw: String
         public var lookupIntentRaw: String
         public var resolvedLookupDirectionRaw: String
         public var directionDetectorVersion: String
@@ -51,6 +52,7 @@ extension WordNoteSnapshotV2Payload.RecordState {
     init(_ model: WordNoteSchemaV2.InputRecordModel) {
         id = model.id
         captureID = model.captureID
+        capturedViaRaw = model.capturedViaRaw
         lookupIntentRaw = model.lookupIntentRaw
         resolvedLookupDirectionRaw = model.resolvedLookupDirectionRaw
         directionDetectorVersion = model.directionDetectorVersion
@@ -64,6 +66,7 @@ extension WordNoteSnapshotV2Payload.RecordState {
 
     func apply(to model: WordNoteSchemaV2.InputRecordModel) {
         model.captureID = captureID
+        model.capturedViaRaw = capturedViaRaw
         model.lookupIntentRaw = lookupIntentRaw
         model.resolvedLookupDirectionRaw = resolvedLookupDirectionRaw
         model.directionDetectorVersion = directionDetectorVersion

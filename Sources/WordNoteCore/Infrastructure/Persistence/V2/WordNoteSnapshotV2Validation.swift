@@ -28,6 +28,7 @@ extension WordNoteSnapshotV2Payload {
             try counter(state.revision)
             try counter(state.analysisGeneration)
             let intent: LookupIntent = try snapshotEnum(state.lookupIntentRaw)
+            let _: CaptureSurface = try snapshotEnum(state.capturedViaRaw)
             let direction: LookupDirection = try snapshotEnum(state.resolvedLookupDirectionRaw)
             let queue: AnalysisQueueState = try snapshotEnum(state.queueStateRaw)
             guard (0...2).contains(state.autoRetryCount),
@@ -79,7 +80,8 @@ extension WordNoteSnapshotV2Payload {
         for source in occurrences {
             guard terms[source.termID] != nil,
                   source.courseID.map({ courses[$0] != nil }) ?? true,
-                  source.sourceRecordID.map({ recordMetadata[$0]?.captureID == source.captureID }) ?? true else {
+                  source.sourceRecordID.map({ recordMetadata[$0]?.captureID == source.captureID
+                      && recordMetadata[$0]?.capturedViaRaw == source.capturedViaRaw }) ?? true else {
                 throw WordNoteSnapshotError.missingReference
             }
             let _: SourceType = try snapshotEnum(source.sourceTypeRaw)

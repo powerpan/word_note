@@ -73,7 +73,7 @@ public enum WordNoteV1ToV2Migration {
         let candidateRecordIDs = Set(source.candidates.map(\.inputRecordID))
         let recordStates = source.inputRecords.map { record in
             WordNoteSnapshotV2Payload.RecordState(
-                id: record.id, captureID: stableID("record-capture", record.id), lookupIntentRaw: "auto",
+                id: record.id, captureID: stableID("record-capture", record.id), capturedViaRaw: "legacy", lookupIntentRaw: "auto",
                 resolvedLookupDirectionRaw: LookupDirectionDetectorV1.detect(record.rawText).rawValue,
                 directionDetectorVersion: LookupDirectionDetectorV1.version,
                 analysisGeneration: record.analyzedAt != nil || candidateRecordIDs.contains(record.id)

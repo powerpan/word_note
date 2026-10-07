@@ -311,6 +311,7 @@ normalized(rawText) == Term.normalizedTerm
 | 實體/字段 | 契約 |
 |---|---|
 | InputRecord.captureID | 一次用戶提交的穩定 UUID；重試分析不換 ID，不同提交即使字串相同也不同 |
+| InputRecord.capturedViaRaw | legacy / mainQuickAdd / floatingQuickAdd / manual；提交時保存，建立 occurrence 時複製，不能在重啟後猜測來源窗口 |
 | InputRecord.lookupIntentRaw | auto / englishToChinese / chineseToEnglish，記錄用戶選擇 |
 | InputRecord.resolvedLookupDirectionRaw | 實際發送方向，與 detectorVersion 一起凍結；重試不能因新版偵測規則改方向 |
 | InputRecord.directionDetectorVersion | 本地規則版本；顯式方向也保留解析來源標記 |
@@ -328,6 +329,10 @@ normalized(rawText) == Term.normalizedTerm
 Occurrence 的業務唯一鍵為 `(termID, captureID)`。一條原句生成兩個詞時各有一個 occurrence；同一提交因重試或雙擊不能重複建關聯。已存候選重新分析不代表再次遇見，不增加 occurrence。主動再查同詞是新 capture，允許新增一次 LookupEvent 和來源。
 
 精確命中仍不建立 InputRecord/Candidate、不進 Inbox、不調用 AI；直接保存 occurrence、查詢事件及必要課程關聯。候選確認只是關聯已有詞時新增 occurrence，不把它再虛構成一次 exactRepeat。預覽、朗讀、打開詳情及補全均不是查詢事件。
+
+2026-10-08 隔離服務已實作上述捕獲和單項確認交易，詳見 [內容交易記錄](qa/2026-10-08-a02-content-transactions.md)。捕獲入口標記現亦保存在 InputRecord 及 V2 快照元資料；來源有 sourceRecordID 時，其 captureID/capturedVia 必須與記錄一致。歷史轉換一律 legacy；新提交不允許自行偽裝成 legacy。V2 尚未正式啟用，這次補充不改凍結的 V1 類型或 fixture。
+
+相同 captureID 的重送必須保留原文、note、課程、來源類型和入口；已有 InputRecord 還須保持原查詢意圖，返回當前任務狀態而不自動重新分析。已刪 occurrence 但仍有 LookupEvent 的重送被拒絕，不恢復被明確刪掉的來源。此保護基於仍在庫中的記錄/事件，不承諾在全部相關資料明確刪除後永久保存提交收據。
 
 舊 Term.courseID 只保留為兼容/遷移快照，V2 起頁面篩選與批量操作讀 TermCourseLink，不再兩處獨立編輯。舊 contextSentence/sourceRecordID 保留原值但新來源讀 occurrence。歷史來源課程與當前 membership 是兩個概念，解除 membership 不刪歷史 occurrence。
 
@@ -356,6 +361,8 @@ ConfirmationPlan 是非持久化值，包含 operationID、選中記錄/候選 I
 既有重複詞默認 link，只增加來源/課程；fill 顯示逐字段差異並由用戶選擇。批內同 normalizedTerm 建一個 Term，只有所有衝突已解決才提交。同音異義等不同意思在 C 階段成同一詞頭的不同義項，在 A/B 不自動以拼接文字「合併」，需要用戶指定內容。
 
 Term、Candidate 狀態、savedTermID、membership、occurrence 單次保存；失敗全部回滾。英文字母、必要符號及數字可存在詞頭（如 C++、L2），不允許純中文主體；旧不合格 Term 提示人工修正，不因遷移被刪除。
+
+A02 的單項 link 保留已有正式字段及復習統計，只在新增來源/課程時增加 Term.revision；同一 capture 的第二個同詞候選不重建 occurrence。候選和其 InputRecord 的整理狀態/revision 隨確認保存；queued/running 記錄不允許同時確認。英文主體及中文查英文所需中文釋義的校驗使用記錄已凍結的方向，不重新偵測原文。完整 ConfirmationPlan、批次歸併、fill 和撤銷仍待 A04/A05。
 
 ### V3：卡片與會話
 
