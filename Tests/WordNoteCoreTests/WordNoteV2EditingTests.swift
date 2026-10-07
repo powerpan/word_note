@@ -55,6 +55,69 @@ final class WordNoteV2EditingTests: XCTestCase {
         XCTAssertFalse(container.mainContext.hasChanges)
     }
 
+    func testBatchCandidateEditingAdvancesSharedRecordOnlyOnce() throws {
+        let container = try Support.container()
+        let first = try Support.candidate("throughput", in: container)
+        let second = try Support.candidate("quick", in: container)
+        XCTAssertEqual(first.inputRecordID, second.inputRecordID)
+        let record = try Support.record(first.inputRecordID, in: container)
+        var edits = [first, second].map { WordNoteV2CandidateEdit($0, recordRevision: record.revision) }
+        edits[0].chineseMeaning = "First edited meaning"
+        edits[1].chineseMeaning = "Second edited meaning"
+        var saveCount = 0
+        let service = try WordNoteV2ContentService(container: container, save: { saveCount += 1; try $0.save() })
+        try service.updateCandidates(edits, at: Support.now)
+        XCTAssertEqual(saveCount, 1)
+        XCTAssertEqual(record.revision, 1)
+        XCTAssertEqual(first.revision, 1)
+        XCTAssertEqual(second.revision, 1)
+        XCTAssertEqual(first.chineseMeaning, edits[0].chineseMeaning)
+        XCTAssertEqual(second.chineseMeaning, edits[1].chineseMeaning)
+    }
+
+    func testBatchCandidateEditingRejectsDuplicateIDsAndLateInvalidEditWithoutPartialWrites() throws {
+        let container = try Support.container()
+        let first = try Support.candidate("throughput", in: container)
+        let second = try Support.candidate("quick", in: container)
+        var firstEdit = WordNoteV2CandidateEdit(first, recordRevision: 0)
+        firstEdit.chineseMeaning = "Must roll back"
+        var secondEdit = WordNoteV2CandidateEdit(second, recordRevision: 0)
+        secondEdit.term = ""
+        let before = try Support.snapshot(container)
+        let service = try WordNoteV2ContentService(container: container)
+        XCTAssertThrowsError(try service.updateCandidates([firstEdit, firstEdit]))
+        XCTAssertThrowsError(try service.updateCandidates([firstEdit, secondEdit]))
+        XCTAssertEqual(try Support.snapshot(container), before)
+        XCTAssertFalse(container.mainContext.hasChanges)
+    }
+
+    func testBatchCandidateEditingSaveFailureRollsBackEveryDraft() throws {
+        let container = try Support.container()
+        let candidates = try [Support.candidate("throughput", in: container), Support.candidate("quick", in: container)]
+        let edits = candidates.map { candidate in
+            var value = WordNoteV2CandidateEdit(candidate, recordRevision: 0)
+            value.chineseMeaning = "Not persisted"
+            return value
+        }
+        let before = try Support.snapshot(container)
+        let service = try WordNoteV2ContentService(container: container, save: { _ in throw Support.Failure.save })
+        XCTAssertThrowsError(try service.updateCandidates(edits))
+        XCTAssertEqual(try Support.snapshot(container), before)
+    }
+
+    func testBatchCandidateEditingRejectsExternalRecordChangesWithoutRebasing() throws {
+        let container = try Support.container()
+        let first = try Support.candidate("throughput", in: container)
+        let second = try Support.candidate("quick", in: container)
+        let firstEdit = WordNoteV2CandidateEdit(first, recordRevision: 0)
+        let secondEdit = WordNoteV2CandidateEdit(second, recordRevision: 0)
+        let service = try WordNoteV2ContentService(container: container)
+        try service.updateCandidate(firstEdit)
+        let before = try Support.snapshot(container)
+        XCTAssertThrowsError(try service.updateCandidates([secondEdit]))
+        XCTAssertEqual(try Support.snapshot(container), before)
+    }
+
     func testTermEditUpdatesAllMembershipsWithoutChangingOriginsOrReviewHistory() throws {
         let container = try Support.container()
         let service = try WordNoteV2ContentService(container: container)

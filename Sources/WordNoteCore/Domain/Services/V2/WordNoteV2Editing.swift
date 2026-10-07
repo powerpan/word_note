@@ -90,32 +90,45 @@ extension WordNoteV2ContentService {
     }
 
     public func updateCandidate(_ edit: WordNoteV2CandidateEdit, at date: Date = Date()) throws {
+        try updateCandidates([edit], at: date)
+    }
+
+    public func updateCandidates(_ edits: [WordNoteV2CandidateEdit], at date: Date = Date()) throws {
         try transaction {
             try validateDate(date)
-            guard let value = try fetch(Candidate.self).first(where: { $0.id == edit.id }) else {
-                throw WordNoteV2ContentError.missingEntity
+            guard Set(edits.map(\.id)).count == edits.count else { throw WordNoteV2ContentError.invalidValue }
+            let storedCandidates = try fetch(Candidate.self)
+            var sources: [UUID: Record] = [:]
+            // Validate every original revision before advancing shared source records.
+            for edit in edits {
+                guard let value = storedCandidates.first(where: { $0.id == edit.id }) else {
+                    throw WordNoteV2ContentError.missingEntity
+                }
+                try requireRevision(value.revision, edit.revision)
+                guard value.status == .pending else { throw WordNoteV2ContentError.candidateAlreadyHandled }
+                let source = try sources[value.inputRecordID] ?? record(value.inputRecordID)
+                try requireRevision(source.revision, edit.recordRevision)
+                try requireEditableCuration(source)
+                guard value.analysisGeneration == source.analysisGeneration else { throw WordNoteV2ContentError.invalidState }
+                let text = edit.term.trimmingCharacters(in: .whitespacesAndNewlines)
+                try validateSubjectAndDefinition(text, chinese: edit.chineseMeaning, english: edit.englishDefinition, record: source)
+                try validateText([edit.aiContextExplanation, edit.exampleSentence])
+                value.term = text
+                value.normalizedTerm = TextNormalizer.normalized(text)
+                value.importance = edit.importance
+                value.category = edit.category
+                value.chineseMeaning = optionalText(edit.chineseMeaning)
+                value.englishDefinition = optionalText(edit.englishDefinition)
+                value.aiContextExplanation = optionalText(edit.aiContextExplanation)
+                value.exampleSentence = optionalText(edit.exampleSentence)
+                value.revision = try increment(value.revision)
+                value.updatedAt = date
+                sources[source.id] = source
             }
-            try requireRevision(value.revision, edit.revision)
-            guard value.status == .pending else { throw WordNoteV2ContentError.candidateAlreadyHandled }
-            let source = try record(value.inputRecordID)
-            try requireRevision(source.revision, edit.recordRevision)
-            try requireEditableCuration(source)
-            guard value.analysisGeneration == source.analysisGeneration else { throw WordNoteV2ContentError.invalidState }
-            let text = edit.term.trimmingCharacters(in: .whitespacesAndNewlines)
-            try validateSubjectAndDefinition(text, chinese: edit.chineseMeaning, english: edit.englishDefinition, record: source)
-            try validateText([edit.aiContextExplanation, edit.exampleSentence])
-            value.term = text
-            value.normalizedTerm = TextNormalizer.normalized(text)
-            value.importance = edit.importance
-            value.category = edit.category
-            value.chineseMeaning = optionalText(edit.chineseMeaning)
-            value.englishDefinition = optionalText(edit.englishDefinition)
-            value.aiContextExplanation = optionalText(edit.aiContextExplanation)
-            value.exampleSentence = optionalText(edit.exampleSentence)
-            value.revision = try increment(value.revision)
-            value.updatedAt = date
-            source.revision = try increment(source.revision)
-            source.updatedAt = date
+            for source in sources.values {
+                source.revision = try increment(source.revision)
+                source.updatedAt = date
+            }
         }
     }
 

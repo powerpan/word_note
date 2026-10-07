@@ -6,7 +6,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var dataProtection: WordNoteDataProtection?
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        dataProtection?.restorePhase == .preparing ? .terminateCancel : .terminateNow
+        if dataProtection?.restorePhase == .preparing { return .terminateCancel }
+        #if WORDNOTE_V2_VALIDATION
+        if dataProtection?.restorePhase != .readyToQuit {
+            return EditProtectionWindows.shared.shouldTerminate(sender)
+        }
+        #endif
+        return .terminateNow
     }
 
     func applicationWillTerminate(_ notification: Notification) {

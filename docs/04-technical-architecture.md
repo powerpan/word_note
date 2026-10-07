@@ -453,7 +453,11 @@ P2 若做 iCloud，需要先制定資料衝突策略，不能直接把本地模�
 
 單項確認支援新建與關聯已有詞，校驗候選/記錄/目標 revision 及分析世代；相同 confirmationOperationID 重送返回原目標，目標已刪除則明確報錯、不重建。QA App 沿用新詞批量確認交互，先核對全部候選/記錄 revision，整批單次保存；遇精確重複仍整批拒絕，不自行關聯。A04 undo receipt、A05 批次預覽/逐字段補充尚未實作。刪除與課程引用保護的基礎證據見 [V2 內容交易](qa/2026-10-08-a02-content-transactions.md)。
 
-V2 QA 的候選輸入綁定值型 `WordNoteV2CandidateEdit`，保存前不碰 SwiftData；已修改未保存的行會阻止該候選區直接確認。Term/Course 表單在載入時保存 revision，正式保存與刪除不能偷偷改用當前 revision。編輯衝突拒絕覆寫，完整離頁/關窗保護和撤銷仍屬 A04。詞條課程成員資格由 TermCourseLink 控制，編輯不改寫原 occurrence 或兼容 courseID；詞庫、課程計數、復習篩選及 CSV 使用相同成員資料。V2 review 只把既有排程搬入原子交易，保留 legacyMixed，不提前啟用 V3 分方向規則。
+V2 QA 的候選輸入綁定值型 `WordNoteV2CandidateEdit`，保存前不碰 SwiftData；已修改未保存的行會阻止該候選區直接確認。Term/Course 表單在載入時保存 revision，正式保存與刪除不能偷偷改用當前 revision。詞條課程成員資格由 TermCourseLink 控制，編輯不改寫原 occurrence 或兼容 courseID；詞庫、課程計數、復習篩選及 CSV 使用相同成員資料。V2 review 只把既有排程搬入原子交易，保留 legacyMixed，不提前啟用 V3 分方向規則。
+
+A04 編輯保護：每個主窗口持有 `WordNoteEditProtection`，表單使用引用生命週期穩定、內容為值型的 `WordNoteEditDraft`。保護器在決策時讀取當前值，不等 SwiftUI 的 onChange，避免漏掉最後一次輸入；草稿不是 SwiftData 模型。導航/篩選/列表切換/Inbox 整理操作先處理保存、放棄或取消，sheet 完全關閉後才執行待處理動作。保存失敗保留草稿和原目的地，第二個請求不能覆蓋第一個。其他窗口移除模型時，髒草稿仍留在當前窗口，可查看並複製文字；保存按 ID 重查並拒絕已刪除/過期的目標，不重建已刪內容。
+
+原生 NSWindow 代理只攔截關閉並轉發原有 SwiftUI delegate；取消時嘗試恢復原控件與文字選區。正常退出由 `WordNoteQuitProtection` 逐窗口處理，任何取消/保存失敗都阻止退出，過程中新窗口也重新納入；已明確準備的資料恢復沿用既有受控退出流程。同記錄的候選草稿整批一次交易保存，各候選 revision 增加一次，來源 revision 只增加一次。這些代碼僅在 V2 QA 注入窗口保護，不啟用生產遷移；UI 尚未實機通過，字段差異對比和 undo receipt 仍待補，見 [A04 證據](qa/2026-10-08-a04-edit-protection.md)。
 
 ### 備份、恢復與啟動
 

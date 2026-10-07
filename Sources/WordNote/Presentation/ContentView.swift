@@ -3,14 +3,22 @@ import SwiftUI
 import WordNoteCore
 
 struct ContentView: View {
+    @Environment(\.editProtection) private var editProtection
     @SceneStorage("sidebarSelection") private var selection: SidebarDestination = .dashboard
+
+    private var protectedSelection: Binding<SidebarDestination> {
+        Binding(get: { selection }, set: { destination in
+            guard selection != destination else { return }
+            protectingEdits(editProtection) { selection = destination }
+        })
+    }
 
     var body: some View {
         GeometryReader { proxy in
             let sidebarPresentation = SidebarPresentation.presentation(for: proxy.size.width)
 
             HStack(spacing: 0) {
-                SidebarView(selection: $selection, presentation: sidebarPresentation)
+                SidebarView(selection: protectedSelection, presentation: sidebarPresentation)
                     .frame(
                         minWidth: sidebarPresentation.width,
                         idealWidth: sidebarPresentation.width,
@@ -18,7 +26,7 @@ struct ContentView: View {
                     )
                     .layoutPriority(3)
 
-                DetailRouter(selection: $selection)
+                DetailRouter(selection: protectedSelection)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(WordNoteTheme.canvas)
                     .layoutPriority(1)

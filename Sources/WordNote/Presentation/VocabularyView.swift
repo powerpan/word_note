@@ -3,6 +3,7 @@ import SwiftUI
 import WordNoteCore
 
 struct VocabularyView: View {
+    @Environment(\.editProtection) private var editProtection
     private var memberships = AppCourseMemberships()
     @Environment(WordNoteDataProtection.self) private var dataProtection
     @Query private var storedTerms: [TermModel]
@@ -49,7 +50,7 @@ struct VocabularyView: View {
                 VStack(spacing: 12) {
                     filterBar
 
-                    List(selection: $selectedTermID) {
+                    List(selection: protected($selectedTermID)) {
                         ForEach(filteredTerms, id: \.id) { term in
                             VocabularyRow(term: term, courseName: memberships.names(for: term, courses: courses))
                                 .tag(term.id)
@@ -79,6 +80,7 @@ struct VocabularyView: View {
 
                 if let selectedTerm {
                     TermDetailEditor(term: selectedTerm, courses: courses)
+                        .id(selectedTerm.id)
                         .frame(
                             minWidth: VocabularyLayoutMetrics.minDetailWidth,
                             maxWidth: .infinity,
@@ -127,11 +129,11 @@ struct VocabularyView: View {
                 .disabled(dataProtection.isWorking || dataProtection.isRestoring)
             }
 
-            TextField("Search English or Chinese meanings", text: $searchText)
+            TextField("Search English or Chinese meanings", text: protected($searchText))
                 .textFieldStyle(.roundedBorder)
 
             HStack(spacing: 8) {
-                Picker("Course", selection: $selectedCourseID) {
+                Picker("Course", selection: protected($selectedCourseID)) {
                     Text("All Courses").tag(UUID?.none)
                     ForEach(courses, id: \.id) { course in
                         Text(course.courseName).tag(Optional(course.id))
@@ -139,7 +141,7 @@ struct VocabularyView: View {
                 }
                 .frame(maxWidth: 170)
 
-                Picker("Mastery", selection: $selectedMasteryRaw) {
+                Picker("Mastery", selection: protected($selectedMasteryRaw)) {
                     Text("All Mastery").tag("all")
                     ForEach(MasteryLevel.allCases) { masteryLevel in
                         Text(masteryLevel.displayTitle).tag(masteryLevel.rawValue)
@@ -174,6 +176,13 @@ struct VocabularyView: View {
             return
         }
         selectedTermID = filteredTerms.first?.id
+    }
+
+    private func protected<Value: Equatable>(_ binding: Binding<Value>) -> Binding<Value> {
+        Binding(get: { binding.wrappedValue }, set: { value in
+            guard binding.wrappedValue != value else { return }
+            protectingEdits(editProtection) { binding.wrappedValue = value }
+        })
     }
 }
 

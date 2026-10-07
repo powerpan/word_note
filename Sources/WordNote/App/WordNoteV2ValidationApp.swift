@@ -13,7 +13,7 @@ struct WordNoteV2ValidationApp: App {
         WindowGroup("Word Note V2 QA", id: "main") {
             Group {
                 if let ready = runtime.ready {
-                    ContentView()
+                    EditProtectionHost { ContentView() }
                         .modelContainer(ready.session.container)
                         .environment(ready.queue)
                         .environment(ready.protection)

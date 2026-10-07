@@ -4,6 +4,7 @@ import WordNoteCore
 
 struct InboxView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.editProtection) private var editProtection
     @Environment(QuickAddAnalysisQueue.self) private var analysisQueue
     @Query private var storedRecords: [InputRecordModel]
     @Query private var storedCourses: [CourseModel]
@@ -111,7 +112,10 @@ struct InboxView: View {
     }
 
     private var recordList: some View {
-        List(selection: $selectedRecordID) {
+        List(selection: Binding(get: { selectedRecordID }, set: { id in
+            guard selectedRecordID != id else { return }
+            protectingEdits(editProtection) { selectedRecordID = id }
+        })) {
             if !activeRecords.isEmpty {
                 Section("Needs Review") {
                     ForEach(activeRecords, id: \.id) { record in
@@ -141,7 +145,7 @@ struct InboxView: View {
                     }
                     .contentShape(Rectangle())
                     .onTapGesture {
-                        confirmedRecordsExpanded.toggle()
+                        protectingEdits(editProtection) { confirmedRecordsExpanded.toggle() }
                     }
 
                     if confirmedRecordsExpanded {
@@ -175,7 +179,7 @@ struct InboxView: View {
                         .disabled(confirmableRecords.isEmpty)
 
                         Button {
-                            confirmSelectedRecords()
+                            protectingEdits(editProtection, perform: confirmSelectedRecords)
                         } label: {
                             Label("Confirm Selected", systemImage: "checkmark.circle")
                         }
@@ -213,10 +217,11 @@ struct InboxView: View {
                 candidates: candidates.filter { $0.inputRecordID == selectedRecord.id },
                 isAnalyzing: analyzingRecordID == selectedRecord.id || selectedRecord.analysisPending,
                 errorMessage: $errorMessage,
-                onAnalyze: analyze,
-                onIgnore: ignore,
-                onDelete: delete
+                onAnalyze: { record in protectingEdits(editProtection) { analyze(record) } },
+                onIgnore: { record in protectingEdits(editProtection) { ignore(record) } },
+                onDelete: { record in protectingEdits(editProtection) { delete(record) } }
             )
+            .id(selectedRecord.id)
         } else {
             EmptyStateView(
                 systemImage: "doc.text",

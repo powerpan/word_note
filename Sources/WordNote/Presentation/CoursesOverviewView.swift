@@ -3,6 +3,7 @@ import SwiftUI
 import WordNoteCore
 
 struct CoursesOverviewView: View {
+    @Environment(\.editProtection) private var editProtection
     private var memberships = AppCourseMemberships()
     @Query private var storedCourses: [CourseModel]
     @Query private var terms: [TermModel]
@@ -32,15 +33,20 @@ struct CoursesOverviewView: View {
                     subtitle: "\(courses.count) course\(courses.count == 1 ? "" : "s")"
                 ) {
                     Button {
-                        isCreating = true
-                        selectedCourseID = nil
+                        protectingEdits(editProtection) {
+                            isCreating = true
+                            selectedCourseID = nil
+                        }
                     } label: {
                         Label("Add", systemImage: "plus")
                     }
                 }
                 .padding([.horizontal, .top], 18)
 
-                List(selection: $selectedCourseID) {
+                List(selection: Binding(get: { selectedCourseID }, set: { id in
+                    guard selectedCourseID != id || isCreating else { return }
+                    protectingEdits(editProtection) { selectedCourseID = id; isCreating = false }
+                })) {
                     ForEach(courses, id: \.id) { course in
                         CourseRow(
                             course: course,
@@ -81,6 +87,7 @@ struct CoursesOverviewView: View {
                     },
                     onDeleted: {}
                     )
+                    .id("new-course")
                 } else if let selectedCourse {
                     CourseEditor(
                     mode: .edit,
@@ -95,6 +102,7 @@ struct CoursesOverviewView: View {
                         selectedCourseID = courses.first?.id
                     }
                     )
+                    .id(selectedCourse.id)
                 } else {
                     ContentUnavailableView("No Course Selected", systemImage: "graduationcap")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -177,14 +185,15 @@ private struct CourseEditor: View {
     let onSaved: (CourseModel) -> Void
     let onDeleted: () -> Void
 
-    @State private var courseName = ""
-    @State private var editRevision = 0
-    @State private var courseCode = ""
-    @State private var instructor = ""
-    @State private var semester = ""
-    @State private var description = ""
+    @State private var values = WordNoteEditDraft(CourseEditorValues())
+    @State private var draftID = UUID()
+    private var draft: CourseEditorValues { get { values.value } nonmutating set { values.value = newValue } }
+    private var original: CourseEditorValues { get { values.baseline } nonmutating set { values.baseline = newValue } }
+    private var editRevision: Int { get { values.revision } nonmutating set { values.revision = newValue } }
     @State private var statusMessage: String?
     @State private var isDeleteConfirmationPresented = false
+
+    private var isDirty: Bool { draft != original }
 
     var body: some View {
         ScrollView {
@@ -218,6 +227,12 @@ private struct CourseEditor: View {
                 if let errorMessage {
                     StatusBanner(message: errorMessage, kind: .warning)
                 }
+                if isDirty {
+                    if let course, editRevision != course.editRevision {
+                        StatusBanner(message: "This course changed in another operation. Your draft has not been overwritten.", kind: .warning)
+                    }
+                    Button("Discard Changes", action: load)
+                }
 
                 if mode == .edit {
                     HStack(spacing: 12) {
@@ -229,19 +244,19 @@ private struct CourseEditor: View {
                 GroupBox("Course") {
                     Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 10) {
                         formRow("Name") {
-                            TextField("Course name", text: $courseName)
+                            TextField("Course name", text: $values.value.courseName)
                         }
                         formRow("Code") {
-                            TextField("Course code", text: $courseCode)
+                            TextField("Course code", text: $values.value.courseCode)
                         }
                         formRow("Instructor") {
-                            TextField("Instructor", text: $instructor)
+                            TextField("Instructor", text: $values.value.instructor)
                         }
                         formRow("Semester") {
-                            TextField("Semester", text: $semester)
+                            TextField("Semester", text: $values.value.semester)
                         }
                         formRow("Description") {
-                            TextField("Description", text: $description, axis: .vertical)
+                            TextField("Description", text: $values.value.description, axis: .vertical)
                                 .lineLimit(2...6)
                         }
                     }
@@ -256,6 +271,9 @@ private struct CourseEditor: View {
         .onChange(of: course?.id) {
             load()
         }
+        .onChange(of: course?.editRevision) { if !isDirty { load() } }
+        .protectEdits(id: draftID, value: draft, isDirty: { values.isDirty }, title: "Course: \(original.courseName.isEmpty ? "New Course" : original.courseName)",
+                      preview: { values.value.preview }, save: capturedSave, discard: discardDraft)
     }
 
     @ViewBuilder
@@ -269,47 +287,63 @@ private struct CourseEditor: View {
 
     private func load() {
         editRevision = course?.editRevision ?? 0
-        courseName = course?.courseName ?? ""
-        courseCode = course?.courseCode ?? ""
-        instructor = course?.instructor ?? ""
-        semester = course?.semester ?? ""
-        description = course?.courseDescription ?? ""
+        draft = CourseEditorValues(courseName: course?.courseName ?? "", courseCode: course?.courseCode ?? "",
+                                   instructor: course?.instructor ?? "", semester: course?.semester ?? "",
+                                   description: course?.courseDescription ?? "")
+        original = draft
         statusMessage = nil
         errorMessage = nil
     }
 
     private func save() {
-        let service = CourseService(modelContext: modelContext, expectedRevision: editRevision)
-
         do {
-            let savedCourse: CourseModel
-            if let course {
-                try service.update(
-                    course,
-                    courseName: courseName,
-                    courseCode: courseCode,
-                    instructor: instructor,
-                    semester: semester,
-                    description: description
-                )
-                savedCourse = course
-            } else {
-                savedCourse = try service.create(
-                    courseName: courseName,
-                    courseCode: courseCode,
-                    instructor: instructor,
-                    semester: semester,
-                    description: description
-                )
-            }
-            editRevision = savedCourse.editRevision
-            statusMessage = "Saved."
-            errorMessage = nil
-            onSaved(savedCourse)
+            try capturedSave()
         } catch {
             statusMessage = nil
             errorMessage = error.localizedDescription
         }
+    }
+
+    private var capturedSave: () throws -> Void {
+        let id = course?.id
+        return {
+            let value = values.value
+            let revision = values.revision
+            let service = CourseService(modelContext: modelContext, expectedRevision: revision)
+            let savedCourse: CourseModel
+            if let id {
+                guard let course = try modelContext.fetch(FetchDescriptor<CourseModel>()).first(where: { $0.id == id }) else {
+                    throw WordNoteV2ContentError.missingEntity
+                }
+                try service.update(
+                    course,
+                    courseName: value.courseName,
+                    courseCode: value.courseCode,
+                    instructor: value.instructor,
+                    semester: value.semester,
+                    description: value.description
+                )
+                savedCourse = course
+            } else {
+                savedCourse = try service.create(
+                    courseName: value.courseName,
+                    courseCode: value.courseCode,
+                    instructor: value.instructor,
+                    semester: value.semester,
+                    description: value.description
+                )
+            }
+            editRevision = savedCourse.editRevision
+            original = value
+            statusMessage = "Saved."
+            errorMessage = nil
+            onSaved(savedCourse)
+        }
+    }
+
+    private func discardDraft() {
+        draft = original
+        errorMessage = nil
     }
 
     private func delete() {
@@ -318,6 +352,7 @@ private struct CourseEditor: View {
 
         do {
             try service.delete(course)
+            discardDraft()
             statusMessage = nil
             errorMessage = nil
             onDeleted()
@@ -326,6 +361,15 @@ private struct CourseEditor: View {
             errorMessage = error.localizedDescription
         }
     }
+}
+
+private struct CourseEditorValues: Equatable {
+    var courseName = ""
+    var courseCode = ""
+    var instructor = ""
+    var semester = ""
+    var description = ""
+    var preview: String { [courseName, courseCode, instructor, semester, description].filter { !$0.isEmpty }.joined(separator: "\n") }
 }
 
 private struct CourseMetric: View {

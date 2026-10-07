@@ -4,6 +4,7 @@ import WordNoteCore
 
 struct CandidateReviewView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.editProtection) private var editProtection
 
     let record: InputRecordModel
     let candidates: [CandidateTermModel]
@@ -30,19 +31,12 @@ struct CandidateReviewView: View {
                     )
                         .foregroundStyle(.secondary)
                 } else {
+                    #if WORDNOTE_V2_VALIDATION
+                    V2CandidateDraftEditor(candidates: pendingCandidates, record: record,
+                                           selectedIDs: $selectedCandidateIDs, editedIDs: $editedCandidateIDs)
+                        .disabled(isManualEditorPresented)
+                    #else
                     ForEach(pendingCandidates, id: \.id) { candidate in
-                        #if WORDNOTE_V2_VALIDATION
-                        V2CandidateEditorRow(
-                            candidate: candidate, record: record,
-                            isSelected: Binding(
-                                get: { selectedCandidateIDs.contains(candidate.id) },
-                                set: { if $0 { selectedCandidateIDs.insert(candidate.id) } else { selectedCandidateIDs.remove(candidate.id) } }
-                            ),
-                            onDirtyChanged: { dirty in
-                                if dirty { editedCandidateIDs.insert(candidate.id) } else { editedCandidateIDs.remove(candidate.id) }
-                            }
-                        )
-                        #else
                         CandidateEditorRow(
                             candidate: candidate,
                             isSelected: Binding(
@@ -56,33 +50,33 @@ struct CandidateReviewView: View {
                                 }
                             )
                         )
-                        #endif
                     }
+                    #endif
 
                     HStack {
                         Button {
-                            saveSelected()
+                            protectingEdits(editProtection, perform: saveSelected)
                         } label: {
                             Label("Save Selected", systemImage: "checkmark.circle")
                         }
-                        .disabled(selectedCandidateIDs.isEmpty || !editedCandidateIDs.isEmpty)
+                        .disabled(selectedCandidateIDs.isEmpty || !editedCandidateIDs.isEmpty || isManualEditorPresented)
 
                         Button {
-                            ignoreSelected()
+                            protectingEdits(editProtection, perform: ignoreSelected)
                         } label: {
                             Label("Ignore Selected", systemImage: "archivebox")
                         }
-                        .disabled(selectedCandidateIDs.isEmpty || !editedCandidateIDs.isEmpty)
+                        .disabled(selectedCandidateIDs.isEmpty || !editedCandidateIDs.isEmpty || isManualEditorPresented)
 
                         Button {
-                            ignoreAll()
+                            protectingEdits(editProtection, perform: ignoreAll)
                         } label: {
                             Label("Ignore All", systemImage: "xmark.circle")
                         }
-                        .disabled(!editedCandidateIDs.isEmpty)
+                        .disabled(!editedCandidateIDs.isEmpty || isManualEditorPresented)
 
                         Button {
-                            isManualEditorPresented.toggle()
+                            protectingEdits(editProtection) { isManualEditorPresented.toggle() }
                         } label: {
                             Label("Add Manually", systemImage: "square.and.pencil")
                         }
@@ -93,7 +87,7 @@ struct CandidateReviewView: View {
 
                 if record.status != .completed, pendingCandidates.isEmpty {
                     Button {
-                        isManualEditorPresented.toggle()
+                        protectingEdits(editProtection) { isManualEditorPresented.toggle() }
                     } label: {
                         Label("Add Term Manually", systemImage: "square.and.pencil")
                     }
