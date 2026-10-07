@@ -302,6 +302,8 @@ normalized(rawText) == Term.normalizedTerm
 
 先凍結 `WordNoteSchemaV1` 的真實模型定義。每版持有自己的歷史類型形狀；不能只改版本號卻讓所有版本指向最新類別。V1 fixture 必須由基線版本產生，不能由新模型現造「舊庫」。遷移只讀本地，不發 AI 請求。
 
+2026-10-08 隔離實施：五個既有模型已收進 `WordNoteSchemaV1` 命名空間，頂層別名仍指向 V1；字段和既有業務方法不變。`WordNoteSchemaV2` 另持有八個模型，尚未接入 App。原始 V1 SQLite fixture 的校驗碼不變，完整字段對比和 V2 臨時庫重開測試見 [A02 記錄](qa/2026-10-08-a02-isolated-foundation.md)。
+
 ### V2：捕獲與關聯
 
 下表為必需字段；所有新實體另有 UUID 主鍵及必要建立時間。業務唯一鍵在單一寫入協調器內校驗，採用存儲層唯一限制前須驗證最低系統兼容性。
@@ -337,6 +339,15 @@ V1 回填規則：
 4. 舊 InputRecord 用基線偵測規則回填方向，意圖為 auto，保留算法版本；重試時使用已保存值。
 5. saved 候選只有在來源/規範化詞頭能唯一對應時回填 savedTermID；有歧義保留 unresolvedLegacy 狀態與報告，不能任意選一個 Term。
 6. Term ID、Candidate ID、ReviewEvent ID 及原始文本不改寫；舊 wrongCount 繼續保留，直到 V3 啟用時凍結歷史快照。
+
+隔離轉換的具體規則：
+
+- 遷移 UUID 用固定 `wordnote/v1-to-v2/1` 命名空間、實體用途及原有 ID 作域分隔 SHA-256 映射；結果取 16 bytes 並設 UUID version 8/variant bits。此規則只用於 legacy 回填，新提交仍用新 captureID。沒有可還原到每次提交的歷史證據時，不從 `duplicateHitCount` 偽造 LookupEvent。
+- 自動方向固定為 `han-latin-v1`；顯式方向的解析來源為 `explicit-v1`。`capturedViaRaw` 支持 legacy/mainQuickAdd/floatingQuickAdd/manual，遷移來源一律 legacy。
+- 原 `analyzing` 轉成整理狀態 draft + queueState queued，原 `failed` 轉成 draft + failed；錯誤摘要和原始文字保留，沒有網絡 attemptID。已有候選、analyzedAt 或 analyzing/failed 記錄的 generation 初始化為 1，其餘為 0；這不代表重建歷史嘗試次數。啟動接入時仍必須遵守恢復/遷移後暫停分析的閘門。
+- 歷史 confirmed operationID 沒有證據，保持 nil；唯一來源/詞頭匹配才填 savedTermID。來源的歷史課程來自 InputRecord，當前 membership 來自 Term.courseID，不因兩者不同而覆寫。
+- dangling course/source、孤立 Candidate/ReviewEvent 產生帶 ID 的阻塞報告，不先調用破壞性 repair，也不猜外鍵；此版本不自動繞過這些問題。`sourceRecordID == nil` 且有非空 contextSentence 才可直接使用 legacy context fallback，原文空白字符仍保留。
+- 轉換為純值運算，同一輸入不受 fetch 順序影響；寫庫只能到空的 V2 目標庫，重複寫入同一非空庫被拒絕。這是隔離轉換的冪等保護，尚不是已接入正式啟動的完整遷移流程。
 
 ### 確認與內容保護
 

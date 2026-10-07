@@ -1,5 +1,6 @@
 import SwiftData
 
+/// Historical storage shape. Add fields only in a new schema, never in V1.
 public enum WordNoteSchemaV1: VersionedSchema {
     public static let versionIdentifier = Schema.Version(1, 0, 0)
 

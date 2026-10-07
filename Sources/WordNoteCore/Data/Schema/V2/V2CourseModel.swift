@@ -1,12 +1,11 @@
 import Foundation
 import SwiftData
 
-public typealias CourseModel = WordNoteSchemaV1.CourseModel
-
-extension WordNoteSchemaV1 {
+extension WordNoteSchemaV2 {
     @Model
     public final class CourseModel {
         @Attribute(.unique) public var id: UUID
+        public var revision: Int = 0
         public var courseName: String
         public var courseCode: String?
         public var instructor: String?
@@ -33,10 +32,6 @@ extension WordNoteSchemaV1 {
             self.courseDescription = courseDescription
             self.createdAt = createdAt
             self.updatedAt = updatedAt
-        }
-
-        public func touch(_ date: Date = Date()) {
-            updatedAt = date
         }
     }
 }

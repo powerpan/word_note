@@ -447,6 +447,10 @@ P2 若做 iCloud，需要先制定資料衝突策略，不能直接把本地模�
 
 每次 schema 改變同時更新 migration、snapshot adapter、刪除/完整性檢查與測試 fixture；先凍結 V1 真實類型形狀，不能讓 V1 指向持續改動的最新類型。V2/V3/V4 的主要寫入切換點見 [05](05-data-model.md)。
 
+2026-10-08 的隔離 V2 基礎不使用在原庫上直接執行的 lightweight migration。`WordNoteV1ToV2Migration` 先檢查完整 V1 DTO，再產生確定性的 V2 值；`WordNoteSnapshotV2Payload` 只允許写入 schema 為 V2 的空庫。完整啟動遷移仍需接入 A01 保護快照、后台建庫/重開比對和恢復日誌，不能單獨改 App 的 typealias 就啟用。
+
+V2 邏輯快照沿用 formatVersion 1 的 checksum envelope，sourceSchemaVersion 為 2.0.0。payload.content 復用凍結的 V1 字段定義，另有按實體 ID 一對一匹配的 revision/捕獲/候選/計數語義元資料表，以及 occurrence、courseLink、lookupEvent 三類實體。缺行、多行、重複業務鍵和錯誤關聯均拒絕恢復。`WordNoteSnapshotReader` 按 schema 路由 V1/V2 讀取器；現行 App vault/coordinator 尚未切換，V1 入口繼續拒絕 V2 文件和 context，防止靜默丟棄新增資料。
+
 ### 窗口與性能
 
 全局快捷鍵封裝在單一 AppKit 適配器，只接受已註冊組合鍵；先验证 macOS 14 的可用機制，不預先要求輔助功能或全鍵盤監聽。保持 SwiftUI 命令、菜單欄和浮窗路由一致。

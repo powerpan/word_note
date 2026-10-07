@@ -33,12 +33,15 @@ public struct WordNoteSnapshotPayload: Codable, Equatable, Sendable {
     public static func capture(
         from context: ModelContext, preferences: Preferences = Preferences()
     ) throws -> Self {
+        guard context.container.schema.version == WordNoteSchemaV1.versionIdentifier else {
+            throw WordNoteSnapshotError.unsupportedSchema
+        }
         let payload = Self(
-            courses: try context.fetch(FetchDescriptor<CourseModel>()).map(Course.init).sorted { $0.id.uuidString < $1.id.uuidString },
-            inputRecords: try context.fetch(FetchDescriptor<InputRecordModel>()).map(InputRecord.init).sorted { $0.id.uuidString < $1.id.uuidString },
-            candidates: try context.fetch(FetchDescriptor<CandidateTermModel>()).map(Candidate.init).sorted { $0.id.uuidString < $1.id.uuidString },
-            terms: try context.fetch(FetchDescriptor<TermModel>()).map(Term.init).sorted { $0.id.uuidString < $1.id.uuidString },
-            reviewEvents: try context.fetch(FetchDescriptor<ReviewEventModel>()).map(ReviewEvent.init).sorted { $0.id.uuidString < $1.id.uuidString },
+            courses: try context.fetch(FetchDescriptor<WordNoteSchemaV1.CourseModel>()).map(Course.init).sorted { $0.id.uuidString < $1.id.uuidString },
+            inputRecords: try context.fetch(FetchDescriptor<WordNoteSchemaV1.InputRecordModel>()).map(InputRecord.init).sorted { $0.id.uuidString < $1.id.uuidString },
+            candidates: try context.fetch(FetchDescriptor<WordNoteSchemaV1.CandidateTermModel>()).map(Candidate.init).sorted { $0.id.uuidString < $1.id.uuidString },
+            terms: try context.fetch(FetchDescriptor<WordNoteSchemaV1.TermModel>()).map(Term.init).sorted { $0.id.uuidString < $1.id.uuidString },
+            reviewEvents: try context.fetch(FetchDescriptor<WordNoteSchemaV1.ReviewEventModel>()).map(ReviewEvent.init).sorted { $0.id.uuidString < $1.id.uuidString },
             preferences: preferences
         )
         try payload.validate()
@@ -47,12 +50,15 @@ public struct WordNoteSnapshotPayload: Codable, Equatable, Sendable {
 
     // Restore only into an isolated empty context, never overwrite an open live store.
     public func populateEmptyStore(_ context: ModelContext) throws {
+        guard context.container.schema.version == WordNoteSchemaV1.versionIdentifier else {
+            throw WordNoteSnapshotError.unsupportedSchema
+        }
         try validate()
-        let existingCount = try context.fetchCount(FetchDescriptor<CourseModel>())
-            + context.fetchCount(FetchDescriptor<InputRecordModel>())
-            + context.fetchCount(FetchDescriptor<CandidateTermModel>())
-            + context.fetchCount(FetchDescriptor<TermModel>())
-            + context.fetchCount(FetchDescriptor<ReviewEventModel>())
+        let existingCount = try context.fetchCount(FetchDescriptor<WordNoteSchemaV1.CourseModel>())
+            + context.fetchCount(FetchDescriptor<WordNoteSchemaV1.InputRecordModel>())
+            + context.fetchCount(FetchDescriptor<WordNoteSchemaV1.CandidateTermModel>())
+            + context.fetchCount(FetchDescriptor<WordNoteSchemaV1.TermModel>())
+            + context.fetchCount(FetchDescriptor<WordNoteSchemaV1.ReviewEventModel>())
         guard existingCount == 0, !context.hasChanges else { throw WordNoteSnapshotError.destinationNotEmpty }
         do {
             courses.forEach { context.insert($0.model()) }
@@ -77,7 +83,7 @@ public struct WordNoteSnapshotPayload: Codable, Equatable, Sendable {
         public var createdAt: Date
         public var updatedAt: Date
 
-        public init(_ model: CourseModel) {
+        public init(_ model: WordNoteSchemaV1.CourseModel) {
             id = model.id
             courseName = model.courseName
             courseCode = model.courseCode
@@ -88,8 +94,8 @@ public struct WordNoteSnapshotPayload: Codable, Equatable, Sendable {
             updatedAt = model.updatedAt
         }
 
-        func model() -> CourseModel {
-            CourseModel(
+        func model() -> WordNoteSchemaV1.CourseModel {
+            WordNoteSchemaV1.CourseModel(
                 id: id, courseName: courseName, courseCode: courseCode, instructor: instructor,
                 semester: semester, courseDescription: courseDescription, createdAt: createdAt, updatedAt: updatedAt
             )
@@ -111,7 +117,7 @@ public struct WordNoteSnapshotPayload: Codable, Equatable, Sendable {
         public var createdAt: Date
         public var updatedAt: Date
 
-        init(_ model: InputRecordModel) {
+        init(_ model: WordNoteSchemaV1.InputRecordModel) {
             id = model.id
             rawText = model.rawText
             normalizedText = model.normalizedText
@@ -127,8 +133,8 @@ public struct WordNoteSnapshotPayload: Codable, Equatable, Sendable {
             updatedAt = model.updatedAt
         }
 
-        func model() throws -> InputRecordModel {
-            let model = InputRecordModel(
+        func model() throws -> WordNoteSchemaV1.InputRecordModel {
+            let model = WordNoteSchemaV1.InputRecordModel(
                 id: id, rawText: rawText, inputType: try snapshotEnum(inputTypeRaw),
                 status: try snapshotEnum(statusRaw), sentenceMeaning: sentenceMeaning,
                 courseID: courseID, sourceType: try snapshotEnum(sourceTypeRaw), note: note,
@@ -159,7 +165,7 @@ public struct WordNoteSnapshotPayload: Codable, Equatable, Sendable {
         public var createdAt: Date
         public var updatedAt: Date
 
-        init(_ model: CandidateTermModel) {
+        init(_ model: WordNoteSchemaV1.CandidateTermModel) {
             id = model.id
             inputRecordID = model.inputRecordID
             term = model.term
@@ -180,8 +186,8 @@ public struct WordNoteSnapshotPayload: Codable, Equatable, Sendable {
             updatedAt = model.updatedAt
         }
 
-        func model() throws -> CandidateTermModel {
-            let model = CandidateTermModel(
+        func model() throws -> WordNoteSchemaV1.CandidateTermModel {
+            let model = WordNoteSchemaV1.CandidateTermModel(
                 id: id, inputRecordID: inputRecordID, term: term, termType: try snapshotEnum(termTypeRaw),
                 needToLearn: needToLearn, importance: try snapshotEnum(importanceRaw), category: try snapshotEnum(categoryRaw),
                 reason: reason, chineseMeaning: chineseMeaning, englishDefinition: englishDefinition,
@@ -222,7 +228,7 @@ public struct WordNoteSnapshotPayload: Codable, Equatable, Sendable {
         public var createdAt: Date
         public var updatedAt: Date
 
-        public init(_ model: TermModel) {
+        public init(_ model: WordNoteSchemaV1.TermModel) {
             id = model.id
             term = model.term
             normalizedTerm = model.normalizedTerm
@@ -251,8 +257,8 @@ public struct WordNoteSnapshotPayload: Codable, Equatable, Sendable {
             updatedAt = model.updatedAt
         }
 
-        func model() throws -> TermModel {
-            let model = TermModel(
+        func model() throws -> WordNoteSchemaV1.TermModel {
+            let model = WordNoteSchemaV1.TermModel(
                 id: id, term: term, termType: try snapshotEnum(termTypeRaw),
                 chineseMeaning: chineseMeaning, englishDefinition: englishDefinition,
                 aiContextExplanation: aiContextExplanation, exampleSentence: exampleSentence,
@@ -280,7 +286,7 @@ public struct WordNoteSnapshotPayload: Codable, Equatable, Sendable {
         public var newNextReviewAt: Date?
         public var reviewedAt: Date
 
-        init(_ model: ReviewEventModel) {
+        init(_ model: WordNoteSchemaV1.ReviewEventModel) {
             id = model.id
             termID = model.termID
             modeRaw = model.modeRaw
@@ -292,8 +298,8 @@ public struct WordNoteSnapshotPayload: Codable, Equatable, Sendable {
             reviewedAt = model.reviewedAt
         }
 
-        func model() throws -> ReviewEventModel {
-            ReviewEventModel(
+        func model() throws -> WordNoteSchemaV1.ReviewEventModel {
+            WordNoteSchemaV1.ReviewEventModel(
                 id: id, termID: termID, mode: try snapshotEnum(modeRaw), feedback: try snapshotEnum(feedbackRaw),
                 previousMasteryLevel: try snapshotEnum(previousMasteryLevelRaw),
                 newMasteryLevel: try snapshotEnum(newMasteryLevelRaw),
@@ -303,7 +309,7 @@ public struct WordNoteSnapshotPayload: Codable, Equatable, Sendable {
     }
 }
 
-private func snapshotEnum<T: RawRepresentable>(_ rawValue: String) throws -> T where T.RawValue == String {
+func snapshotEnum<T: RawRepresentable>(_ rawValue: String) throws -> T where T.RawValue == String {
     guard let value = T(rawValue: rawValue) else { throw WordNoteSnapshotError.invalidEnum }
     return value
 }

@@ -1,12 +1,20 @@
 import Foundation
 import SwiftData
 
-public typealias InputRecordModel = WordNoteSchemaV1.InputRecordModel
-
-extension WordNoteSchemaV1 {
+extension WordNoteSchemaV2 {
     @Model
     public final class InputRecordModel {
         @Attribute(.unique) public var id: UUID
+        public var captureID: UUID = UUID()
+        public var lookupIntentRaw: String = "auto"
+        public var resolvedLookupDirectionRaw: String = "englishToChinese"
+        public var directionDetectorVersion: String = "han-latin-v1"
+        public var analysisGeneration: Int = 0
+        public var attemptID: UUID? = nil
+        public var queueStateRaw: String = "none"
+        public var autoRetryCount: Int = 0
+        public var nextAttemptAt: Date? = nil
+        public var revision: Int = 0
         public var rawText: String
         public var normalizedText: String
         public var inputTypeRaw: String
@@ -51,6 +59,7 @@ extension WordNoteSchemaV1 {
         ) {
             self.id = id
             self.rawText = rawText
+            self.resolvedLookupDirectionRaw = LookupDirectionDetectorV1.detect(rawText).rawValue
             self.normalizedText = TextNormalizer.normalized(rawText)
             self.inputTypeRaw = inputType.rawValue
             self.statusRaw = status.rawValue
@@ -62,37 +71,6 @@ extension WordNoteSchemaV1 {
             self.analyzedAt = analyzedAt
             self.createdAt = createdAt
             self.updatedAt = updatedAt
-        }
-
-        public func updateRawText(_ rawText: String, at date: Date = Date()) {
-            self.rawText = rawText
-            self.normalizedText = TextNormalizer.normalized(rawText)
-            touch(date)
-        }
-
-        public func markAnalyzing(at date: Date = Date()) {
-            status = .analyzing
-            aiErrorSummary = nil
-            touch(date)
-        }
-
-        public func markAnalyzed(sentenceMeaning: String?, inputType: InputType, at date: Date = Date()) {
-            self.status = .analyzed
-            self.sentenceMeaning = sentenceMeaning
-            self.inputType = inputType
-            self.analyzedAt = date
-            self.aiErrorSummary = nil
-            touch(date)
-        }
-
-        public func markFailed(_ summary: String, at date: Date = Date()) {
-            status = .failed
-            aiErrorSummary = summary
-            touch(date)
-        }
-
-        public func touch(_ date: Date = Date()) {
-            updatedAt = date
         }
     }
 }

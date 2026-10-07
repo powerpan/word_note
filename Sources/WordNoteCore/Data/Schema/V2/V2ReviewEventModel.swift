@@ -1,9 +1,7 @@
 import Foundation
 import SwiftData
 
-public typealias ReviewEventModel = WordNoteSchemaV1.ReviewEventModel
-
-extension WordNoteSchemaV1 {
+extension WordNoteSchemaV2 {
     @Model
     public final class ReviewEventModel {
         @Attribute(.unique) public var id: UUID

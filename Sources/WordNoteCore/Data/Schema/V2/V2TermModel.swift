@@ -1,12 +1,12 @@
 import Foundation
 import SwiftData
 
-public typealias TermModel = WordNoteSchemaV1.TermModel
-
-extension WordNoteSchemaV1 {
+extension WordNoteSchemaV2 {
     @Model
     public final class TermModel {
         @Attribute(.unique) public var id: UUID
+        public var revision: Int = 0
+        public var counterSemanticsVersionRaw: String = "legacyMixed"
         public var term: String
         public var normalizedTerm: String
         public var termTypeRaw: String
@@ -111,23 +111,6 @@ extension WordNoteSchemaV1 {
             self.nextReviewAt = nextReviewAt
             self.createdAt = createdAt
             self.updatedAt = updatedAt
-        }
-
-        public func applyReview(_ result: ReviewScheduleResult, reviewedAt: Date = Date()) {
-            reviewCount += 1
-            if result.countsAsWrong {
-                wrongCount += 1
-            }
-            masteryLevel = result.masteryLevel
-            reviewIntervalDays = result.reviewIntervalDays
-            correctStreak = result.correctStreak
-            lastReviewedAt = reviewedAt
-            nextReviewAt = result.nextReviewAt
-            touch(reviewedAt)
-        }
-
-        public func touch(_ date: Date = Date()) {
-            updatedAt = date
         }
     }
 }

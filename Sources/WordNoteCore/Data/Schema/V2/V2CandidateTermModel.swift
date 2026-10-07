@@ -1,12 +1,15 @@
 import Foundation
 import SwiftData
 
-public typealias CandidateTermModel = WordNoteSchemaV1.CandidateTermModel
-
-extension WordNoteSchemaV1 {
+extension WordNoteSchemaV2 {
     @Model
     public final class CandidateTermModel {
         @Attribute(.unique) public var id: UUID
+        public var revision: Int = 0
+        public var savedTermID: UUID? = nil
+        public var savedLinkStateRaw: String = "none"
+        public var confirmationOperationID: UUID? = nil
+        public var analysisGeneration: Int = 0
         public var inputRecordID: UUID
         public var term: String
         public var normalizedTerm: String
@@ -82,20 +85,6 @@ extension WordNoteSchemaV1 {
             self.statusRaw = status.rawValue
             self.createdAt = createdAt
             self.updatedAt = updatedAt
-        }
-
-        public func markSaved(at date: Date = Date()) {
-            status = .saved
-            touch(date)
-        }
-
-        public func markIgnored(at date: Date = Date()) {
-            status = .ignored
-            touch(date)
-        }
-
-        public func touch(_ date: Date = Date()) {
-            updatedAt = date
         }
     }
 }

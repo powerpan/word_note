@@ -151,7 +151,7 @@ flowchart TD
 
 ### WN2-A02：V2 捕獲與內容關聯基礎
 
-狀態：待實施。工作量：L。依賴：WN2-A01。
+狀態：進行中，隔離的 V2 模型、純轉換與快照基礎已實作；正式啟用仍等待 A01 驗收和 A02 服務接入。工作量：L。依賴：WN2-A01。
 
 - 增加 TermOccurrence、TermCourseLink、LookupEvent 與 CandidateTerm.savedTermID；建立冪等鍵和 revision 校驗。
 - 為 InputRecord 固定查詢意圖、實際方向與檢測版本，為後續手動方向覆寫留出契約。
@@ -160,6 +160,8 @@ flowchart TD
 - 更新新增、刪除、備份、恢復和資料完整性修復服務。
 
 驗收：重複執行回填不增加記錄，舊詞條和 review event ID 不變，所有來源/課程可追溯，快照恢復覆盖 V2。關聯測試：QA-06、QA-07。
+
+隔離準備記錄：[V1 凍結與 V2 資料基礎](qa/2026-10-08-a02-isolated-foundation.md)。僅在開發分支加入歷史類型、值轉換、8 實體快照及臨時庫測試；App 類型別名、啟動、寫入服務和恢復入口仍使用 V1。A01 實機閘門未通過前，不啟用正式詞庫遷移；本項也不能因模型測試通過而標為完成。
 
 ### WN2-A03：查詞展示與英文主體修復
 
@@ -382,7 +384,7 @@ flowchart TD
 |---|---|---|---|
 | WN2-G00 | 進行中，UI 待補 | S | [基線、固定 V1 fixture 與工具限制](qa/2026-10-07-g00-a03.md) |
 | WN2-A01 | 進行中，核心/App/大庫測量完成，UI 待補 | L | [核心資料保護](qa/2026-10-08-a01-persistence.md)、[App 接入](qa/2026-10-08-a01-app-integration.md)、[后台與性能](qa/2026-10-08-a01-background-persistence.md) |
-| WN2-A02 | 待實施 | L | 待填 |
+| WN2-A02 | 進行中，隔離資料基礎完成，服務/啟動未接入 | L | [V1 凍結、V2 轉換與快照](qa/2026-10-08-a02-isolated-foundation.md) |
 | WN2-A03 | 進行中，UI 待補 | S | [14 項回歸、完整離線測試及真實雙向查詞](qa/2026-10-07-g00-a03.md) |
 | WN2-A04 | 待實施 | M | 待填 |
 | WN2-A05 | 待實施 | L | 待填 |
