@@ -2,6 +2,8 @@
 
 日期：2026-10-08（Asia/Hong_Kong）。基線：`a1a7d1b`；工作分支：`codex/supplemental-development`。
 
+本記錄對應提交 `c5b7320`；完整性處理和啟動防護的後續進展另見 [A02 完整性](2026-10-08-a02-integrity.md)。下文保留當批驗證範圍和結果。
+
 ## 狀態與邊界
 
 本批推進 A02 的本地寫入核心，不代表 A02 完成或 V2 已啟用。App 的模型別名、啟動、AI worker 和 Settings 恢復入口仍使用 V1。沒有操作正式詞庫，沒有合併 main，也沒有 app 分發改動。V1 歷史類型和 SQLite fixture 未更改。

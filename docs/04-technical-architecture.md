@@ -268,8 +268,8 @@ prepare private app directory
   -> WordNoteRestoreStore reads the generation journal
        -> verify and commit a prepared replacement, or roll back an interrupted activation
   -> open the selected generation using versioned SwiftData schema
+  -> inspect dangling references without changing data; stop with a storage issue if found
   -> apply whitelisted restored preferences and acknowledge durable completion
-  -> repair dangling references and orphan rows
   -> set directory 0700 and store files 0600
   -> recover analyzing records only when analysisRequiresResume is false
   -> share WordNoteDataProtection across all windows and the capture panel
@@ -277,6 +277,8 @@ prepare private app directory
 ```
 
 舊 `default.store` 永不由遷移器刪除。持久化容器打開失敗時，App 顯示可操作的啟動錯誤頁，只使用記憶體容器承載錯誤 UI，不允許在該狀態下捕獲新資料。
+
+完整性檢查也採相同失敗關閉策略：V1 啟動不再先刪孤立候選/復習事件、再等日常備份觸發。`validateBeforeOpening` 只返回帶 ID 的問題報告或通過，不清外鍵、不刪行；問題庫保留原樣。成功選定 generation 後，錯誤頁指向該代 store 和同一目錄的 Backups，不誤指舊的根目錄 store。舊 `repairDanglingReferences` 僅保留為顯式維護 API，不再由 App 啟動呼叫。
 
 A01 接入已完成代碼和隔離集成測試，完整 UI 驗收仍待補。恢復只能經 `WordNoteDataProtection`：取得同容器寫入屏障、失效舊 AI ticket、持久化分析暫停旗標，建立並驗證當前庫快照後才準備新代。禁止在恢復準備中正常退出；就緒後受控退出，下一次 bootstrap 切庫。失敗時讀取持久日誌決定解除屏障或保持鎖定，不根據單一拋出的錯誤猜測磁碟狀態。
 
@@ -456,6 +458,8 @@ P2 若做 iCloud，需要先制定資料衝突策略，不能直接把本地模�
 2026-10-08 的隔離 V2 基礎不使用在原庫上直接執行的 lightweight migration。`WordNoteV1ToV2Migration` 先檢查完整 V1 DTO，再產生確定性的 V2 值；`WordNoteSnapshotV2Payload` 只允許写入 schema 為 V2 的空庫。完整啟動遷移仍需接入 A01 保護快照、后台建庫/重開比對和恢復日誌，不能單獨改 App 的 typealias 就啟用。
 
 V2 邏輯快照沿用 formatVersion 1 的 checksum envelope，sourceSchemaVersion 為 2.0.0。payload.content 復用凍結的 V1 字段定義，另有按實體 ID 一對一匹配的 revision/捕獲/候選/計數語義元資料表，以及 occurrence、courseLink、lookupEvent 三類實體。缺行、多行、重複業務鍵和錯誤關聯均拒絕恢復。`WordNoteSnapshotReader` 按 schema 路由 V1/V2 讀取器；現行 App vault/coordinator 尚未切換，V1 入口繼續拒絕 V2 文件和 context，防止靜默丟棄新增資料。
+
+`WordNoteV2IntegrityService` 提供值層檢查及修復預覽：涵蓋全部八實體、四份元資料、業務唯一鍵、來源對應與候選狀態。唯一自動提出的修復是解除指向已不存在記錄的 Term.sourceRecordID、Occurrence.sourceRecordID、LookupEvent.occurrenceID；缺課程、缺詞、孤立內容、跨 capture 關聯及重複關係均要求人工處理。修復方案保留完整來源值，stage 前比較最新資料與偏好，變動即拒絕舊方案。只產生新 payload、更新受影響 Term.revision，不寫原庫；正式使用仍需接入共用 staged store/日誌，不能另建一套修復切庫流程。見 [完整性與啟動防護證據](qa/2026-10-08-a02-integrity.md)。
 
 ### 窗口與性能
 

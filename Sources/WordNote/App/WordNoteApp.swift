@@ -22,6 +22,8 @@ struct WordNoteApp: App {
         let schema = Schema(versionedSchema: WordNoteSchemaV1.self)
         let storeManager = WordNoteStoreLocationManager()
         let initialization: (container: ModelContainer, session: WordNoteStoreSession?, store: WordNoteRestoreStore?, issue: AppStartupIssue?)
+        var failureStoreURL = storeManager.storeURL
+        var failureBackupURL = storeManager.backupRootURL
 
         do {
             if AppRuntime.isUITest {
@@ -29,11 +31,15 @@ struct WordNoteApp: App {
                     throw CocoaError(.fileReadCorruptFile)
                 }
                 let directory = AppRuntime.fixtureDirectoryURL
+                failureStoreURL = directory.appending(path: "WordNote.store")
+                failureBackupURL = directory.appending(path: "Backups")
                 let isNewSession = !FileManager.default.fileExists(atPath: directory.appending(path: "WordNote.store").path)
                     && !FileManager.default.fileExists(atPath: directory.appending(path: "store-generations.json").path)
                 let store = WordNoteRestoreStore(directoryURL: directory)
                 let session = try store.open()
+                failureStoreURL = session.storeURL
                 if isNewSession { try fixture.populate(session.container.mainContext) }
+                try DataIntegrityService(modelContext: session.container.mainContext).validateBeforeOpening()
                 UserDefaults.standard.set(AppRuntime.fixtureAppearance.rawValue, forKey: AppAppearancePreference.storageKey)
                 try Self.applyRestoredPreferences(session, store: store)
                 initialization = (session.container, session, store, nil)
@@ -44,8 +50,10 @@ struct WordNoteApp: App {
                 }
                 let store = WordNoteRestoreStore(directoryURL: directory)
                 let session = try store.open()
+                failureStoreURL = session.storeURL
+                failureBackupURL = directory.appending(path: "Backups")
+                try DataIntegrityService(modelContext: session.container.mainContext).validateBeforeOpening()
                 try Self.applyRestoredPreferences(session, store: store)
-                _ = try DataIntegrityService(modelContext: session.container.mainContext).repairDanglingReferences()
                 _ = try? DeepSeekEnvironmentFileStore().migrateFromProcessEnvironmentIfNeeded()
                 initialization = (session.container, session, store, nil)
             }
@@ -55,8 +63,8 @@ struct WordNoteApp: App {
                 nil, nil,
                 AppStartupIssue(
                     message: error.localizedDescription,
-                    storePath: storeManager.storeURL.path,
-                    backupPath: storeManager.backupRootURL.path
+                    storePath: failureStoreURL.path,
+                    backupPath: failureBackupURL.path
                 )
             )
         }

@@ -30,6 +30,16 @@ public struct WordNoteSnapshotV2Payload: Codable, Equatable, Sendable {
         from context: ModelContext,
         preferences: WordNoteSnapshotPayload.Preferences = .init()
     ) throws -> Self {
+        let payload = try captureForIntegrityInspection(from: context, preferences: preferences)
+        try payload.validate()
+        return payload
+    }
+
+    // Only integrity inspection may read invalid relationships; backup/restore must still validate.
+    static func captureForIntegrityInspection(
+        from context: ModelContext,
+        preferences: WordNoteSnapshotPayload.Preferences = .init()
+    ) throws -> Self {
         guard context.container.schema.version == WordNoteSchemaV2.versionIdentifier else {
             throw WordNoteSnapshotError.unsupportedSchema
         }
@@ -38,7 +48,7 @@ public struct WordNoteSnapshotV2Payload: Codable, Equatable, Sendable {
         let candidates = try context.fetch(FetchDescriptor<WordNoteSchemaV2.CandidateTermModel>())
         let terms = try context.fetch(FetchDescriptor<WordNoteSchemaV2.TermModel>())
         let events = try context.fetch(FetchDescriptor<WordNoteSchemaV2.ReviewEventModel>())
-        let payload = Self(
+        return Self(
             content: WordNoteSnapshotPayload(
                 courses: courses.map(WordNoteSnapshotPayload.Course.init),
                 inputRecords: records.map(WordNoteSnapshotPayload.InputRecord.init),
@@ -55,8 +65,6 @@ public struct WordNoteSnapshotV2Payload: Codable, Equatable, Sendable {
             courseLinks: try context.fetch(FetchDescriptor<WordNoteSchemaV2.TermCourseLinkModel>()).map(CourseLink.init),
             lookupEvents: try context.fetch(FetchDescriptor<WordNoteSchemaV2.LookupEventModel>()).map(LookupEvent.init)
         ).canonicalized
-        try payload.validate()
-        return payload
     }
 
     public func populateEmptyStore(_ context: ModelContext) throws {
