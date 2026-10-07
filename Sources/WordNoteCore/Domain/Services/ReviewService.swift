@@ -49,6 +49,7 @@ public struct ReviewService {
         feedback: ReviewFeedback,
         reviewedAt: Date = Date()
     ) throws -> ReviewEventModel {
+        try WordNoteWriteGate.check(modelContext)
         let previousMasteryLevel = term.masteryLevel
         let previousNextReviewAt = term.nextReviewAt
         let result = scheduler.schedule(
@@ -76,6 +77,7 @@ public struct ReviewService {
     }
 
     public func postponeUntilTomorrow(_ term: TermModel, from date: Date = Date()) throws {
+        try WordNoteWriteGate.check(modelContext)
         let startOfToday = calendar.startOfDay(for: date)
         term.nextReviewAt = calendar.date(byAdding: .day, value: 1, to: startOfToday)
             ?? date.addingTimeInterval(24 * 60 * 60)

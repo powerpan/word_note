@@ -10,6 +10,7 @@ public final class QuickAddAnalysisQueue {
     @ObservationIgnored private let modelContext: ModelContext
     @ObservationIgnored private let analysisHandler: AnalysisHandler
     @ObservationIgnored private var processingTask: Task<Void, Never>?
+    @ObservationIgnored private var processingID = UUID()
     private var queuedRecords: [QueuedAnalysisRecord] = []
     private var isProcessingAnalysisQueue = false
 
@@ -17,13 +18,16 @@ public final class QuickAddAnalysisQueue {
     public var statusMessage: String?
     public var errorMessage: String?
     public var latestAIExplanation: AIExplanationPreview?
+    public private(set) var isSuspended: Bool
 
     public init(
         modelContext: ModelContext,
+        initiallySuspended: Bool = false,
         analysisHandler: AnalysisHandler? = nil
     ) {
         self.modelContext = modelContext
         self.analysisHandler = analysisHandler ?? Self.performLiveAnalysis
+        isSuspended = initiallySuspended
     }
 
     public var queuedCount: Int {
@@ -35,6 +39,7 @@ public final class QuickAddAnalysisQueue {
     }
 
     public var queueStatusText: String {
+        if isSuspended { return "Analysis paused. Resume in Settings." }
         if let activeAnalysisTitle {
             return "Analyzing: \(activeAnalysisTitle)"
         }
@@ -49,6 +54,7 @@ public final class QuickAddAnalysisQueue {
         sourceType: SourceType,
         note: String?
     ) throws -> QuickAddEnqueueResult {
+        try WordNoteWriteGate.check(modelContext)
         let lookupDirection = LookupDirectionDetector.detect(rawText)
         let vocabularyService = VocabularyService(modelContext: modelContext)
         if lookupDirection == .englishToChinese,
@@ -89,6 +95,8 @@ public final class QuickAddAnalysisQueue {
 
     @discardableResult
     public func recoverPendingAnalyses() throws -> Int {
+        try WordNoteWriteGate.check(modelContext)
+        guard !isSuspended else { return 0 }
         let persistedRecords = try modelContext.fetch(FetchDescriptor<InputRecordModel>())
             .filter { $0.status == .analyzing }
             .sorted { $0.createdAt < $1.createdAt }
@@ -115,6 +123,28 @@ public final class QuickAddAnalysisQueue {
         return recoveredRecords.count
     }
 
+    public func suspendForRestore() {
+        isSuspended = true
+        processingID = UUID()
+        processingTask?.cancel()
+        processingTask = nil
+        queuedRecords.removeAll()
+        isProcessingAnalysisQueue = false
+        activeAnalysisTitle = nil
+        latestAIExplanation = nil
+    }
+
+    @discardableResult
+    public func resumePendingAnalyses() throws -> Int {
+        try WordNoteWriteGate.check(modelContext)
+        isSuspended = false
+        do { return try recoverPendingAnalyses() }
+        catch {
+            isSuspended = true
+            throw error
+        }
+    }
+
     func waitUntilIdle(timeoutNanoseconds: UInt64 = 3_000_000_000) async throws {
         let startedAt = ContinuousClock.now
         while isBusy {
@@ -131,27 +161,32 @@ public final class QuickAddAnalysisQueue {
     }
 
     private func processNextQueuedAnalysisIfNeeded() {
-        guard !isProcessingAnalysisQueue, !queuedRecords.isEmpty else { return }
+        guard !isSuspended, !isProcessingAnalysisQueue, !queuedRecords.isEmpty else { return }
+        guard let ticket = try? WordNoteWriteGate.ticket(for: modelContext) else { return }
 
         isProcessingAnalysisQueue = true
         let queuedRecord = queuedRecords.removeFirst()
         activeAnalysisTitle = queuedRecord.record.rawText
+        let operationID = UUID()
+        processingID = operationID
 
         processingTask = Task { @MainActor in
+            guard processingID == operationID, !Task.isCancelled else { return }
             let service = InputRecordService(modelContext: modelContext)
             let lookupDirection = LookupDirectionDetector.detect(queuedRecord.record.rawText)
 
             do {
-                let result = try await analysisHandler(
-                    AIAnalysisRequest(
+                let outcome = try await service.analyze(
+                    queuedRecord.record, request: AIAnalysisRequest(
                         rawText: queuedRecord.record.rawText,
                         courseName: queuedRecord.courseName,
                         sourceType: queuedRecord.record.sourceType,
                         userNote: queuedRecord.record.note,
                         lookupDirection: lookupDirection
-                    )
+                    ), ticket: ticket, using: analysisHandler
                 )
-                let candidates = try service.applyAnalysisResult(result, to: queuedRecord.record)
+                guard processingID == operationID else { return }
+                let result = outcome.analysis
 
                 latestAIExplanation = AIExplanationPreview(
                     rawText: queuedRecord.record.rawText,
@@ -159,13 +194,11 @@ public final class QuickAddAnalysisQueue {
                     candidates: result.candidates.map(AIExplanationCandidatePreview.init(candidate:))
                 )
                 statusMessage = lookupDirection == .chineseToEnglish
-                    ? "English candidates are ready in Inbox: \(candidates.count)"
-                    : "Analyzed \(queuedRecord.record.rawText). Candidates: \(candidates.count)"
+                    ? "English candidates are ready in Inbox: \(outcome.candidateCount)"
+                    : "Analyzed \(queuedRecord.record.rawText). Candidates: \(outcome.candidateCount)"
                 errorMessage = nil
             } catch {
-                if queuedRecord.record.status != .failed {
-                    try? service.markFailed(queuedRecord.record, summary: error.localizedDescription)
-                }
+                guard processingID == operationID else { return }
                 statusMessage = nil
                 errorMessage = "Analysis failed for \(queuedRecord.record.rawText): \(error.localizedDescription)"
             }

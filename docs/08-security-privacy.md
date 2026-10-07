@@ -1,6 +1,6 @@
 # 08. Security And Privacy
 
-版本說明：原章節記錄現行安全邊界；文末「2026-10 補充契約」是 A01 起逐步交付的備份、恢復和權限要求，尚未實施。
+版本說明：原章節記錄現行安全邊界；文末「2026-10 補充契約」按任務分階段交付。A01 的 V1 備份、恢復、導出及 App 接入已在開發分支實作並通過隔離集成測試，完整 UI/性能驗收仍待補，見 [執行記錄](qa/2026-10-08-a01-app-integration.md)。後續 schema 和 B/C 權限功能不屬於已完成範圍。
 
 ## 資料分類
 
@@ -79,12 +79,12 @@ Debug build 如需更詳細日誌，必須由開發者顯式開啟，且不可�
 
 ## 導出
 
-P1 JSON/CSV 導出要求：
+已接入的 V1 JSON/CSV 導出邊界：
 
 - 不包含 API Key。
 - 不包含內部錯誤堆棧。
-- 可以包含 Term、Course、ReviewEvent。
-- 是否包含 InputRecord 由用戶選擇。
+- 完整 JSON 必須包含 Course、InputRecord、CandidateTerm、Term、ReviewEvent 及白名單偏好，用於一致恢復；不能任意省略被引用模型。
+- CSV 僅導出所選或當前篩選詞條，不含原始 InputRecord、候選或 ReviewEvent；在文件選擇器確認數量和隱私風險。
 
 ## 刪除
 
@@ -110,16 +110,15 @@ P1 JSON/CSV 導出要求：
 
 ## 備份策略
 
-目前：
+開發分支 A01 實作（尚未完整實機驗收）：
 
-- SwiftData 固定存放在 `~/Library/Application Support/WordNote/WordNote.store`。
+- 無 generation 清單時沿用 `~/Library/Application Support/WordNote/WordNote.store`；恢復後由同目錄 `store-generations.json` 選擇 `Stores/<UUID>/WordNote.store`，不覆寫已打開的舊庫。
 - 從歷史 `default.store` 遷移時自動建立一次不可覆寫的完整備份，並保留原檔。
-- 一般日常寫入不建立逐次備份；仍需後續提供用戶主動導出能力。
-
-P1：
-
-- 增加手動 JSON 導出。
-- 增加導入前備份。
+- 首次有資料時建立自動邏輯快照；之後資料變更且滿 24 小時才備份。啟動檢查、保存事件與運行期檢查由 App 級 coordinator 管理，不依賴 Settings 頁面保持打開；沒有資料變更時不重複捕獲全庫。
+- 自動快照保留最近 7 份，手動/恢復前保護快照不自動刪除；清理失敗保留新快照並告警，下次檢查可重試。
+- Settings 提供手動備份、JSON 導出、快照列表和明確刪除；恢復前檢查版本/校驗碼，顯示替換與未保存表單警告，生成並驗證當前庫保護快照後才建新代。
+- 恢復期间全窗口提交和領域寫入受同容器屏障保護。舊 AI 操作 ticket 失效，不論成功或失敗回調都不能寫入；暫停旗標先持久化，恢復/取消後未完成分析必須顯式恢復，不自動重播付費請求。
+- 導出禁止選在受管理資料目錄（含符號鏈接別名）內，避免覆寫 store、恢復日誌或既有備份。
 
 ## 權限
 
@@ -158,7 +157,7 @@ P1 如果做全局快捷鍵或剪貼板增強，需要單獨評估權限。
 
 完整 JSON envelope 包括 formatVersion、sourceSchemaVersion、appVersion、snapshotID、createdAt、各實體數量、payload checksum 和模型 DTO。formatVersion 首版為 1，與資料 schema 分開。payload 使用 JSON 字符串承載序列化 DTO，checksum 對解碼該字符串後的原始 UTF-8 bytes 計算並驗證，再解析其中模型資料，不對任意重排的 JSON 對象求 hash；採標準序列化/雜湊實作。校驗碼只檢測損壞，不宣稱文件經簽名或已加密。
 
-V1-V4 均有對應 reader/upgrader；最新版本可恢復受支持舊快照，舊 App 拒絕較新快照。包含原文、候選、詞義、課程、來源、卡片、事件和持久化會話；非機密偏好只用明確白名單（外觀、課程/來源預設、學習限額）。排除 env、API Key、任意 UserDefaults、SSH 文件、日誌、網絡原始 response 及系統快捷鍵權限狀態。
+目標契約：V1-V4 各階段提供對應 reader/upgrader；最新版本可恢復受支持舊快照，舊 App 拒絕較新快照。最終包含原文、候選、詞義、課程、來源、卡片、事件和持久化會話；非機密偏好只用明確白名單（外觀、課程/來源預設、學習限額）。目前只支援 V1 五類模型和 appearance/defaultSource，不虛構尚未實施字段。排除 env、API Key、任意 UserDefaults、SSH 文件、日誌、網絡原始 response 及系統快捷鍵權限狀態。
 
 默認落到 WordNote 私有 Backups 目錄，目錄 0700、文件 0600。首次有資料後建立自動快照；之後資料有變更且距上次成功滿 24 小時才再次觸發。關閉期間不常駐定時服務，下次啟動補做。最新 7 份自動快照輪替；手動、遷移前、恢復前保護快照不自動刪除。新快照寫成功且驗證可讀之後才能刪最舊自動快照，失敗不得先清空備份。
 

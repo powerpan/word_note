@@ -334,6 +334,12 @@ struct InboxView: View {
     }
 
     private func analyze(_ record: InputRecordModel) {
+        let ticket: WordNoteWriteGate.Ticket
+        do { ticket = try WordNoteWriteGate.ticket(for: modelContext) }
+        catch {
+            errorMessage = error.localizedDescription
+            return
+        }
         analyzingRecordID = record.id
         errorMessage = nil
 
@@ -341,18 +347,15 @@ struct InboxView: View {
             let service = InputRecordService(modelContext: modelContext)
 
             do {
-                try service.markAnalyzing(record)
-                let result = try await AppRuntime.analyze(
-                    AIAnalysisRequest(
+                try await service.analyze(
+                    record, request: AIAnalysisRequest(
                         rawText: record.rawText,
                         courseName: courseName(for: record.courseID),
                         sourceType: record.sourceType,
                         userNote: record.note
-                    )
+                    ), ticket: ticket, using: AppRuntime.analyze
                 )
-                _ = try service.applyAnalysisResult(result, to: record)
             } catch {
-                try? service.markFailed(record, summary: error.localizedDescription)
                 errorMessage = error.localizedDescription
             }
 

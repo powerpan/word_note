@@ -31,6 +31,7 @@ public struct CourseService {
         semester: String?,
         description: String?
     ) throws -> CourseModel {
+        try WordNoteWriteGate.check(modelContext)
         let trimmedName = courseName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !TextNormalizer.isBlank(trimmedName) else {
             throw CourseServiceError.blankCourseName
@@ -57,6 +58,7 @@ public struct CourseService {
         semester: String?,
         description: String?
     ) throws {
+        try WordNoteWriteGate.check(modelContext)
         let trimmedName = courseName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !TextNormalizer.isBlank(trimmedName) else {
             throw CourseServiceError.blankCourseName
@@ -72,6 +74,7 @@ public struct CourseService {
     }
 
     public func delete(_ course: CourseModel) throws {
+        try WordNoteWriteGate.check(modelContext)
         let courseID = course.id
         let courseIsReferenced = try modelContext.fetch(FetchDescriptor<InputRecordModel>())
             .contains { $0.courseID == courseID }

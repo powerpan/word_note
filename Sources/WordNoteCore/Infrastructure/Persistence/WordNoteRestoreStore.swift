@@ -200,6 +200,19 @@ public struct WordNoteRestoreStore {
         try writeManifest(manifest)
     }
 
+    public func requireAnalysisPause(for expectedGeneration: WordNoteStoreGeneration) throws {
+        var manifest = try readManifest()
+        guard manifest.active == expectedGeneration, manifest.pending == nil else { throw WordNoteRestoreError.staleGeneration }
+        manifest.analysisRequiresResume = true
+        try writeManifest(manifest)
+    }
+
+    public func hasPreparedRestore(for expectedGeneration: WordNoteStoreGeneration) throws -> Bool {
+        let manifest = try readManifest()
+        guard manifest.active == expectedGeneration else { throw WordNoteRestoreError.staleGeneration }
+        return manifest.pending != nil
+    }
+
     private func session(
         _ manifest: Manifest, outcome: WordNoteRestoreOutcome, requireExisting: Bool = false
     ) throws -> WordNoteStoreSession {

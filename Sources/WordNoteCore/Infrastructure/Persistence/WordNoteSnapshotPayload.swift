@@ -78,7 +78,7 @@ public struct WordNoteSnapshotPayload: Codable, Equatable, Sendable {
         public var createdAt: Date
         public var updatedAt: Date
 
-        @MainActor init(_ model: CourseModel) {
+        @MainActor public init(_ model: CourseModel) {
             id = model.id
             courseName = model.courseName
             courseCode = model.courseCode
@@ -223,7 +223,7 @@ public struct WordNoteSnapshotPayload: Codable, Equatable, Sendable {
         public var createdAt: Date
         public var updatedAt: Date
 
-        @MainActor init(_ model: TermModel) {
+        @MainActor public init(_ model: TermModel) {
             id = model.id
             term = model.term
             normalizedTerm = model.normalizedTerm

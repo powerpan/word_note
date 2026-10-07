@@ -64,6 +64,7 @@ public struct VocabularyService {
         at date: Date = Date(),
         wrongCountCooldown: TimeInterval = 10 * 60
     ) throws -> TermModel {
+        try WordNoteWriteGate.check(modelContext)
         let previousDuplicateHitAt = term.lastDuplicateHitAt
 
         term.nextReviewAt = date
@@ -102,6 +103,7 @@ public struct VocabularyService {
 
     @discardableResult
     public func confirmCandidates(_ confirmations: [CandidateConfirmation]) throws -> [TermModel] {
+        try WordNoteWriteGate.check(modelContext)
         guard !confirmations.isEmpty,
               confirmations.allSatisfy({ !$0.candidates.isEmpty })
         else {
@@ -187,6 +189,7 @@ public struct VocabularyService {
         englishDefinition: String?,
         sourceRecord: InputRecordModel
     ) throws -> TermModel {
+        try WordNoteWriteGate.check(modelContext)
         let trimmedTerm = termText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !TextNormalizer.isBlank(trimmedTerm) else {
             throw InputRecordValidationError.blankRawText
@@ -236,6 +239,7 @@ public struct VocabularyService {
     }
 
     public func ignore(_ candidates: [CandidateTermModel], sourceRecord: InputRecordModel) throws {
+        try WordNoteWriteGate.check(modelContext)
         let now = Date()
         for candidate in candidates {
             candidate.markIgnored(at: now)
@@ -259,6 +263,7 @@ public struct VocabularyService {
         importance: Importance,
         masteryLevel: MasteryLevel
     ) throws {
+        try WordNoteWriteGate.check(modelContext)
         let trimmedTerm = termText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !TextNormalizer.isBlank(trimmedTerm) else {
             throw InputRecordValidationError.blankRawText
@@ -294,6 +299,7 @@ public struct VocabularyService {
     }
 
     public func delete(_ term: TermModel) throws {
+        try WordNoteWriteGate.check(modelContext)
         let termID = term.id
         let reviewEvents = try modelContext.fetch(FetchDescriptor<ReviewEventModel>())
             .filter { $0.termID == termID }

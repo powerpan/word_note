@@ -2,6 +2,7 @@ import SwiftUI
 import WordNoteCore
 
 struct SettingsView: View {
+    @Environment(WordNoteDataProtection.self) private var dataProtection
     @AppStorage(AppAppearancePreference.storageKey) private var appearanceRawValue = AppAppearancePreference.system.rawValue
     @AppStorage("defaultSourceType") private var defaultSourceType = "other"
     @State private var apiKey = ""
@@ -98,11 +99,15 @@ struct SettingsView: View {
                     .padding(.vertical, 4)
                 }
                 .groupBoxStyle(WordNoteGroupBoxStyle())
+
+                DataManagementView()
             }
             .padding(28)
             .frame(maxWidth: 760, alignment: .leading)
         }
         .onAppear(perform: loadKeyStatus)
+        .onChange(of: appearanceRawValue) { dataProtection.noteDataChanged() }
+        .onChange(of: defaultSourceType) { dataProtection.noteDataChanged() }
     }
 
     private func loadKeyStatus() {

@@ -161,6 +161,7 @@ struct CandidateReviewView: View {
 }
 
 private struct CandidateEditorRow: View {
+    @Environment(\.modelContext) private var modelContext
     @Bindable var candidate: CandidateTermModel
     @Binding var isSelected: Bool
 
@@ -172,13 +173,12 @@ private struct CandidateEditorRow: View {
                     .toggleStyle(.checkbox)
                     .accessibilityLabel("Select \(candidate.term)")
 
-                TextField("Term", text: $candidate.term)
+                TextField("Term", text: guarded($candidate.term) { value in
+                    candidate.normalizedTerm = TextNormalizer.normalized(value)
+                })
                     .font(.headline)
-                    .onChange(of: candidate.term) {
-                        candidate.normalizedTerm = TextNormalizer.normalized(candidate.term)
-                    }
 
-                Picker("Importance", selection: $candidate.importance) {
+                Picker("Importance", selection: guarded($candidate.importance)) {
                     ForEach(Importance.allCases) { importance in
                         Text(importance.displayTitle).tag(importance)
                     }
@@ -186,7 +186,7 @@ private struct CandidateEditorRow: View {
                 .labelsHidden()
                 .frame(width: 120)
 
-                Picker("Category", selection: $candidate.category) {
+                Picker("Category", selection: guarded($candidate.category)) {
                     ForEach(TermCategory.allCases) { category in
                         Text(category.displayTitle).tag(category)
                     }
@@ -236,7 +236,18 @@ private struct CandidateEditorRow: View {
     private func optionalBinding(_ binding: Binding<String?>) -> Binding<String> {
         Binding(
             get: { binding.wrappedValue ?? "" },
-            set: { binding.wrappedValue = $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 }
+            set: {
+                guard !WordNoteWriteGate.isBlocked(modelContext) else { return }
+                binding.wrappedValue = $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0
+            }
         )
+    }
+
+    private func guarded<T>(_ binding: Binding<T>, onChange: @escaping (T) -> Void = { _ in }) -> Binding<T> {
+        Binding(get: { binding.wrappedValue }, set: {
+            guard !WordNoteWriteGate.isBlocked(modelContext) else { return }
+            binding.wrappedValue = $0
+            onChange($0)
+        })
     }
 }

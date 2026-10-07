@@ -25,6 +25,7 @@ public struct DataIntegrityService {
 
     @discardableResult
     public func repairDanglingReferences() throws -> DataIntegrityRepairReport {
+        try WordNoteWriteGate.check(modelContext)
         let records = try modelContext.fetch(FetchDescriptor<InputRecordModel>())
         let candidates = try modelContext.fetch(FetchDescriptor<CandidateTermModel>())
         let terms = try modelContext.fetch(FetchDescriptor<TermModel>())

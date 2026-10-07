@@ -262,16 +262,23 @@ CandidateReviewView
 
 ```text
 prepare private app directory
-  -> if WordNote.store is absent and legacy default.store exists
+  -> if no generation journal, WordNote.store is absent, and legacy default.store exists
        -> copy legacy store + WAL/SHM to unique backup directory
        -> copy into WordNote/WordNote.store
-  -> open versioned SwiftData schema
+  -> WordNoteRestoreStore reads the generation journal
+       -> verify and commit a prepared replacement, or roll back an interrupted activation
+  -> open the selected generation using versioned SwiftData schema
+  -> apply whitelisted restored preferences and acknowledge durable completion
   -> repair dangling references and orphan rows
   -> set directory 0700 and store files 0600
-  -> recover analyzing records into the queue
+  -> recover analyzing records only when analysisRequiresResume is false
+  -> share WordNoteDataProtection across all windows and the capture panel
+  -> observe saves and run automatic backup checks independently of view lifetime
 ```
 
 舊 `default.store` 永不由遷移器刪除。持久化容器打開失敗時，App 顯示可操作的啟動錯誤頁，只使用記憶體容器承載錯誤 UI，不允許在該狀態下捕獲新資料。
+
+A01 接入已完成代碼和隔離集成測試，完整 UI 驗收仍待補。恢復只能經 `WordNoteDataProtection`：取得同容器寫入屏障、失效舊 AI ticket、持久化分析暫停旗標，建立並驗證當前庫快照後才準備新代。禁止在恢復準備中正常退出；就緒後受控退出，下一次 bootstrap 切庫。失敗時讀取持久日誌決定解除屏障或保持鎖定，不根據單一拋出的錯誤猜測磁碟狀態。
 
 ## 資料流：Duplicate Quick Add Hit
 

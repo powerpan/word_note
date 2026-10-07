@@ -3,6 +3,7 @@ import SwiftUI
 import WordNoteCore
 
 struct VocabularyView: View {
+    @Environment(WordNoteDataProtection.self) private var dataProtection
     @Query private var storedTerms: [TermModel]
     @Query private var storedCourses: [CourseModel]
 
@@ -10,6 +11,7 @@ struct VocabularyView: View {
     @State private var selectedCourseID: UUID?
     @State private var selectedMasteryRaw = "all"
     @State private var selectedTermID: UUID?
+    @State private var exportMessage: String?
 
     private var terms: [TermModel] {
         storedTerms.sorted { $0.updatedAt > $1.updatedAt }
@@ -98,6 +100,9 @@ struct VocabularyView: View {
         .frame(minWidth: VocabularyLayoutMetrics.minContentWidth, minHeight: 620)
         .onAppear(perform: maintainSelection)
         .onChange(of: filteredTerms.map(\.id)) { maintainSelection() }
+        .alert("Vocabulary Export", isPresented: Binding(
+            get: { exportMessage != nil }, set: { if !$0 { exportMessage = nil } }
+        )) { Button("OK", role: .cancel) {} } message: { Text(exportMessage ?? "") }
     }
 
     private var filterBar: some View {
@@ -106,7 +111,19 @@ struct VocabularyView: View {
                 title: "Vocabulary",
                 subtitle: "\(filteredTerms.count) / \(terms.count) terms"
             ) {
-                EmptyView()
+                Menu {
+                    Button("Export Filtered (\(filteredTerms.count))…", systemImage: "square.and.arrow.up") {
+                        export(filteredTerms)
+                    }
+                    .disabled(filteredTerms.isEmpty)
+                    Button("Export Selected…", systemImage: "doc") {
+                        if let selectedTerm { export([selectedTerm]) }
+                    }
+                    .disabled(selectedTerm == nil)
+                } label: { Image(systemName: "square.and.arrow.up") }
+                .help("Export vocabulary as CSV")
+                .accessibilityLabel("Export vocabulary as CSV")
+                .disabled(dataProtection.isWorking || dataProtection.isRestoring)
             }
 
             TextField("Search English or Chinese meanings", text: $searchText)
@@ -136,6 +153,18 @@ struct VocabularyView: View {
     private func courseName(for courseID: UUID?) -> String? {
         guard let courseID else { return nil }
         return courses.first { $0.id == courseID }?.courseName
+    }
+
+    private func export(_ selectedTerms: [TermModel]) {
+        let terms = selectedTerms.map(WordNoteSnapshotPayload.Term.init)
+        let courses = courses.map(WordNoteSnapshotPayload.Course.init)
+        Task {
+            guard let url = await DataFilePicker.exportURL(csvCount: terms.count) else { return }
+            do {
+                try await dataProtection.exportVocabulary(terms: terms, courses: courses, to: url)
+                exportMessage = "Exported \(terms.count) vocabulary entries."
+            } catch { exportMessage = error.localizedDescription }
+        }
     }
 
     private func maintainSelection() {

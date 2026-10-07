@@ -9,6 +9,7 @@ struct WordNoteApp: App {
     @AppStorage(AppAppearancePreference.storageKey) private var appearanceRawValue = AppAppearancePreference.system.rawValue
     @State private var analysisQueue: QuickAddAnalysisQueue
     @State private var quickAddPanelController: QuickAddPanelController
+    @State private var dataProtection: WordNoteDataProtection?
 
     private let modelContainer: ModelContainer
     private let startupIssue: AppStartupIssue?
@@ -20,38 +21,38 @@ struct WordNoteApp: App {
     init() {
         let schema = Schema(versionedSchema: WordNoteSchemaV1.self)
         let storeManager = WordNoteStoreLocationManager()
-        let initialization: (container: ModelContainer, issue: AppStartupIssue?)
+        let initialization: (container: ModelContainer, session: WordNoteStoreSession?, store: WordNoteRestoreStore?, issue: AppStartupIssue?)
 
         do {
             if AppRuntime.isUITest {
                 guard let fixture = AppRuntime.fixture else {
                     throw CocoaError(.fileReadCorruptFile)
                 }
-                let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
-                let container = try ModelContainer(for: schema, configurations: [configuration])
-                try fixture.populate(container.mainContext)
+                let directory = AppRuntime.fixtureDirectoryURL
+                let isNewSession = !FileManager.default.fileExists(atPath: directory.appending(path: "WordNote.store").path)
+                    && !FileManager.default.fileExists(atPath: directory.appending(path: "store-generations.json").path)
+                let store = WordNoteRestoreStore(directoryURL: directory)
+                let session = try store.open()
+                if isNewSession { try fixture.populate(session.container.mainContext) }
                 UserDefaults.standard.set(AppRuntime.fixtureAppearance.rawValue, forKey: AppAppearancePreference.storageKey)
-                initialization = (container, nil)
+                try Self.applyRestoredPreferences(session, store: store)
+                initialization = (session.container, session, store, nil)
             } else {
-                let storeMigration = try storeManager.prepareStoreLocation()
-                let configuration = ModelConfiguration(
-                    "WordNote",
-                    schema: schema,
-                    url: storeMigration.storeURL
-                )
-                let persistentContainer = try ModelContainer(
-                    for: schema,
-                    migrationPlan: WordNoteMigrationPlan.self,
-                    configurations: [configuration]
-                )
-                try storeManager.secureStoreFiles()
-                _ = try DataIntegrityService(modelContext: persistentContainer.mainContext).repairDanglingReferences()
+                let directory = storeManager.storeURL.deletingLastPathComponent()
+                if !FileManager.default.fileExists(atPath: directory.appending(path: "store-generations.json").path) {
+                    _ = try storeManager.prepareStoreLocation()
+                }
+                let store = WordNoteRestoreStore(directoryURL: directory)
+                let session = try store.open()
+                try Self.applyRestoredPreferences(session, store: store)
+                _ = try DataIntegrityService(modelContext: session.container.mainContext).repairDanglingReferences()
                 _ = try? DeepSeekEnvironmentFileStore().migrateFromProcessEnvironmentIfNeeded()
-                initialization = (persistentContainer, nil)
+                initialization = (session.container, session, store, nil)
             }
         } catch {
             initialization = (
                 Self.makeEmergencyContainer(schema: schema),
+                nil, nil,
                 AppStartupIssue(
                     message: error.localizedDescription,
                     storePath: storeManager.storeURL.path,
@@ -65,18 +66,38 @@ struct WordNoteApp: App {
 
         let queue = QuickAddAnalysisQueue(
             modelContext: initialization.container.mainContext,
+            initiallySuspended: initialization.session?.analysisRequiresResume ?? true,
             analysisHandler: AppRuntime.analyze
         )
         if initialization.issue == nil {
             _ = try? queue.recoverPendingAnalyses()
         }
         _analysisQueue = State(initialValue: queue)
+        let protection: WordNoteDataProtection?
+        if let session = initialization.session, let store = initialization.store {
+            protection = WordNoteDataProtection(
+                session: session, store: store,
+                vault: WordNoteBackupVault(
+                    directoryURL: store.directoryURL.appending(path: "Backups"),
+                    appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "development"
+                ), queue: queue,
+                preferences: {
+                    WordNoteSnapshotPayload.Preferences(
+                        appearance: AppAppearancePreference.resolved(from: UserDefaults.standard.string(forKey: AppAppearancePreference.storageKey) ?? "system").rawValue,
+                        defaultSource: SourceType(rawValue: UserDefaults.standard.string(forKey: "defaultSourceType") ?? "other")?.rawValue ?? "other"
+                    )
+                }
+            )
+        } else { protection = nil }
+        _dataProtection = State(initialValue: protection)
         _quickAddPanelController = State(
             initialValue: QuickAddPanelController(
                 modelContainer: initialization.container,
-                analysisQueue: queue
+                analysisQueue: queue,
+                dataProtection: protection
             )
         )
+        appDelegate.dataProtection = protection
     }
 
     var body: some Scene {
@@ -84,9 +105,12 @@ struct WordNoteApp: App {
             Group {
                 if let startupIssue {
                     AppStartupFailureView(issue: startupIssue)
-                } else {
+                } else if let dataProtection {
                     ContentView()
                         .environment(analysisQueue)
+                        .environment(dataProtection)
+                        .modifier(DataProtectionOverlay(protection: dataProtection))
+                        .task { dataProtection.startAutomaticBackups() }
                 }
             }
             .modelContainer(modelContainer)
@@ -103,7 +127,7 @@ struct WordNoteApp: App {
                     Label("Quick Add", systemImage: "plus.circle")
                 }
                 .keyboardShortcut("n", modifiers: [.command, .shift])
-                .disabled(startupIssue != nil)
+                .disabled(startupIssue != nil || dataProtection?.isRestoring == true)
             }
         }
 
@@ -111,7 +135,7 @@ struct WordNoteApp: App {
             WordNoteMenuBarMenu(
                 analysisQueue: analysisQueue,
                 quickAddPanelController: quickAddPanelController,
-                captureAvailable: startupIssue == nil
+                captureAvailable: startupIssue == nil && dataProtection?.isRestoring != true
             )
         } label: {
             WordNoteMenuBarLabel(analysisQueue: analysisQueue)
@@ -119,7 +143,16 @@ struct WordNoteApp: App {
         .menuBarExtraStyle(.menu)
 
         Settings {
-            SettingsView()
+            Group {
+                if let dataProtection {
+                    SettingsView()
+                        .environment(dataProtection)
+                        .modifier(DataProtectionOverlay(protection: dataProtection))
+                        .task { dataProtection.startAutomaticBackups() }
+                } else if let startupIssue {
+                    AppStartupFailureView(issue: startupIssue)
+                }
+            }
                 .modelContainer(modelContainer)
                 .preferredColorScheme(selectedAppearance.preferredColorScheme)
         }
@@ -134,5 +167,13 @@ struct WordNoteApp: App {
         } catch {
             preconditionFailure("SwiftData could not create an in-memory recovery container: \(error)")
         }
+    }
+
+    private static func applyRestoredPreferences(_ session: WordNoteStoreSession, store: WordNoteRestoreStore) throws {
+        guard let preferences = session.preferencesToApply else { return }
+        UserDefaults.standard.set(preferences.appearance, forKey: AppAppearancePreference.storageKey)
+        UserDefaults.standard.set(preferences.defaultSource, forKey: "defaultSourceType")
+        guard UserDefaults.standard.synchronize() else { throw CocoaError(.fileWriteUnknown) }
+        try store.acknowledgePreferences(for: session.generation)
     }
 }

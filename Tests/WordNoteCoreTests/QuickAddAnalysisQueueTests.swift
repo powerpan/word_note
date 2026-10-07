@@ -87,6 +87,34 @@ final class QuickAddAnalysisQueueTests: XCTestCase {
         XCTAssertEqual(records.first { $0.rawText == "second" }?.status, .analyzed)
     }
 
+    func testRecoveredAnalysisReportsOnlyNewCandidates() async throws {
+        let container = try makeInMemoryContainer()
+        defer { withExtendedLifetime(container) {} }
+        let context = container.mainContext
+        let inputService = InputRecordService(modelContext: context)
+        let record = try inputService.createAnalyzing(
+            rawText: "latent representation", courseID: nil, sourceType: .paper, note: nil
+        )
+        let saved = CandidateTermModel(
+            inputRecordID: record.id, term: "latent representation", termType: .phrase,
+            needToLearn: true, importance: .medium, category: .general, status: .saved
+        )
+        context.insert(saved)
+        try context.save()
+        let queue = QuickAddAnalysisQueue(modelContext: context) { request in
+            Self.result(for: request.rawText)
+        }
+
+        XCTAssertEqual(try queue.recoverPendingAnalyses(), 1)
+        try await queue.waitUntilIdle()
+
+        let candidates = try context.fetch(FetchDescriptor<CandidateTermModel>())
+        XCTAssertEqual(candidates.map(\.id), [saved.id])
+        XCTAssertEqual(candidates.first?.status, .saved)
+        XCTAssertEqual(queue.statusMessage, "Analyzed latent representation. Candidates: 0")
+        XCTAssertEqual(queue.latestAIExplanation?.candidates.count, 1)
+    }
+
     func testExactVocabularyHitSkipsAnalysisAndInboxCreation() throws {
         let context = ModelContext(try makeInMemoryContainer())
         let term = TermModel(

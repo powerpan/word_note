@@ -1,6 +1,8 @@
 import XCTest
+import SwiftData
 @testable import WordNoteCore
 
+@MainActor
 final class LiveDeepSeekSmokeTests: XCTestCase {
     func testLiveDeepSeekSupportsBothLookupDirections() async throws {
         guard ProcessInfo.processInfo.environment["RUN_LIVE_DEEPSEEK_TESTS"] == "1" else {
@@ -15,9 +17,16 @@ final class LiveDeepSeekSmokeTests: XCTestCase {
 
         let startedAt = ContinuousClock.now
         let service = AIAnalysisService(client: DeepSeekChatClient(apiKey: apiKey))
-        let result = try await service.analyze(
-            AIAnalysisRequest(rawText: "latent representation", sourceType: .paper)
+        let schema = Schema(versionedSchema: WordNoteSchemaV1.self)
+        let container = try ModelContainer(for: schema, configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)])
+        defer { withExtendedLifetime(container) {} }
+        let inputService = InputRecordService(modelContext: container.mainContext)
+        let englishRecord = try inputService.createDraft(rawText: "latent representation", courseID: nil, sourceType: .paper, note: nil)
+        let englishOutcome = try await inputService.analyze(
+            englishRecord, request: AIAnalysisRequest(rawText: "latent representation", sourceType: .paper),
+            using: { try await service.analyze($0) }
         )
+        let result = englishOutcome.analysis
 
         XCTAssertEqual(result.inputType, .phrase)
         XCTAssertTrue(
@@ -25,13 +34,15 @@ final class LiveDeepSeekSmokeTests: XCTestCase {
             "Expected a latent representation candidate, got \(result.candidates.map(\.term))"
         )
 
-        let chineseLookupResult = try await service.analyze(
-            AIAnalysisRequest(
+        let chineseRecord = try inputService.createDraft(rawText: "過擬合", courseID: nil, sourceType: .class, note: nil)
+        let chineseOutcome = try await inputService.analyze(
+            chineseRecord, request: AIAnalysisRequest(
                 rawText: "過擬合",
                 courseName: "CS-50",
                 sourceType: .class
-            )
+            ), using: { try await service.analyze($0) }
         )
+        let chineseLookupResult = chineseOutcome.analysis
 
         XCTAssertFalse(chineseLookupResult.candidates.isEmpty)
         XCTAssertTrue(
@@ -40,6 +51,15 @@ final class LiveDeepSeekSmokeTests: XCTestCase {
                     !TextNormalizer.isBlank($0.chineseMeaning ?? "")
             }
         )
+        XCTAssertEqual(englishRecord.status, .analyzed)
+        XCTAssertEqual(chineseRecord.status, .analyzed)
+        XCTAssertGreaterThan(englishOutcome.candidateCount, 0)
+        XCTAssertGreaterThan(chineseOutcome.candidateCount, 0)
+        XCTAssertEqual(
+            try container.mainContext.fetchCount(FetchDescriptor<CandidateTermModel>()),
+            englishOutcome.candidateCount + chineseOutcome.candidateCount
+        )
+        XCTAssertEqual(try container.mainContext.fetchCount(FetchDescriptor<TermModel>()), 0)
         XCTAssertTrue(
             chineseLookupResult.candidates.contains {
                 TextNormalizer.normalized($0.term).contains("overfit")

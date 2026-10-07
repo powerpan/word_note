@@ -47,6 +47,8 @@ ENOSPC 為受控故障注入，activating 中斷為持久日誌狀態重放；�
 
 ## Remaining Gates
 
+以下保留本次核心提交時的待辦基線；後續 coordinator、啟動、Settings 和網絡屏障接入結果以 [A01 App 接入記錄](2026-10-08-a01-app-integration.md) 為準，不改寫本次 154 項歷史測試結果。實機、表格軟件和大庫性能仍未完成。
+
 - App 級資料管理 coordinator、所有窗口和領域寫入服務的寫入屏障、未保存表單處理、取消/過期 AI 回調驗證。低層 `prepareRestore` 的前置條件是已取得屏障且傳入當前庫的已驗證保護快照，不能直接綁在 UI 按鈕上。
 - Settings 的備份列表、手動建立/導出/刪除、錯誤與輪替告警、恢復預覽和替換確認；Vocabulary 所選/篩選 CSV 的範圍與數量確認。
 - 正式啟動路徑掛接唯一 generation bootstrap、受控退出/重啟、恢復偏好套用、待分析顯式恢復；不能與舊啟動路徑並行競爭選庫。

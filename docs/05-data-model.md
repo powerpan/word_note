@@ -276,7 +276,7 @@ normalized(rawText) == Term.normalizedTerm
 - 新字段優先可空或有默認值。
 - 不在小版本中刪除用戶資料。
 - 任何破壞性遷移前先做導出或備份。
-- 正式 store 固定在 `~/Library/Application Support/WordNote/WordNote.store`。
+- 無分代清單時沿用 `~/Library/Application Support/WordNote/WordNote.store`。A01 恢復接入後由 `store-generations.json` 選擇受控 `Stores/<UUID>/WordNote.store`；原庫與上一代保留，不能固定打開舊路徑繞過恢復日誌。
 - 若只存在歷史 `~/Library/Application Support/default.store`，首次啟動先完整複製 store、WAL、SHM 到 `WordNote/Backups/`，再複製到新位置；舊檔保留不刪除。
 - App 啟動後清理沒有 InputRecord 的 CandidateTerm、沒有 Term 的 ReviewEvent，並清空指向不存在 Course/InputRecord 的可空外鍵。
 - `WordNote` 和 `Backups` 目錄使用 `0700`，store 與 sidecar 文件使用 `0600`。

@@ -13,11 +13,13 @@ case "$MODE" in
   --ui-fixture)
     [[ "$FIXTURE" == "empty" || "$FIXTURE" == "populated" ]] || { echo "Invalid fixture" >&2; exit 2; }
     [[ "$APPEARANCE" == "light" || "$APPEARANCE" == "dark" ]] || { echo "Invalid appearance" >&2; exit 2; }
+    QA_SESSION="${4:-$(uuidgen)}"
+    [[ "$QA_SESSION" =~ ^[[:xdigit:]]{8}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{12}$ ]] || { echo "Invalid QA session UUID" >&2; exit 2; }
     APP_NAME="WordNoteQA"
     BUNDLE_ID="com.powerpan.WordNote.UITest"
     ;;
   *)
-    echo "usage: $0 [run|--debug|--logs|--telemetry|--verify|--ui-fixture [empty|populated] [light|dark]]" >&2
+    echo "usage: $0 [run|--debug|--logs|--telemetry|--verify|--ui-fixture [empty|populated] [light|dark] [session-UUID]]" >&2
     exit 2
     ;;
 esac
@@ -103,7 +105,8 @@ case "$MODE" in
     pgrep -x "$APP_NAME" >/dev/null
     ;;
   --ui-fixture)
-    /usr/bin/open -n "$APP_BUNDLE" --args --ui-fixture "$FIXTURE" --ui-appearance "$APPEARANCE"
+    echo "QA session: $QA_SESSION"
+    /usr/bin/open -n "$APP_BUNDLE" --args --ui-fixture "$FIXTURE" --ui-appearance "$APPEARANCE" --ui-session "$QA_SESSION"
     ;;
   *)
     echo "usage: $0 [run|--debug|--logs|--telemetry|--verify]" >&2

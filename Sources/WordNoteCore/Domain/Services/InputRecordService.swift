@@ -53,6 +53,7 @@ public struct InputRecordService {
     }
 
     public func markAnalyzing(_ record: InputRecordModel) throws {
+        try WordNoteWriteGate.check(modelContext)
         record.markAnalyzing()
         try modelContext.save()
     }
@@ -62,6 +63,7 @@ public struct InputRecordService {
         _ result: AIAnalysisResult,
         to record: InputRecordModel
     ) throws -> [CandidateTermModel] {
+        try WordNoteWriteGate.check(modelContext)
         let recordID = record.id
         let existingCandidates = try modelContext.fetch(FetchDescriptor<CandidateTermModel>())
             .filter { $0.inputRecordID == recordID }
@@ -104,6 +106,7 @@ public struct InputRecordService {
     }
 
     public func markFailed(_ record: InputRecordModel, summary: String) throws {
+        try WordNoteWriteGate.check(modelContext)
         record.markFailed(summary)
         try modelContext.save()
     }
@@ -115,6 +118,7 @@ public struct InputRecordService {
         note: String?,
         status: InputRecordStatus
     ) throws -> InputRecordModel {
+        try WordNoteWriteGate.check(modelContext)
         let trimmedRawText = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !TextNormalizer.isBlank(trimmedRawText) else {
             throw InputRecordValidationError.blankRawText
@@ -135,12 +139,14 @@ public struct InputRecordService {
     }
 
     public func ignore(_ record: InputRecordModel) throws {
+        try WordNoteWriteGate.check(modelContext)
         record.status = .ignored
         record.touch()
         try modelContext.save()
     }
 
     public func delete(_ record: InputRecordModel) throws {
+        try WordNoteWriteGate.check(modelContext)
         let recordID = record.id
         let candidates = try modelContext.fetch(FetchDescriptor<CandidateTermModel>())
             .filter { $0.inputRecordID == recordID }
@@ -154,6 +160,32 @@ public struct InputRecordService {
             try modelContext.save()
         } catch {
             modelContext.rollback()
+            throw error
+        }
+    }
+
+    @discardableResult
+    public func analyze(
+        _ record: InputRecordModel, request: AIAnalysisRequest,
+        ticket expectedTicket: WordNoteWriteGate.Ticket? = nil,
+        using handler: @MainActor (AIAnalysisRequest) async throws -> AIAnalysisResult
+    ) async throws -> (analysis: AIAnalysisResult, candidateCount: Int) {
+        try Task.checkCancellation()
+        let ticket = try expectedTicket ?? WordNoteWriteGate.ticket(for: modelContext)
+        try WordNoteWriteGate.check(modelContext, ticket: ticket)
+        try markAnalyzing(record)
+        do {
+            let result = try await handler(request)
+            try Task.checkCancellation()
+            try WordNoteWriteGate.check(modelContext, ticket: ticket)
+            let candidates = try applyAnalysisResult(result, to: record)
+            return (analysis: result, candidateCount: candidates.count)
+        } catch {
+            // Invalidated callbacks must not write either a success or a failure status.
+            try WordNoteWriteGate.check(modelContext, ticket: ticket)
+            if !Task.isCancelled, !(error is CancellationError) {
+                try markFailed(record, summary: error.localizedDescription)
+            }
             throw error
         }
     }

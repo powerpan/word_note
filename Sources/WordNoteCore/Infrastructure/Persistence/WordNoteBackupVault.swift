@@ -39,7 +39,7 @@ public actor WordNoteBackupVault {
 
     public static let automaticRetentionCount = 7
     public static let automaticInterval: TimeInterval = 24 * 60 * 60
-    public let directoryURL: URL
+    public nonisolated let directoryURL: URL
     private let appVersion: String
     private let fault: (@Sendable (Checkpoint) throws -> Void)?
     private static let suffix = ".wordnote-backup.json"
@@ -165,6 +165,13 @@ public actor WordNoteBackupVault {
         try PrivateFileIO.write(data, to: url)
     }
 
+    public func exportSnapshot(id: UUID, to url: URL) throws {
+        _ = try readSnapshot(id: id)
+        let data = try PrivateFileIO.read(snapshotURL(id), maximumBytes: WordNoteSnapshotCodec.maximumDocumentBytes)
+        _ = try WordNoteSnapshotCodec.decode(data)
+        try PrivateFileIO.write(data, to: url)
+    }
+
     public func exportCSV(
         terms: [WordNoteSnapshotPayload.Term], courses: [WordNoteSnapshotPayload.Course], to url: URL
     ) throws {
@@ -176,6 +183,10 @@ public actor WordNoteBackupVault {
         guard existing.snapshots.contains(where: { $0.id == id }) else { throw WordNoteSnapshotError.invalidDocument }
         try FileManager.default.removeItem(at: snapshotURL(id))
         try writeCatalog(existing.snapshots.filter { $0.id != id })
+    }
+
+    public func maintainAutomaticRetention() throws {
+        try pruneExpiredAutomaticBackups(inventory().snapshots)
     }
 
     private var catalogURL: URL { directoryURL.appending(path: "catalog.json") }

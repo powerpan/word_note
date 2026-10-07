@@ -13,9 +13,10 @@ enum AppRuntime {
         AppAppearancePreference.resolved(from: argument(after: "--ui-appearance") ?? "light")
     }
 
-    static let fixtureCredentialURL = FileManager.default.temporaryDirectory
-        .appending(path: "WordNote-QA-\(UUID().uuidString)", directoryHint: .isDirectory)
-        .appending(path: "deepseek.env")
+    static let fixtureSessionID = UUID(uuidString: argument(after: "--ui-session") ?? "") ?? UUID()
+    static let fixtureDirectoryURL = FileManager.default.temporaryDirectory
+        .appending(path: "WordNote-QA/\(fixtureSessionID.uuidString.lowercased())", directoryHint: .isDirectory)
+    static let fixtureCredentialURL = fixtureDirectoryURL.appending(path: "deepseek.env")
 
     @MainActor
     static func analyze(_ request: AIAnalysisRequest) async throws -> AIAnalysisResult {

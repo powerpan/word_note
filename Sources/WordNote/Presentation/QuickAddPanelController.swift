@@ -7,14 +7,17 @@ import WordNoteCore
 final class QuickAddPanelController {
     private let modelContainer: ModelContainer
     private let analysisQueue: QuickAddAnalysisQueue
+    private let dataProtection: WordNoteDataProtection?
     private var panel: QuickAddFloatingPanel?
 
-    init(modelContainer: ModelContainer, analysisQueue: QuickAddAnalysisQueue) {
+    init(modelContainer: ModelContainer, analysisQueue: QuickAddAnalysisQueue, dataProtection: WordNoteDataProtection? = nil) {
         self.modelContainer = modelContainer
         self.analysisQueue = analysisQueue
+        self.dataProtection = dataProtection
     }
 
     func show() {
+        guard !WordNoteWriteGate.isBlocked(modelContainer.mainContext) else { return }
         let panel = panel ?? makePanel()
         self.panel = panel
 
@@ -68,6 +71,7 @@ final class QuickAddPanelController {
             onClose: { [weak self] in self?.close() }
         )
         .modelContainer(modelContainer)
+        .modifier(CaptureProtectionModifier(protection: dataProtection))
 
         let hostingView = NSHostingView(rootView: rootView)
         hostingView.frame = NSRect(origin: .zero, size: panelSize)
