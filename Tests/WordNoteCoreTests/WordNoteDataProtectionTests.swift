@@ -229,6 +229,21 @@ final class WordNoteDataProtectionTests: XCTestCase {
         XCTAssertEqual(try snapshot(h), before)
     }
 
+    func testV1ControllerCanListV2BackupButRejectsRestoreWithoutChangingStore() async throws {
+        let h = try harness()
+        let before = try snapshot(h)
+        let payload = try WordNoteV1ToV2Migration.convert(before).payload
+        let saved = try await h.vault.create(payload, kind: .manual)
+        await h.controller.refresh()
+        XCTAssertEqual(h.controller.snapshots.first?.schemaVersion, .v2)
+        do { _ = try await h.controller.previewRestore(id: saved.snapshot.id); XCTFail("V1 app must not accept a V2 restore.") }
+        catch { XCTAssertEqual(error as? WordNoteSnapshotError, .unsupportedSchema) }
+        XCTAssertEqual(h.controller.restorePhase, .idle)
+        XCTAssertFalse(h.controller.isRestoring)
+        XCTAssertFalse(try h.store.hasPreparedRestore(for: h.session.generation))
+        XCTAssertEqual(try snapshot(h), before)
+    }
+
     private struct Harness {
         let store: WordNoteRestoreStore
         let session: WordNoteStoreSession

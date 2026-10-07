@@ -13,17 +13,23 @@ public enum WordNoteSnapshotCaptureError: LocalizedError, Equatable {
 @MainActor
 public struct WordNoteSnapshotCapture {
     typealias Reader = @Sendable (ModelContainer, WordNoteSnapshotPayload.Preferences) async throws -> WordNoteSnapshotPayload
+    typealias VersionedReader = @Sendable (ModelContainer, WordNoteSnapshotPayload.Preferences) async throws -> WordNoteVersionedPayload
     private let container: ModelContainer
-    private let reader: Reader
+    private let reader: VersionedReader
 
     public init(container: ModelContainer) {
         self.container = container
         reader = { container, preferences in
-            try await Self.readOnBackgroundExecutor(container: container, preferences: preferences)
+            try await Self.readVersionedOnBackgroundExecutor(container: container, preferences: preferences)
         }
     }
 
     init(container: ModelContainer, reader: @escaping Reader) {
+        self.container = container
+        self.reader = { container, preferences in .v1(try await reader(container, preferences)) }
+    }
+
+    init(versionedContainer container: ModelContainer, reader: @escaping VersionedReader) {
         self.container = container
         self.reader = reader
     }
@@ -31,14 +37,33 @@ public struct WordNoteSnapshotCapture {
     public func capture(
         preferences: WordNoteSnapshotPayload.Preferences = .init()
     ) async throws -> WordNoteSnapshotPayload {
+        guard container.schema.version == WordNoteSchemaV1.versionIdentifier else { throw WordNoteSnapshotError.unsupportedSchema }
+        guard case .v1(let payload) = try await captureVersioned(preferences: preferences) else { throw WordNoteSnapshotError.unsupportedSchema }
+        return payload
+    }
+
+    public func captureVersioned(
+        preferences: WordNoteSnapshotPayload.Preferences = .init()
+    ) async throws -> WordNoteVersionedPayload {
+        let schema: WordNoteDataSchemaVersion
+        switch container.schema.version {
+        case WordNoteSchemaV1.versionIdentifier: schema = .v1
+        case WordNoteSchemaV2.versionIdentifier: schema = .v2
+        default: throw WordNoteSnapshotError.unsupportedSchema
+        }
         let changes = SnapshotSaveCounter(container: container)
         for _ in 0..<3 {
             try Task.checkCancellation()
-            if container.mainContext.hasChanges { try container.mainContext.save() }
+            if container.mainContext.hasChanges {
+                // V2 form drafts must not bypass their revision-checked service through a backup.
+                guard schema == .v1 else { throw WordNoteV2ContentError.unsavedChanges }
+                try container.mainContext.save()
+            }
             let revision = changes.revision
             do {
                 let payload = try await reader(container, preferences)
                 try Task.checkCancellation()
+                guard payload.schemaVersion == schema else { throw WordNoteSnapshotError.unsupportedSchema }
                 if changes.revision == revision, !container.mainContext.hasChanges { return payload }
             } catch {
                 try Task.checkCancellation()
@@ -52,12 +77,22 @@ public struct WordNoteSnapshotCapture {
     nonisolated static func readOnBackgroundExecutor(
         container: ModelContainer, preferences: WordNoteSnapshotPayload.Preferences
     ) async throws -> WordNoteSnapshotPayload {
+        guard container.schema.version == WordNoteSchemaV1.versionIdentifier else { throw WordNoteSnapshotError.unsupportedSchema }
+        guard case .v1(let payload) = try await readVersionedOnBackgroundExecutor(container: container, preferences: preferences) else {
+            throw WordNoteSnapshotError.unsupportedSchema
+        }
+        return payload
+    }
+
+    nonisolated static func readVersionedOnBackgroundExecutor(
+        container: ModelContainer, preferences: WordNoteSnapshotPayload.Preferences
+    ) async throws -> WordNoteVersionedPayload {
         let task = Task.detached(priority: .utility) {
             try Task.checkCancellation()
             return try autoreleasepool {
                 let context = ModelContext(container)
                 context.autosaveEnabled = false
-                let payload = try WordNoteSnapshotPayload.capture(from: context, preferences: preferences)
+                let payload = try WordNoteVersionedPayload.capture(from: context, preferences: preferences)
                 try Task.checkCancellation()
                 return payload
             }

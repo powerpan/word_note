@@ -61,6 +61,10 @@ struct DataManagementView: View {
                                     .font(.subheadline.weight(.medium))
                                 Text("\(kindTitle(backup.kind)) · \(backup.counts.terms) terms · \(backup.counts.inputRecords) records")
                                     .font(.caption).foregroundStyle(.secondary)
+                                if backup.schemaVersion != .v1 {
+                                    Text("Schema \(backup.schemaVersion.rawValue)")
+                                        .font(.caption).foregroundStyle(.secondary)
+                                }
                             }
                             Spacer()
                             Menu {

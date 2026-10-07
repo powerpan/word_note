@@ -447,7 +447,7 @@ P2 若做 iCloud，需要先制定資料衝突策略，不能直接把本地模�
 
 ### 備份、恢復與啟動
 
-備份取得一致、不可變的 DTO 後才序列化及原子寫文件，不跨 executor 共用可變 ModelContext/model。A01 大庫測量發現 MainActor 全量捕獲會阻塞，因此日常/手動備份改用樂觀一致性讀取：MainActor 先保存當前已修改 context，后台 worker 建自己的唯讀 context，讀取前後同步比較同容器的 willSave/didSave 計數；有任何保存或主 context 待保存修改就丟棄整次讀取並重試，最多三次，仍不穩定則保留舊備份並明確報錯。不能把混合版本或只截取部分實體的結果當成成功快照。
+備份取得一致、不可變的 DTO 後才序列化及原子寫文件，不跨 executor 共用可變 ModelContext/model。A01 大庫測量發現 MainActor 全量捕獲會阻塞，因此日常/手動備份改用樂觀一致性讀取：V1 先保存當前已修改 context；V2 若存在直接模型的未提交修改則拒絕捕獲，不代替 revision 交易提交或丟棄表單。后台 worker 建自己的唯讀 context，讀取前後同步比較同容器的 willSave/didSave 計數；有任何保存或主 context 待保存修改就丟棄整次讀取並重試，最多三次，仍不穩定則保留舊備份並明確報錯。V2 重試時仍檢查未提交修改。不能把混合版本或只截取部分實體的結果當成成功快照。
 
 前提是 App 的正式寫入仍由 MainActor 服務串行處理；通知不得延後排入主隊列才計數。新增後台寫入者或另一個寫庫進程時必須重新設計此一致性邊界，不能沿用上述假設。快照 DTO 的同步 adapter 不再強制 MainActor，但呼叫方必須在其 context 所屬 executor 完成全部模型訪問。
 
@@ -457,7 +457,9 @@ P2 若做 iCloud，需要先制定資料衝突策略，不能直接把本地模�
 
 2026-10-08 的隔離 V2 基礎不使用在原庫上直接執行的 lightweight migration。`WordNoteV1ToV2Migration` 先檢查完整 V1 DTO，再產生確定性的 V2 值；`WordNoteSnapshotV2Payload` 只允許写入 schema 為 V2 的空庫。完整啟動遷移仍需接入 A01 保護快照、后台建庫/重開比對和恢復日誌，不能單獨改 App 的 typealias 就啟用。
 
-V2 邏輯快照沿用 formatVersion 1 的 checksum envelope，sourceSchemaVersion 為 2.0.0。payload.content 復用凍結的 V1 字段定義，另有按實體 ID 一對一匹配的 revision/捕獲/候選/計數語義元資料表，以及 occurrence、courseLink、lookupEvent 三類實體。缺行、多行、重複業務鍵和錯誤關聯均拒絕恢復。`WordNoteSnapshotReader` 按 schema 路由 V1/V2 讀取器；現行 App vault/coordinator 尚未切換，V1 入口繼續拒絕 V2 文件和 context，防止靜默丟棄新增資料。
+V2 邏輯快照沿用 formatVersion 1 的 checksum envelope，sourceSchemaVersion 為 2.0.0。payload.content 復用凍結的 V1 字段定義，另有按實體 ID 一對一匹配的 revision/捕獲/候選/計數語義元資料表，以及 occurrence、courseLink、lookupEvent 三類實體。缺行、多行、重複業務鍵和錯誤關聯均拒絕恢復。`WordNoteSnapshotReader` 按 schema 路由 V1/V2 讀取器；`WordNoteVersionedPayload` 共用捕獲、校驗、checksum 與編碼入口，不改兩版既有文件格式。
+
+2026-10-08 的 vault 已能列出、生成及導出 V1/V2，摘要含 schema 與全部八類計數；跨版本保留最新七份自動備份，手動/遷移前/恢復前快照均不自動刪除。只改 V2 關係或元資料也會改變備份 checksum。按 ID 導出使用同一次讀取的驗證 bytes，不能省略新增資料。現行 App coordinator 與切庫日誌仍為 V1，舊 `readSnapshot`/`capture` 入口繼續拒絕 V2；只有顯式版本化入口接受兩版。見 [版本化備份證據](qa/2026-10-08-a02-versioned-backups.md)，這不代表已完成 V2 恢復或正式啟用。
 
 `WordNoteV2IntegrityService` 提供值層檢查及修復預覽：涵蓋全部八實體、四份元資料、業務唯一鍵、來源對應與候選狀態。唯一自動提出的修復是解除指向已不存在記錄的 Term.sourceRecordID、Occurrence.sourceRecordID、LookupEvent.occurrenceID；缺課程、缺詞、孤立內容、跨 capture 關聯及重複關係均要求人工處理。修復方案保留完整來源值，stage 前比較最新資料與偏好，變動即拒絕舊方案。只產生新 payload、更新受影響 Term.revision，不寫原庫；正式使用仍需接入共用 staged store/日誌，不能另建一套修復切庫流程。見 [完整性與啟動防護證據](qa/2026-10-08-a02-integrity.md)。
 

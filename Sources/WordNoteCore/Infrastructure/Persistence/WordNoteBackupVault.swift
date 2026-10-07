@@ -4,7 +4,8 @@ public struct WordNoteBackupSummary: Identifiable, Equatable, Sendable {
     public let id: UUID
     public let createdAt: Date
     public let kind: WordNoteBackupKind
-    public let counts: WordNoteSnapshotCounts
+    public let schemaVersion: WordNoteDataSchemaVersion
+    public let counts: WordNoteBackupCounts
     public let payloadChecksum: String
     public let appVersion: String
 
@@ -12,7 +13,18 @@ public struct WordNoteBackupSummary: Identifiable, Equatable, Sendable {
         id = document.snapshotID
         createdAt = document.createdAt
         kind = document.kind
-        counts = document.counts
+        schemaVersion = .v1
+        counts = WordNoteBackupCounts(document.counts)
+        payloadChecksum = document.payloadChecksum
+        appVersion = document.appVersion
+    }
+
+    init(_ document: WordNoteSnapshotV2Document) {
+        id = document.snapshotID
+        createdAt = document.createdAt
+        kind = document.kind
+        schemaVersion = .v2
+        counts = WordNoteBackupCounts(document.counts)
         payloadChecksum = document.payloadChecksum
         appVersion = document.appVersion
     }
@@ -70,9 +82,9 @@ public actor WordNoteBackupVault {
                 guard let id = UUID(uuidString: idText), url.lastPathComponent == fileName(id) else {
                     throw WordNoteSnapshotError.invalidDocument
                 }
-                let decoded = try readSnapshot(at: url)
-                guard decoded.document.snapshotID == id else { throw WordNoteSnapshotError.invalidDocument }
-                summaries[id] = WordNoteBackupSummary(decoded.document)
+                let decoded = try readVersionedSnapshot(at: url)
+                guard decoded.summary.id == id else { throw WordNoteSnapshotError.invalidDocument }
+                summaries[id] = decoded.summary
             } catch {
                 unreadable += 1
             }
@@ -107,12 +119,27 @@ public actor WordNoteBackupVault {
     public func createIfDue(
         _ payload: WordNoteSnapshotPayload, now: Date = Date()
     ) throws -> WordNoteBackupResult? {
+        try createIfDue(.v1(payload), now: now)
+    }
+
+    public func createIfDue(
+        _ payload: WordNoteSnapshotV2Payload, now: Date = Date()
+    ) throws -> WordNoteBackupResult? {
+        try createIfDue(.v2(payload), now: now)
+    }
+
+    public func createIfDue(
+        _ payload: WordNoteVersionedPayload, now: Date = Date()
+    ) throws -> WordNoteBackupResult? {
+        guard now.timeIntervalSince1970.isFinite, abs(now.timeIntervalSince1970) < 100_000_000_000 else {
+            throw WordNoteSnapshotError.invalidValue
+        }
         try payload.validate()
         let existing = try inventory()
         var isDue = true
         if let latest = existing.snapshots.first {
             let elapsed = now.timeIntervalSince(latest.createdAt)
-            isDue = try WordNoteSnapshotCodec.contentChecksum(payload) != latest.payloadChecksum
+            isDue = try (payload.schemaVersion != latest.schemaVersion || payload.contentChecksum() != latest.payloadChecksum)
                 && (elapsed >= Self.automaticInterval || elapsed < 0)
         } else if payload.counts.total == 0 {
             isDue = false
@@ -127,15 +154,27 @@ public actor WordNoteBackupVault {
     public func create(
         _ payload: WordNoteSnapshotPayload, kind: WordNoteBackupKind, now: Date = Date()
     ) throws -> WordNoteBackupResult {
+        try create(.v1(payload), kind: kind, now: now)
+    }
+
+    public func create(
+        _ payload: WordNoteSnapshotV2Payload, kind: WordNoteBackupKind, now: Date = Date()
+    ) throws -> WordNoteBackupResult {
+        try create(.v2(payload), kind: kind, now: now)
+    }
+
+    public func create(
+        _ payload: WordNoteVersionedPayload, kind: WordNoteBackupKind, now: Date = Date()
+    ) throws -> WordNoteBackupResult {
         let existing = try inventory()
         let id = UUID()
-        let data = try WordNoteSnapshotCodec.encode(payload, kind: kind, snapshotID: id, createdAt: now, appVersion: appVersion)
+        let data = try payload.encode(kind: kind, snapshotID: id, createdAt: now, appVersion: appVersion)
         try fault?(.snapshotWrite)
         let url = snapshotURL(id)
         try PrivateFileIO.write(data, to: url, replaceExisting: false)
-        let verified = try readSnapshot(at: url)
-        guard verified.document.snapshotID == id else { throw WordNoteSnapshotError.invalidDocument }
-        let summary = WordNoteBackupSummary(verified.document)
+        let verified = try readVersionedSnapshot(at: url)
+        guard verified.summary.id == id else { throw WordNoteSnapshotError.invalidDocument }
+        let summary = verified.summary
         var snapshots = existing.snapshots
         snapshots.insert(summary, at: 0)
         try writeCatalog(snapshots)
@@ -151,24 +190,41 @@ public actor WordNoteBackupVault {
     }
 
     public func readSnapshot(at url: URL) throws -> DecodedWordNoteSnapshot {
-        try WordNoteSnapshotCodec.decode(PrivateFileIO.read(url, maximumBytes: WordNoteSnapshotCodec.maximumDocumentBytes))
+        guard case .v1(let snapshot) = try readVersionedSnapshot(at: url) else { throw WordNoteSnapshotError.unsupportedSchema }
+        return snapshot
     }
 
     public func readSnapshot(id: UUID) throws -> DecodedWordNoteSnapshot {
-        let decoded = try readSnapshot(at: snapshotURL(id))
-        guard decoded.document.snapshotID == id else { throw WordNoteSnapshotError.invalidDocument }
+        guard case .v1(let snapshot) = try readVersionedSnapshot(id: id) else { throw WordNoteSnapshotError.unsupportedSchema }
+        return snapshot
+    }
+
+    public func readVersionedSnapshot(at url: URL) throws -> VersionedWordNoteSnapshot {
+        try WordNoteSnapshotReader.decode(PrivateFileIO.read(url, maximumBytes: WordNoteSnapshotCodec.maximumDocumentBytes))
+    }
+
+    public func readVersionedSnapshot(id: UUID) throws -> VersionedWordNoteSnapshot {
+        let decoded = try readVersionedSnapshot(at: snapshotURL(id))
+        guard decoded.summary.id == id else { throw WordNoteSnapshotError.invalidDocument }
         return decoded
     }
 
     public func exportSnapshot(_ payload: WordNoteSnapshotPayload, to url: URL) throws {
-        let data = try WordNoteSnapshotCodec.encode(payload, kind: .manual, appVersion: appVersion)
+        try exportSnapshot(.v1(payload), to: url)
+    }
+
+    public func exportSnapshot(_ payload: WordNoteSnapshotV2Payload, to url: URL) throws {
+        try exportSnapshot(.v2(payload), to: url)
+    }
+
+    public func exportSnapshot(_ payload: WordNoteVersionedPayload, to url: URL) throws {
+        let data = try payload.encode(kind: .manual, appVersion: appVersion)
         try PrivateFileIO.write(data, to: url)
     }
 
     public func exportSnapshot(id: UUID, to url: URL) throws {
-        _ = try readSnapshot(id: id)
         let data = try PrivateFileIO.read(snapshotURL(id), maximumBytes: WordNoteSnapshotCodec.maximumDocumentBytes)
-        _ = try WordNoteSnapshotCodec.decode(data)
+        guard try WordNoteSnapshotReader.decode(data).summary.id == id else { throw WordNoteSnapshotError.invalidDocument }
         try PrivateFileIO.write(data, to: url)
     }
 

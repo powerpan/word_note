@@ -159,7 +159,9 @@ P1 如果做全局快捷鍵或剪貼板增強，需要單獨評估權限。
 
 完整 JSON envelope 包括 formatVersion、sourceSchemaVersion、appVersion、snapshotID、createdAt、各實體數量、payload checksum 和模型 DTO。formatVersion 首版為 1，與資料 schema 分開。payload 使用 JSON 字符串承載序列化 DTO，checksum 對解碼該字符串後的原始 UTF-8 bytes 計算並驗證，再解析其中模型資料，不對任意重排的 JSON 對象求 hash；採標準序列化/雜湊實作。校驗碼只檢測損壞，不宣稱文件經簽名或已加密。
 
-目標契約：V1-V4 各階段提供對應 reader/upgrader；最新版本可恢復受支持舊快照，舊 App 拒絕較新快照。最終包含原文、候選、詞義、課程、來源、卡片、事件和持久化會話；非機密偏好只用明確白名單（外觀、課程/來源預設、學習限額）。目前只支援 V1 五類模型和 appearance/defaultSource，不虛構尚未實施字段。排除 env、API Key、任意 UserDefaults、SSH 文件、日誌、網絡原始 response 及系統快捷鍵權限狀態。
+目標契約：V1-V4 各階段提供對應 reader/upgrader；最新版本可恢復受支持舊快照，舊 App 拒絕較新快照。最終包含原文、候選、詞義、課程、來源、卡片、事件和持久化會話；非機密偏好只用明確白名單（外觀、課程/來源預設、學習限額）。現行 App 捕獲/恢復仍為 V1 五類模型；隔離核心的版本化捕獲、vault 目錄與 JSON 導出已另支援 V2 八實體及完整元資料，但 V2 恢復日誌與啟動尚未接入。兩版偏好仍僅 appearance/defaultSource，不虛構尚未實施字段。排除 env、API Key、任意 UserDefaults、SSH 文件、日誌、網絡原始 response 及系統快捷鍵權限狀態。
+
+混合 V1/V2 vault 按完整版本內容檢測變更，輪替不丟棄新關係。未知 schema、損壞數量或文件名/內嵌 ID 不一致的文件不列為有效備份，也不自動清除；舊 V1 恢復入口在修改日誌或原庫前拒絕 V2。V2 未提交的直接模型編輯不能由備份順帶保存。上述是 [備份回歸](qa/2026-10-08-a02-versioned-backups.md) 的邊界，不是全倉敏感資訊審核或 V2 實機恢復驗收。
 
 默認落到 WordNote 私有 Backups 目錄，目錄 0700、文件 0600。首次有資料後建立自動快照；之後資料有變更且距上次成功滿 24 小時才再次觸發。關閉期間不常駐定時服務，下次啟動補做。最新 7 份自動快照輪替；手動、遷移前、恢復前保護快照不自動刪除。新快照寫成功且驗證可讀之後才能刪最舊自動快照，失敗不得先清空備份。
 
