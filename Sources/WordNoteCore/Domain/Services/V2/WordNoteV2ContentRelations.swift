@@ -10,7 +10,10 @@ extension WordNoteV2ContentService {
         courseName: String, courseCode: String? = nil, instructor: String? = nil,
         semester: String? = nil, description: String? = nil, at date: Date = Date()
     ) throws -> WordNoteV2VersionedID {
-        try transaction {
+        try undoableTransaction("Add Course", scope: { .init() }, includingResult: { result, scope in
+            scope.courses.insert(result.id)
+            scope.createdCourses.insert(result.id)
+        }) {
             try validateDate(date)
             try validateText([courseName, courseCode, instructor, semester, description])
             guard let name = optionalText(courseName) else { throw CourseServiceError.blankCourseName }
@@ -26,7 +29,7 @@ extension WordNoteV2ContentService {
     public func setCourseMembership(
         termID: UUID, courseID: UUID, included: Bool, expectedTermRevision: Int, at date: Date = Date()
     ) throws -> WordNoteV2VersionedID {
-        try transaction {
+        try undoableTransaction("Edit Course Membership", scope: { .init(terms: [termID]) }) {
             try validateDate(date)
             let term = try term(termID)
             try requireRevision(term.revision, expectedTermRevision)

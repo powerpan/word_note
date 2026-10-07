@@ -4,6 +4,7 @@ import WordNoteCore
 
 struct InboxView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.savedChangeHistory) private var undoHistory
     @Environment(\.editProtection) private var editProtection
     @Environment(QuickAddAnalysisQueue.self) private var analysisQueue
     @Query private var storedRecords: [InputRecordModel]
@@ -307,7 +308,7 @@ struct InboxView: View {
 
         guard !recordsToConfirm.isEmpty else { return }
 
-        let service = VocabularyService(modelContext: modelContext)
+        let service = VocabularyService(modelContext: modelContext, undoHistory: undoHistory)
 
         do {
             _ = try service.confirmCandidates(

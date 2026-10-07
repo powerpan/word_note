@@ -13,10 +13,11 @@ struct WordNoteV2ValidationApp: App {
         WindowGroup("Word Note V2 QA", id: "main") {
             Group {
                 if let ready = runtime.ready {
-                    EditProtectionHost { ContentView() }
+                    EditProtectionHost { ContentView().modifier(SavedChangeUndoControls(history: ready.undoHistory)) }
                         .modelContainer(ready.session.container)
                         .environment(ready.queue)
                         .environment(ready.protection)
+                        .environment(\.savedChangeHistory, ready.undoHistory)
                         .modifier(DataProtectionOverlay(protection: ready.protection))
                         .task { ready.protection.startAutomaticBackups(); appDelegate.dataProtection = ready.protection }
                 } else {
@@ -30,6 +31,7 @@ struct WordNoteV2ValidationApp: App {
         .windowResizability(.contentMinSize)
         .windowStyle(.titleBar)
         .commands {
+            CommandGroup(after: .undoRedo) { SavedChangeUndoCommand() }
             CommandMenu("Capture") {
                 Button("Quick Add", systemImage: "plus.circle") { runtime.ready?.panel.show() }
                     .keyboardShortcut("n", modifiers: [.command, .shift])

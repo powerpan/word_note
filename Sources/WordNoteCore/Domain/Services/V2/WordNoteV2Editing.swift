@@ -32,7 +32,7 @@ extension WordNoteV2ContentService {
         _ id: UUID, expectedRevision: Int, courseName: String, courseCode: String?,
         instructor: String?, semester: String?, description: String?, at date: Date = Date()
     ) throws {
-        try transaction {
+        try undoableTransaction("Edit Course", scope: { .init(courses: [id]) }) {
             try validateDate(date)
             try validateText([courseName, courseCode, instructor, semester, description])
             guard let name = optionalText(courseName) else { throw CourseServiceError.blankCourseName }
@@ -54,7 +54,7 @@ extension WordNoteV2ContentService {
         exampleSentence: String?, contextSentence: String?, courseIDs: Set<UUID>, sourceType: SourceType,
         category: TermCategory, importance: Importance, masteryLevel: MasteryLevel, at date: Date = Date()
     ) throws {
-        try transaction {
+        try undoableTransaction("Edit Term", scope: { .init(terms: [id]) }) {
             try validateDate(date)
             try validateText([termText, chineseMeaning, englishDefinition, aiContextExplanation, exampleSentence, contextSentence])
             let value = try term(id)
@@ -94,7 +94,7 @@ extension WordNoteV2ContentService {
     }
 
     public func updateCandidates(_ edits: [WordNoteV2CandidateEdit], at date: Date = Date()) throws {
-        try transaction {
+        try undoableTransaction("Edit Candidates", scope: { try undoScope(candidateIDs: Set(edits.map(\.id))) }) {
             try validateDate(date)
             guard Set(edits.map(\.id)).count == edits.count else { throw WordNoteV2ContentError.invalidValue }
             let storedCandidates = try fetch(Candidate.self)

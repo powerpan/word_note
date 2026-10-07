@@ -451,13 +451,19 @@ P2 若做 iCloud，需要先制定資料衝突策略，不能直接把本地模�
 
 `captureID` 識別提交而非相同文字：同次重送返回已保存結果，不重建來源或增加計數；不同提交保留各自課程、note 和捕獲入口。Save Only 建草稿而非查詢事件。精確英文命中不排 AI、不進 Inbox；候選確認只做內容/來源整理，不冒充再次查詞。此批仍保留 `legacyMixed` 的復習反饋，B04 才改新統計。
 
-單項確認支援新建與關聯已有詞，校驗候選/記錄/目標 revision 及分析世代；相同 confirmationOperationID 重送返回原目標，目標已刪除則明確報錯、不重建。QA App 沿用新詞批量確認交互，先核對全部候選/記錄 revision，整批單次保存；遇精確重複仍整批拒絕，不自行關聯。A04 undo receipt、A05 批次預覽/逐字段補充尚未實作。刪除與課程引用保護的基礎證據見 [V2 內容交易](qa/2026-10-08-a02-content-transactions.md)。
+單項確認支援新建與關聯已有詞，校驗候選/記錄/目標 revision 及分析世代；相同 confirmationOperationID 重送返回原目標，目標已刪除則明確報錯、不重建。QA App 沿用新詞批量確認交互，先核對全部候選/記錄 revision，整批單次保存；遇精確重複仍整批拒絕，不自行關聯。A04 undo receipt 已接入下述交易；A05 批次預覽/逐字段補充尚未實作。刪除與課程引用保護的基礎證據見 [V2 內容交易](qa/2026-10-08-a02-content-transactions.md)。
 
 V2 QA 的候選輸入綁定值型 `WordNoteV2CandidateEdit`，保存前不碰 SwiftData；已修改未保存的行會阻止該候選區直接確認。Term/Course 表單在載入時保存 revision，正式保存與刪除不能偷偷改用當前 revision。詞條課程成員資格由 TermCourseLink 控制，編輯不改寫原 occurrence 或兼容 courseID；詞庫、課程計數、復習篩選及 CSV 使用相同成員資料。V2 review 只把既有排程搬入原子交易，保留 legacyMixed，不提前啟用 V3 分方向規則。
 
 A04 編輯保護：每個主窗口持有 `WordNoteEditProtection`，表單使用引用生命週期穩定、內容為值型的 `WordNoteEditDraft`。保護器在決策時讀取當前值，不等 SwiftUI 的 onChange，避免漏掉最後一次輸入；草稿不是 SwiftData 模型。導航/篩選/列表切換/Inbox 整理操作先處理保存、放棄或取消，sheet 完全關閉後才執行待處理動作。保存失敗保留草稿和原目的地，第二個請求不能覆蓋第一個。其他窗口移除模型時，髒草稿仍留在當前窗口，可查看並複製文字；保存按 ID 重查並拒絕已刪除/過期的目標，不重建已刪內容。
 
-原生 NSWindow 代理只攔截關閉並轉發原有 SwiftUI delegate；取消時嘗試恢復原控件與文字選區。正常退出由 `WordNoteQuitProtection` 逐窗口處理，任何取消/保存失敗都阻止退出，過程中新窗口也重新納入；已明確準備的資料恢復沿用既有受控退出流程。同記錄的候選草稿整批一次交易保存，各候選 revision 增加一次，來源 revision 只增加一次。這些代碼僅在 V2 QA 注入窗口保護，不啟用生產遷移；UI 尚未實機通過，字段差異對比和 undo receipt 仍待補，見 [A04 證據](qa/2026-10-08-a04-edit-protection.md)。
+原生 NSWindow 代理只攔截關閉並轉發原有 SwiftUI delegate；取消時嘗試恢復原控件與文字選區。正常退出由 `WordNoteQuitProtection` 逐窗口處理，任何取消/保存失敗都阻止退出，過程中新窗口也重新納入；已明確準備的資料恢復沿用既有受控退出流程。同記錄的候選草稿整批一次交易保存，各候選 revision 增加一次，來源 revision 只增加一次。這些代碼僅在 V2 QA 注入窗口保護，不啟用生產遷移；UI 尚未實機通過，字段差異對比仍待補，見 [A04 證據](qa/2026-10-08-a04-edit-protection.md)。
+
+`WordNoteV2UndoHistory` 每個 V2 container 一份，所有主窗口共享，只保留最近一次成功且實際有變更的可撤銷交易。receipt 是記憶體中的局部 DTO 集合及引用標記，不是完整快照或備份；未注入 history 的原有服務不做捕獲。before/body/after/save 同步完成，保存失敗不覆蓋上一張 receipt；幂等確認重送不製造可刪除既有詞的偽 receipt。
+
+撤銷先比較最新字段、revision、來源、候選反向引用、membership、occurrence、lookup/review 事件，再核對被還原的外鍵、詞頭唯一性和關係 ID 所有者。所有檢查通過才反向寫入受影響值，刪除範圍限於那次操作新建的實體與關係；不調用一般級聯刪除，不重建外部已刪除目標。還原後 revision 從當前值繼續增加，舊表單仍失效。資料衝突使 receipt 失效；保存失敗、恢復屏障或直接模型髒修改則保留 receipt 供重試。
+
+工具列和 Edit 菜單使用相同 `operationID` 校驗；若離開確認中的 Save 或另一窗口保存替換了 receipt，舊 Undo 動作會拒絕，不誤撤新保存。無 redo、跨重啟歷史、永久刪除或復習撤銷，也不取代輸入框的 Command-Z。新增可撤銷操作時必須同時擴充 scope、還原字段和依賴測試，不能直接套用到關係字段編輯。詳見 [安全撤銷記錄](qa/2026-10-08-a04-safe-undo.md)。
 
 ### 備份、恢復與啟動
 

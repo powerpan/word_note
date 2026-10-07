@@ -176,6 +176,7 @@ private enum CourseEditorMode {
 
 private struct CourseEditor: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.savedChangeHistory) private var undoHistory
 
     let mode: CourseEditorMode
     let course: CourseModel?
@@ -309,7 +310,7 @@ private struct CourseEditor: View {
         return {
             let value = values.value
             let revision = values.revision
-            let service = CourseService(modelContext: modelContext, expectedRevision: revision)
+            let service = CourseService(modelContext: modelContext, expectedRevision: revision, undoHistory: undoHistory)
             let savedCourse: CourseModel
             if let id {
                 guard let course = try modelContext.fetch(FetchDescriptor<CourseModel>()).first(where: { $0.id == id }) else {

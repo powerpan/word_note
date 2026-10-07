@@ -10,7 +10,9 @@ extension WordNoteV2ContentService {
         sourceRecordID: UUID, expectedRecordRevision: Int, termText: String,
         chineseMeaning: String?, englishDefinition: String?, at date: Date = Date()
     ) throws -> WordNoteV2VersionedID {
-        try transaction {
+        try undoableTransaction("Add Term", scope: { .init(records: [sourceRecordID]) }, includingResult: { result, scope in
+            scope.terms.insert(result.id)
+        }) {
             try validateDate(date)
             let source = try record(sourceRecordID)
             try requireRevision(source.revision, expectedRecordRevision)
@@ -38,7 +40,11 @@ extension WordNoteV2ContentService {
         _ candidateID: UUID, expectedRevision: Int, expectedRecordRevision: Int,
         operationID: UUID, target: WordNoteV2ConfirmationTarget, at date: Date = Date()
     ) throws -> WordNoteV2VersionedID {
-        try transaction {
+        try undoableTransaction("Confirm Candidate", scope: {
+            var scope = try undoScope(candidateIDs: [candidateID])
+            if case .linkExisting(let id, _) = target { scope.terms.insert(id) }
+            return scope
+        }, includingResult: { result, scope in scope.terms.insert(result.id) }) {
             try confirmCandidateInTransaction(
                 candidateID, expectedRevision: expectedRevision, expectedRecordRevision: expectedRecordRevision,
                 operationID: operationID, target: target, at: date

@@ -4,6 +4,7 @@ import WordNoteCore
 
 struct CandidateReviewView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.savedChangeHistory) private var undoHistory
     @Environment(\.editProtection) private var editProtection
 
     let record: InputRecordModel
@@ -132,7 +133,7 @@ struct CandidateReviewView: View {
 
     private func saveSelected() {
         let selectedCandidates = pendingCandidates.filter { selectedCandidateIDs.contains($0.id) }
-        let service = VocabularyService(modelContext: modelContext)
+        let service = VocabularyService(modelContext: modelContext, undoHistory: undoHistory)
 
         do {
             let terms = try service.createTerms(from: selectedCandidates, sourceRecord: record)

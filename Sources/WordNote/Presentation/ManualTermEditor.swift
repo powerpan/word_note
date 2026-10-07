@@ -4,6 +4,7 @@ import WordNoteCore
 
 struct ManualTermEditor: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.savedChangeHistory) private var undoHistory
     @Environment(\.editProtection) private var editProtection
 
     let record: InputRecordModel
@@ -79,7 +80,7 @@ struct ManualTermEditor: View {
             guard let current = try modelContext.fetch(FetchDescriptor<InputRecordModel>()).first(where: { $0.id == id }) else {
                 throw WordNoteV2ContentError.missingEntity
             }
-            let term = try VocabularyService(modelContext: modelContext, expectedRevision: revision, courseIDs: []).createManualTerm(
+            let term = try VocabularyService(modelContext: modelContext, expectedRevision: revision, courseIDs: [], undoHistory: undoHistory).createManualTerm(
                 termText: value.termText,
                 chineseMeaning: value.chineseMeaning,
                 englishDefinition: value.englishDefinition,

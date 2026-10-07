@@ -364,7 +364,9 @@ ConfirmationPlan 是非持久化值，包含 operationID、選中記錄/候選 I
 
 Term、Candidate 狀態、savedTermID、membership、occurrence 單次保存；失敗全部回滾。英文字母、必要符號及數字可存在詞頭（如 C++、L2），不允許純中文主體；旧不合格 Term 提示人工修正，不因遷移被刪除。
 
-A02 的單項 link 保留已有正式字段及復習統計，只在新增來源/課程時增加 Term.revision；同一 capture 的第二個同詞候選不重建 occurrence。候選和其 InputRecord 的整理狀態/revision 隨確認保存；queued/running 記錄不允許同時確認。英文主體及中文查英文所需中文釋義的校驗使用記錄已凍結的方向，不重新偵測原文。完整 ConfirmationPlan、批次歸併、fill 和撤銷仍待 A04/A05。
+A02 的單項 link 保留已有正式字段及復習統計，只在新增來源/課程時增加 Term.revision；同一 capture 的第二個同詞候選不重建 occurrence。候選和其 InputRecord 的整理狀態/revision 隨確認保存；queued/running 記錄不允許同時確認。英文主體及中文查英文所需中文釋義的校驗使用記錄已凍結的方向，不重新偵測原文。完整 ConfirmationPlan、批次歸併、fill 仍待 A05。
+
+A04 [運行期撤銷](qa/2026-10-08-a04-safe-undo.md) 不新增持久表或改 schema：receipt 只留受影響實體的局部 DTO、操作 ID 和前後引用狀態。只可刪本次新建且之後未改/未被引用的 Term/Course/關係；舊詞和原始輸入不因撤銷確認被級聯刪除。還原值時 revision 繼續增加，lookup/review 事件不得反向清除；重啟後不保留 receipt，亦不能把局部 DTO 當完整快照恢復。
 
 隔離 V2 分析交易已新增：running 必須有 attemptID；nextAttemptAt 只允許 queued/failed/cancelled，cancelled 中的值只約束下一次人工重試，不代表仍有自動工作。完成清除 attemptID/deadline，queueState 回到 none，整理 status 按候選是否尚待處理設 analyzed/completed；失敗不抹除既有整理狀態。全部字段和候選同次保存，存儲失敗回滾。
 

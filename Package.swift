@@ -19,7 +19,8 @@ let package = Package(
         ),
         .target(
             name: "WordNoteCore",
-            path: "Sources/WordNoteCore"
+            path: "Sources/WordNoteCore",
+            swiftSettings: [.enableUpcomingFeature("InferSendableFromCaptures")]
         ),
         .testTarget(
             name: "WordNoteCoreTests",

@@ -19,7 +19,8 @@ extension WordNoteV2ContentService {
     public func confirmNewCandidates(
         _ selections: [WordNoteV2CandidateSelection], at date: Date = Date()
     ) throws -> [WordNoteV2VersionedID] {
-        try transaction {
+        try undoableTransaction("Confirm Candidates", scope: { try undoScope(candidateIDs: Set(selections.map(\.id))) },
+                               includingResult: { results, scope in scope.terms.formUnion(results.map(\.id)) }) {
             try validateDate(date)
             try validateSelections(selections)
             return try selections.map { selection in

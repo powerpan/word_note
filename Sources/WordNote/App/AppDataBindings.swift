@@ -39,12 +39,13 @@ struct VocabularyService {
     let modelContext: ModelContext
     var expectedRevision: Int? = nil
     var courseIDs: Set<UUID>? = nil
+    var undoHistory: WordNoteV2UndoHistory? = nil
 
     func createTerms(from candidates: [CandidateTermModel], sourceRecord: InputRecordModel) throws -> [TermModel] {
         try confirmCandidates([CandidateConfirmation(candidates: candidates, sourceRecord: sourceRecord)])
     }
     func confirmCandidates(_ confirmations: [CandidateConfirmation]) throws -> [TermModel] {
-        let result = try WordNoteV2ContentService(container: modelContext.container)
+        let result = try WordNoteV2ContentService(container: modelContext.container, undoHistory: undoHistory)
             .confirmNewCandidates(confirmations.flatMap(\.selections))
         let ids = Set(result.map(\.id))
         return try modelContext.fetch(FetchDescriptor<TermModel>()).filter { ids.contains($0.id) }
@@ -54,7 +55,7 @@ struct VocabularyService {
             .ignoreCandidates(CandidateConfirmation(candidates: candidates, sourceRecord: sourceRecord).selections)
     }
     func createManualTerm(termText: String, chineseMeaning: String?, englishDefinition: String?, sourceRecord: InputRecordModel) throws -> TermModel {
-        let result = try WordNoteV2ContentService(container: modelContext.container).createManualTerm(
+        let result = try WordNoteV2ContentService(container: modelContext.container, undoHistory: undoHistory).createManualTerm(
             sourceRecordID: sourceRecord.id, expectedRecordRevision: expectedRevision ?? sourceRecord.revision,
             termText: termText, chineseMeaning: chineseMeaning, englishDefinition: englishDefinition
         )
@@ -69,7 +70,7 @@ struct VocabularyService {
         sourceType: SourceType, category: TermCategory, importance: Importance, masteryLevel: MasteryLevel
     ) throws {
         guard let expectedRevision, let courseIDs else { throw WordNoteV2ContentError.invalidState }
-        try WordNoteV2ContentService(container: modelContext.container).updateTerm(
+        try WordNoteV2ContentService(container: modelContext.container, undoHistory: undoHistory).updateTerm(
             term.id, expectedRevision: expectedRevision, termText: termText, termType: termType,
             chineseMeaning: chineseMeaning, englishDefinition: englishDefinition, aiContextExplanation: aiContextExplanation,
             exampleSentence: exampleSentence, contextSentence: contextSentence, courseIDs: courseIDs, sourceType: sourceType,
@@ -85,8 +86,9 @@ struct VocabularyService {
 struct CourseService {
     let modelContext: ModelContext
     var expectedRevision: Int? = nil
+    var undoHistory: WordNoteV2UndoHistory? = nil
     func create(courseName: String, courseCode: String?, instructor: String?, semester: String?, description: String?) throws -> CourseModel {
-        let result = try WordNoteV2ContentService(container: modelContext.container).createCourse(
+        let result = try WordNoteV2ContentService(container: modelContext.container, undoHistory: undoHistory).createCourse(
             courseName: courseName, courseCode: courseCode, instructor: instructor, semester: semester, description: description
         )
         guard let value = try modelContext.fetch(FetchDescriptor<CourseModel>()).first(where: { $0.id == result.id }) else {
@@ -96,7 +98,7 @@ struct CourseService {
     }
     func update(_ course: CourseModel, courseName: String, courseCode: String?, instructor: String?, semester: String?, description: String?) throws {
         guard let expectedRevision else { throw WordNoteV2ContentError.invalidState }
-        try WordNoteV2ContentService(container: modelContext.container).updateCourse(
+        try WordNoteV2ContentService(container: modelContext.container, undoHistory: undoHistory).updateCourse(
             course.id, expectedRevision: expectedRevision, courseName: courseName, courseCode: courseCode,
             instructor: instructor, semester: semester, description: description
         )
@@ -125,10 +127,11 @@ extension QuickAddAnalysisQueue {
     }
 }
 extension VocabularyService {
-    init(modelContext: ModelContext, expectedRevision: Int, courseIDs: Set<UUID>) { self.init(modelContext: modelContext) }
+    init(modelContext: ModelContext, expectedRevision: Int, courseIDs: Set<UUID>, undoHistory: WordNoteV2UndoHistory? = nil) { self.init(modelContext: modelContext) }
+    init(modelContext: ModelContext, undoHistory: WordNoteV2UndoHistory?) { self.init(modelContext: modelContext) }
 }
 extension CourseService {
-    init(modelContext: ModelContext, expectedRevision: Int) { self.init(modelContext: modelContext) }
+    init(modelContext: ModelContext, expectedRevision: Int, undoHistory: WordNoteV2UndoHistory? = nil) { self.init(modelContext: modelContext) }
 }
 #endif
 

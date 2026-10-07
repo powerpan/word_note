@@ -53,16 +53,19 @@ public final class WordNoteV2ContentService {
     typealias LookupEvent = WordNoteSchemaV2.LookupEventModel
 
     let context: ModelContext
+    let undoHistory: WordNoteV2UndoHistory?
     private let container: ModelContainer
     private let save: @MainActor (ModelContext) throws -> Void
 
-    public convenience init(container: ModelContainer) throws {
-        try self.init(container: container, save: { try $0.save() })
+    public convenience init(container: ModelContainer, undoHistory: WordNoteV2UndoHistory? = nil) throws {
+        try self.init(container: container, undoHistory: undoHistory, save: { try $0.save() })
     }
 
-    init(container: ModelContainer, save: @escaping @MainActor (ModelContext) throws -> Void) throws {
+    init(container: ModelContainer, undoHistory: WordNoteV2UndoHistory? = nil, save: @escaping @MainActor (ModelContext) throws -> Void) throws {
         guard container.schema.version == WordNoteSchemaV2.versionIdentifier else { throw WordNoteV2ContentError.wrongSchema }
         self.container = container
+        try undoHistory?.checkContainer(container)
+        self.undoHistory = undoHistory
         context = container.mainContext
         context.autosaveEnabled = false
         self.save = save

@@ -5,6 +5,7 @@ import WordNoteCore
 
 struct V2CandidateDraftEditor: View {
     @Environment(\.modelContext) private var context
+    @Environment(\.savedChangeHistory) private var undoHistory
     let candidates: [CandidateTermModel]
     let record: InputRecordModel
     @Binding var selectedIDs: Set<UUID>
@@ -64,7 +65,7 @@ struct V2CandidateDraftEditor: View {
 
     private var capturedSave: () throws -> Void {
         return {
-            try WordNoteV2ContentService(container: context.container).updateCandidates(changed)
+            try WordNoteV2ContentService(container: context.container, undoHistory: undoHistory).updateCandidates(changed)
             reload()
         }
     }

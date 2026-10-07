@@ -12,6 +12,7 @@ final class V2ValidationRuntime {
         let session: WordNoteStoreSession
         let queue: WordNoteV2AnalysisQueue
         let protection: WordNoteDataProtection
+        let undoHistory: WordNoteV2UndoHistory
         let panel: QuickAddPanelController
     }
 
@@ -82,6 +83,7 @@ final class V2ValidationRuntime {
         let protection = WordNoteDataProtection(session: session, store: store, vault: vault, queue: queue, preferences: Self.preferences)
         ready = Ready(
             session: session, queue: queue, protection: protection,
+            undoHistory: try WordNoteV2UndoHistory(container: session.container),
             panel: QuickAddPanelController(modelContainer: session.container, analysisQueue: queue, dataProtection: protection)
         )
         errorMessage = nil
