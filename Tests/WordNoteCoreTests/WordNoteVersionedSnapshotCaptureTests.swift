@@ -75,6 +75,23 @@ final class WordNoteVersionedSnapshotCaptureTests: XCTestCase {
         container.mainContext.rollback()
     }
 
+    func testStrictV1CaptureDoesNotSaveOrDiscardPendingEdits() async throws {
+        let schema = Schema(versionedSchema: WordNoteSchemaV1.self)
+        let container = try ModelContainer(for: schema, configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)])
+        defer { withExtendedLifetime(container) {} }
+        container.mainContext.autosaveEnabled = false
+        try WordNoteTestFixture.populated.populate(container.mainContext)
+        let term = try XCTUnwrap(container.mainContext.fetch(FetchDescriptor<WordNoteSchemaV1.TermModel>()).first)
+        term.chineseMeaning = "Unsubmitted V1 edit"
+        do {
+            _ = try await WordNoteSnapshotCapture(container: container).captureVersioned(requireCleanContext: true)
+            XCTFail("Startup capture must not save a form edit.")
+        } catch { XCTAssertEqual(error as? WordNoteV2ContentError, .unsavedChanges) }
+        XCTAssertTrue(container.mainContext.hasChanges)
+        XCTAssertEqual(term.chineseMeaning, "Unsubmitted V1 edit")
+        container.mainContext.rollback()
+    }
+
     func testUnsavedV2EditDuringReadStopsInsteadOfSavingItOnRetry() async throws {
         let container = try Support.container()
         defer { withExtendedLifetime(container) {} }

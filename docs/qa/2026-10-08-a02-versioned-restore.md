@@ -62,3 +62,5 @@ swift build -Xswiftc -strict-concurrency=complete \
 A02 仍需遷移前保護與启动協調、修復方案確認/套用，以及 V2 App 讀寫、queue 和 Settings 恢復預覽接入。舊 App coordinator 對 V2 仍拒絕，不能因核心 `targetSchema: .v2` 測試通過就把正式 App 切過去。
 
 本批沒有再次啟動或操作 App，最近一次 Computer Use 鎖屏回應見 [完整性批次](2026-10-08-a02-integrity.md)。實機、A01 整體恢復流程及 QA-06/QA-07 仍未標完成。不合併 main、不分發 App；README、產品截圖和全倉敏感資訊審核仍按 C06 在代碼/測試完成後執行。
+
+後續：[受保護啟動遷移](2026-10-08-a02-startup-migration.md) 已補隔離協調器、beforeMigration 重讀驗證及持久恢復標記；正式 App 接入仍未完成。以上數字及工具狀態保留為本批歷史證據。

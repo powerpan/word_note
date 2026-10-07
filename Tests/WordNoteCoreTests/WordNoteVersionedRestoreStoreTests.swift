@@ -206,6 +206,11 @@ final class WordNoteVersionedRestoreStoreTests: XCTestCase {
         XCTAssertEqual(recovered.generation, first.generation)
         XCTAssertEqual(try captured(recovered, preferences: snapshot.payload.preferences), snapshot.payload.canonicalized)
         XCTAssertFalse(try store.hasPreparedRestore(for: first.generation))
+        XCTAssertEqual(try store.open().recoveryRequired, .restore)
+        XCTAssertTrue(try store.open().analysisRequiresResume)
+        try store.authorizeAnalysisResume(for: first.generation)
+        XCTAssertNil(try store.open().recoveryRequired)
+        XCTAssertFalse(try store.open().analysisRequiresResume)
     }
 
     func testChangedV2OnlyRelationshipFailsChecksumAndRollsBack() async throws {

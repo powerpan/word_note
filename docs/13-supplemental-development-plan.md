@@ -151,7 +151,7 @@ flowchart TD
 
 ### WN2-A02：V2 捕獲與內容關聯基礎
 
-狀態：進行中，隔離 V2 資料/內容交易、完整性預覽、版本化備份及共用恢復日誌已實作；啟動遷移保護、修復流程與 App 接入待補，正式啟用仍等待 A01 驗收。工作量：L。依賴：WN2-A01。
+狀態：進行中，隔離 V2 資料/內容交易、完整性預覽、版本化備份恢復及受保護啟動遷移已實作；修復流程與 App 接入待補，正式啟用仍等待 A01 驗收。工作量：L。依賴：WN2-A01。
 
 - 增加 TermOccurrence、TermCourseLink、LookupEvent 與 CandidateTerm.savedTermID；建立冪等鍵和 revision 校驗。
 - 為 InputRecord 固定查詢意圖、實際方向與檢測版本，為後續手動方向覆寫留出契約。
@@ -169,7 +169,9 @@ flowchart TD
 
 備份進展：[版本化目錄、導出與后台捕獲](qa/2026-10-08-a02-versioned-backups.md)。該批新增 22 項測試；嚴格離線全套 292 項中 290 通過、2 跳過。V1/V2 共用 vault 保留各自完整格式、八類摘要及跨版本輪替；舊入口拒絕 V2，不靜默降成五類資料。V2 未保存直接編輯不由備份提交。該批尚未接入恢復切庫日誌和 App 遷移，沒有重新執行實機或性能驗收，QA-06/QA-07 不標完成。
 
-恢復進展：[共用版本化日誌與 staging](qa/2026-10-08-a02-versioned-restore.md)。新增 19 項測試；嚴格離線全套 311 項中 309 通過、2 跳過。顯式 V2 模式可恢復 V1/V2 快照，后台轉換/建庫/重開校驗，下一次 bootstrap 才切換，故障按原 schema 回退；舊 V1 日誌兼容，舊入口拒絕 version 2 日誌且不重寫。App 仍使用預設 V1，啟動遷移的保護協調、修復套用與 V2 讀寫/queue 接入待完成，不啟用正式詞庫遷移。
+恢復進展：[共用版本化日誌與 staging](qa/2026-10-08-a02-versioned-restore.md)。該批新增 19 項測試；嚴格離線全套 311 項中 309 通過、2 跳過。顯式 V2 模式可恢復 V1/V2 快照，后台轉換/建庫/重開校驗，下一次 bootstrap 才切換，故障按原 schema 回退；舊 V1 日誌兼容，舊入口拒絕 version 2 日誌且不重寫。
+
+啟動進展：[受保護遷移與失敗重試](qa/2026-10-08-a02-startup-migration.md)。新增 19 項測試；嚴格離線全套 330 項中 328 通過、2 跳過，Release 定向 110 項通過。隔離啟動協調器在 UI/worker 建立前持久化遷移意圖，建立並重讀 beforeMigration 快照，前後核對源資料，再經共用日誌切庫；中斷或失敗保留原庫，明確重試前不再自動遷移。App 仍使用 V1，修復套用與 V2 讀寫/queue 接入待完成。此次 Computer Use 可讀隔離 QA 的可訪問性樹，但截圖不可用且後續原生通道斷開，實機閘門仍未通過，不推斷目前鎖屏。
 
 ### WN2-A03：查詞展示與英文主體修復
 
@@ -392,7 +394,7 @@ flowchart TD
 |---|---|---|---|
 | WN2-G00 | 進行中，UI 待補 | S | [基線、固定 V1 fixture 與工具限制](qa/2026-10-07-g00-a03.md) |
 | WN2-A01 | 進行中，核心/App/大庫測量完成，UI 待補 | L | [核心資料保護](qa/2026-10-08-a01-persistence.md)、[App 接入](qa/2026-10-08-a01-app-integration.md)、[后台與性能](qa/2026-10-08-a01-background-persistence.md) |
-| WN2-A02 | 進行中，隔離資料/交易/完整性/版本備份恢復完成，遷移協調及 App 接入待補 | L | [V1 凍結與 V2 快照](qa/2026-10-08-a02-isolated-foundation.md)、[內容交易](qa/2026-10-08-a02-content-transactions.md)、[完整性與啟動防護](qa/2026-10-08-a02-integrity.md)、[版本化備份](qa/2026-10-08-a02-versioned-backups.md)、[版本化恢復](qa/2026-10-08-a02-versioned-restore.md) |
+| WN2-A02 | 進行中，隔離資料/交易/完整性/備份恢復/啟動遷移完成，修復及 App 接入待補 | L | [V1 凍結與 V2 快照](qa/2026-10-08-a02-isolated-foundation.md)、[內容交易](qa/2026-10-08-a02-content-transactions.md)、[完整性與啟動防護](qa/2026-10-08-a02-integrity.md)、[版本化備份](qa/2026-10-08-a02-versioned-backups.md)、[版本化恢復](qa/2026-10-08-a02-versioned-restore.md)、[啟動遷移](qa/2026-10-08-a02-startup-migration.md) |
 | WN2-A03 | 進行中，UI 待補 | S | [14 項回歸、完整離線測試及真實雙向查詞](qa/2026-10-07-g00-a03.md) |
 | WN2-A04 | 待實施 | M | 待填 |
 | WN2-A05 | 待實施 | L | 待填 |

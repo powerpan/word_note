@@ -9,7 +9,18 @@ public struct WordNoteStoreGeneration: Codable, Equatable, Sendable {
 public enum WordNoteRestoreOutcome: String, Codable, Sendable {
     case none
     case restored
+    case migrated
     case rolledBack
+}
+
+public enum WordNoteStoreTransitionKind: String, Codable, Sendable {
+    case restore
+    case migration
+}
+
+public struct WordNotePreparedStore: Sendable {
+    public let generation: WordNoteStoreGeneration
+    public let migrationIssues: [WordNoteV1ToV2Migration.Issue]
 }
 
 public enum WordNoteRestoreError: LocalizedError, Equatable {
@@ -19,6 +30,7 @@ public enum WordNoteRestoreError: LocalizedError, Equatable {
     case protectionRequired
     case missingStore
     case stagingMismatch
+    case migrationIncomplete
 
     public var errorDescription: String? {
         switch self {
@@ -28,6 +40,7 @@ public enum WordNoteRestoreError: LocalizedError, Equatable {
         case .protectionRequired: "A verified pre-restore backup is required."
         case .missingStore: "The selected data store is missing. Existing stores have not been replaced."
         case .stagingMismatch: "The staged restore does not match the backup. The previous store is retained."
+        case .migrationIncomplete: "Complete the data migration before resuming analysis. The original store is retained."
         }
     }
 }
@@ -41,6 +54,7 @@ public struct WordNoteStoreSession {
     public let restoreOutcome: WordNoteRestoreOutcome
     public let analysisRequiresResume: Bool
     public let preferencesToApply: WordNoteSnapshotPayload.Preferences?
+    public let recoveryRequired: WordNoteStoreTransitionKind?
 }
 
 /// The sole owner of generation selection. No opened SQLite store is renamed or replaced.
@@ -76,6 +90,7 @@ public struct WordNoteRestoreStore {
         if pending.phase == .activating {
             // A prior launch stopped before commit. Never retry an uncertain activation automatically.
             manifest.pending = nil
+            recordRecovery(in: &manifest, transition: pending.transition)
             try fault?(.rollbackJournal)
             try writeManifest(manifest)
             return try session(manifest, outcome: .rolledBack, requireExisting: true)
@@ -100,12 +115,15 @@ public struct WordNoteRestoreStore {
             manifest.pending = nil
             manifest.analysisRequiresResume = pending.analysisRequiresResume
             manifest.preferencesToApply = pending.preferences
+            manifest.recoveryRequired = nil
             try fault?(.commitJournal)
             try writeManifest(manifest)
             return WordNoteStoreSession(
                 container: container, schemaVersion: manifest.activeSchema,
-                generation: manifest.active, storeURL: url, restoreOutcome: .restored,
-                analysisRequiresResume: manifest.analysisRequiresResume, preferencesToApply: manifest.preferencesToApply
+                generation: manifest.active, storeURL: url,
+                restoreOutcome: pending.transition == .migration ? .migrated : .restored,
+                analysisRequiresResume: manifest.analysisRequiresResume, preferencesToApply: manifest.preferencesToApply,
+                recoveryRequired: nil
             )
         } catch {
             // Reload the durable old selection, not the possibly modified in-memory commit attempt.
@@ -115,6 +133,7 @@ public struct WordNoteRestoreStore {
                 throw error
             }
             old.pending = nil
+            recordRecovery(in: &old, transition: pending.transition)
             try fault?(.rollbackJournal)
             try writeManifest(old)
             return try session(old, outcome: .rolledBack, requireExisting: true)
@@ -137,12 +156,50 @@ public struct WordNoteRestoreStore {
         replacing expectedGeneration: WordNoteStoreGeneration,
         protectedBy backup: WordNoteBackupSummary
     ) async throws -> WordNoteStoreGeneration {
+        try await prepareTransition(snapshot, replacing: expectedGeneration, protectedBy: backup, transition: .restore).generation
+    }
+
+    /// Startup only: mark intent before any awaited backup IO, with no UI or workers attached.
+    public func beginMigration(replacing expectedGeneration: WordNoteStoreGeneration) throws {
+        var manifest = try readManifest()
+        guard targetSchema == .v2, manifest.activeSchema == .v1 else { throw WordNoteSnapshotError.unsupportedSchema }
+        guard manifest.active == expectedGeneration else { throw WordNoteRestoreError.staleGeneration }
+        guard manifest.pending == nil else { throw WordNoteRestoreError.restoreAlreadyPending }
+        manifest.enableVersionedJournal()
+        manifest.analysisRequiresResume = true
+        manifest.recoveryRequired = .migration
+        try writeManifest(manifest)
+    }
+
+    /// Uses the verified source backup itself, not a separately supplied conversion or new source read.
+    public func prepareMigration(
+        _ protection: DecodedWordNoteSnapshot, replacing expectedGeneration: WordNoteStoreGeneration
+    ) async throws -> WordNotePreparedStore {
+        guard targetSchema == .v2, protection.document.kind == .beforeMigration else {
+            throw WordNoteRestoreError.protectionRequired
+        }
+        return try await prepareTransition(
+            .v1(protection), replacing: expectedGeneration,
+            protectedBy: WordNoteBackupSummary(protection.document), transition: .migration
+        )
+    }
+
+    private func prepareTransition(
+        _ snapshot: VersionedWordNoteSnapshot,
+        replacing expectedGeneration: WordNoteStoreGeneration,
+        protectedBy backup: WordNoteBackupSummary, transition: WordNoteStoreTransitionKind
+    ) async throws -> WordNotePreparedStore {
         if targetSchema == .v1, snapshot.payload.schemaVersion == .v2 { throw WordNoteSnapshotError.unsupportedSchema }
         var manifest = try readManifest()
         guard manifest.active == expectedGeneration else { throw WordNoteRestoreError.staleGeneration }
         guard manifest.pending == nil else { throw WordNoteRestoreError.restoreAlreadyPending }
-        guard backup.kind == .beforeRestore, backup.schemaVersion == manifest.activeSchema else {
+        let requiredKind: WordNoteBackupKind = transition == .migration ? .beforeMigration : .beforeRestore
+        guard backup.kind == requiredKind, backup.schemaVersion == manifest.activeSchema else {
             throw WordNoteRestoreError.protectionRequired
+        }
+        if transition == .migration {
+            guard manifest.activeSchema == .v1, manifest.recoveryRequired == .migration,
+                  snapshot.payload.schemaVersion == .v1 else { throw WordNoteRestoreError.invalidJournal }
         }
         let generation = WordNoteStoreGeneration(id: UUID())
         let url = try storeURL(for: generation)
@@ -151,14 +208,18 @@ public struct WordNoteRestoreStore {
         let staging = Task.detached(priority: .utility) {
             try Task.checkCancellation()
             let payload: WordNoteVersionedPayload
+            let issues: [WordNoteV1ToV2Migration.Issue]
             if targetSchema == .v2, case .v1(let legacy) = snapshot.payload {
-                payload = .v2(try WordNoteV1ToV2Migration.convert(legacy).payload)
+                let migration = try WordNoteV1ToV2Migration.convert(legacy)
+                payload = .v2(migration.payload)
+                issues = migration.issues
             } else {
                 payload = snapshot.payload
+                issues = []
             }
-            return (payload, try Self.stage(payload, at: url, fault: fault))
+            return (payload, try Self.stage(payload, at: url, fault: fault), issues)
         }
-        let (payload, checksum) = try await withTaskCancellationHandler {
+        let (payload, checksum, issues) = try await withTaskCancellationHandler {
             try await staging.value
         } onCancel: {
             staging.cancel()
@@ -168,21 +229,26 @@ public struct WordNoteRestoreStore {
         manifest = try readManifest()
         guard manifest.active == expectedGeneration else { throw WordNoteRestoreError.staleGeneration }
         guard manifest.pending == nil else { throw WordNoteRestoreError.restoreAlreadyPending }
+        guard backup.schemaVersion == manifest.activeSchema else { throw WordNoteRestoreError.staleGeneration }
+        if transition == .migration, manifest.recoveryRequired != .migration { throw WordNoteRestoreError.staleGeneration }
         if payload.schemaVersion == .v2 { manifest.enableVersionedJournal() }
         manifest.pending = Manifest.PendingRestore(
             generation: generation, sourceSnapshotID: snapshot.summary.id,
             protectionSnapshotID: backup.id, payloadChecksum: checksum,
-            payload: payload, journalVersion: manifest.version
+            payload: payload, journalVersion: manifest.version, transition: transition
         )
         try fault?(.prepareJournal)
         try writeManifest(manifest)
-        return generation
+        return WordNotePreparedStore(generation: generation, migrationIssues: issues)
     }
 
-    public func cancelPreparedRestore(replacing expectedGeneration: WordNoteStoreGeneration) throws {
+    public func cancelPreparedRestore(
+        replacing expectedGeneration: WordNoteStoreGeneration, expectedPending: WordNoteStoreGeneration? = nil
+    ) throws {
         var manifest = try readManifest()
         guard manifest.active == expectedGeneration else { throw WordNoteRestoreError.staleGeneration }
         guard manifest.pending?.phase == .prepared else { throw WordNoteRestoreError.invalidJournal }
+        if let expectedPending, manifest.pending?.generation != expectedPending { throw WordNoteRestoreError.staleGeneration }
         manifest.pending = nil
         try writeManifest(manifest)
     }
@@ -197,7 +263,9 @@ public struct WordNoteRestoreStore {
     public func authorizeAnalysisResume(for expectedGeneration: WordNoteStoreGeneration) throws {
         var manifest = try readManifest()
         guard manifest.active == expectedGeneration, manifest.pending == nil else { throw WordNoteRestoreError.staleGeneration }
+        guard manifest.recoveryRequired != .migration else { throw WordNoteRestoreError.migrationIncomplete }
         manifest.analysisRequiresResume = false
+        manifest.recoveryRequired = nil
         try writeManifest(manifest)
     }
 
@@ -209,9 +277,13 @@ public struct WordNoteRestoreStore {
     }
 
     public func hasPreparedRestore(for expectedGeneration: WordNoteStoreGeneration) throws -> Bool {
+        try preparedGeneration(for: expectedGeneration) != nil
+    }
+
+    public func preparedGeneration(for expectedGeneration: WordNoteStoreGeneration) throws -> WordNoteStoreGeneration? {
         let manifest = try readManifest()
         guard manifest.active == expectedGeneration else { throw WordNoteRestoreError.staleGeneration }
-        return manifest.pending != nil
+        return manifest.pending?.generation
     }
 
     private func session(
@@ -220,12 +292,21 @@ public struct WordNoteRestoreStore {
         let url = try storeURL(for: manifest.active)
         return WordNoteStoreSession(
             container: try Self.makeContainer(
-                at: url, schemaVersion: manifest.activeSchema, requireExisting: requireExisting || manifest.active != .legacy
+                at: url, schemaVersion: manifest.activeSchema,
+                requireExisting: requireExisting || manifest.active != .legacy || manifest.version == 2
             ),
             schemaVersion: manifest.activeSchema,
             generation: manifest.active, storeURL: url, restoreOutcome: outcome,
-            analysisRequiresResume: manifest.analysisRequiresResume, preferencesToApply: manifest.preferencesToApply
+            analysisRequiresResume: manifest.analysisRequiresResume, preferencesToApply: manifest.preferencesToApply,
+            recoveryRequired: manifest.recoveryRequired
         )
+    }
+
+    private func recordRecovery(in manifest: inout Manifest, transition: WordNoteStoreTransitionKind) {
+        guard targetSchema == .v2 else { return }
+        manifest.enableVersionedJournal()
+        manifest.recoveryRequired = transition
+        manifest.analysisRequiresResume = true
     }
 
     private func storeURL(for generation: WordNoteStoreGeneration) throws -> URL {
@@ -304,7 +385,8 @@ public struct WordNoteRestoreStore {
             if manifest.version == 2, targetSchema == .v1 { throw WordNoteSnapshotError.unsupportedSchema }
             if manifest.version == 1 {
                 guard manifest.activeSchemaVersion == nil, manifest.previousSchemaVersion == nil,
-                      manifest.pending?.schemaVersion == nil else { throw WordNoteRestoreError.invalidJournal }
+                      manifest.pending?.schemaVersion == nil, manifest.pending?.operation == nil,
+                      manifest.recoveryRequired == nil else { throw WordNoteRestoreError.invalidJournal }
             } else {
                 guard manifest.activeSchemaVersion != nil,
                       (manifest.previous == nil) == (manifest.previousSchemaVersion == nil),
@@ -318,6 +400,10 @@ public struct WordNoteRestoreStore {
             }
             if let pending = manifest.pending {
                 guard manifest.version != 2 || pending.schema == .v2 else { throw WordNoteRestoreError.invalidJournal }
+                if pending.transition == .migration {
+                    guard manifest.activeSchema == .v1, pending.sourceSnapshotID == pending.protectionSnapshotID,
+                          manifest.recoveryRequired == .migration else { throw WordNoteRestoreError.invalidJournal }
+                }
                 guard pending.generation.id != nil, pending.generation != manifest.active,
                       pending.payloadChecksum.count == 64,
                       pending.payloadChecksum.allSatisfy({ "0123456789abcdef".contains($0) }),

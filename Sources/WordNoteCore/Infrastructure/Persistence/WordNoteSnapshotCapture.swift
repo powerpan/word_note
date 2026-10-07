@@ -43,7 +43,7 @@ public struct WordNoteSnapshotCapture {
     }
 
     public func captureVersioned(
-        preferences: WordNoteSnapshotPayload.Preferences = .init()
+        preferences: WordNoteSnapshotPayload.Preferences = .init(), requireCleanContext: Bool = false
     ) async throws -> WordNoteVersionedPayload {
         let schema: WordNoteDataSchemaVersion
         switch container.schema.version {
@@ -56,7 +56,7 @@ public struct WordNoteSnapshotCapture {
             try Task.checkCancellation()
             if container.mainContext.hasChanges {
                 // V2 form drafts must not bypass their revision-checked service through a backup.
-                guard schema == .v1 else { throw WordNoteV2ContentError.unsavedChanges }
+                guard schema == .v1, !requireCleanContext else { throw WordNoteV2ContentError.unsavedChanges }
                 try container.mainContext.save()
             }
             let revision = changes.revision

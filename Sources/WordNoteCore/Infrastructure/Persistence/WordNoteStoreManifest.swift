@@ -9,6 +9,7 @@ struct WordNoteStoreManifest: Codable {
     var pending: PendingRestore?
     var analysisRequiresResume = false
     var preferencesToApply: WordNoteSnapshotPayload.Preferences?
+    var recoveryRequired: WordNoteStoreTransitionKind?
 
     var activeSchema: WordNoteDataSchemaVersion { activeSchemaVersion ?? .v1 }
 
@@ -33,12 +34,15 @@ struct WordNoteStoreManifest: Codable {
         let counts: WordNoteBackupCounts
         let preferences: WordNoteSnapshotPayload.Preferences
         let analysisRequiresResume: Bool
+        let operation: WordNoteStoreTransitionKind?
 
         var schema: WordNoteDataSchemaVersion { schemaVersion ?? .v1 }
+        var transition: WordNoteStoreTransitionKind { operation ?? .restore }
 
         init(
             generation: WordNoteStoreGeneration, sourceSnapshotID: UUID, protectionSnapshotID: UUID,
-            payloadChecksum: String, payload: WordNoteVersionedPayload, journalVersion: Int
+            payloadChecksum: String, payload: WordNoteVersionedPayload, journalVersion: Int,
+            transition: WordNoteStoreTransitionKind
         ) {
             phase = .prepared
             self.generation = generation
@@ -49,11 +53,12 @@ struct WordNoteStoreManifest: Codable {
             counts = payload.counts
             preferences = payload.preferences
             analysisRequiresResume = payload.requiresAnalysisResume
+            operation = journalVersion == 1 ? nil : transition
         }
 
         private enum CodingKeys: String, CodingKey {
             case phase, generation, sourceSnapshotID, protectionSnapshotID, payloadChecksum
-            case schemaVersion, counts, preferences, analysisRequiresResume
+            case schemaVersion, counts, preferences, analysisRequiresResume, operation
         }
 
         init(from decoder: Decoder) throws {
@@ -71,6 +76,7 @@ struct WordNoteStoreManifest: Codable {
             }
             preferences = try values.decode(WordNoteSnapshotPayload.Preferences.self, forKey: .preferences)
             analysisRequiresResume = try values.decode(Bool.self, forKey: .analysisRequiresResume)
+            operation = try values.decodeIfPresent(WordNoteStoreTransitionKind.self, forKey: .operation)
         }
 
         func encode(to encoder: Encoder) throws {
@@ -92,6 +98,7 @@ struct WordNoteStoreManifest: Codable {
             }
             try values.encode(preferences, forKey: .preferences)
             try values.encode(analysisRequiresResume, forKey: .analysisRequiresResume)
+            try values.encodeIfPresent(operation, forKey: .operation)
         }
     }
 }

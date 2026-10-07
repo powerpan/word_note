@@ -66,9 +66,11 @@ public final class WordNoteDataProtection {
         if session.analysisRequiresResume { queue.suspendForRestore() }
         switch session.restoreOutcome {
         case .restored: statusMessage = "Backup restored. The previous data store was retained."
+        case .migrated: statusMessage = "Data upgrade completed. The previous data store and backup were retained."
         case .rolledBack: errorMessage = "Restore did not complete. The previous data store is still active."
         case .none: break
         }
+        if session.recoveryRequired != nil { errorMessage = "A data switch did not complete. The previous data store is still active." }
     }
 
     public func startAutomaticBackups() {
