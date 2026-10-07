@@ -51,6 +51,78 @@ final class DeepSeekChatClientTests: XCTestCase {
         }
     }
 
+    func testRetryAfterSecondsAndHTTPDateArePreserved() async throws {
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        for (status, header, expected) in [
+            (429, "120", now.addingTimeInterval(120)),
+            (503, "Tue, 14 Nov 2023 22:14:20 GMT", now.addingTimeInterval(60))
+        ] {
+            MockURLProtocol.store.configure(statusCode: status, data: Data(), headers: ["Retry-After": header])
+            let client = DeepSeekChatClient(apiKey: "test-key", session: makeSession(), now: { now })
+            do {
+                _ = try await client.complete(messages: [], responseFormat: .jsonObject)
+                XCTFail("Expected a provider error")
+            } catch let error as AIAnalysisRetryAfterError {
+                XCTAssertEqual(error.notBefore, expected)
+                XCTAssertEqual(error.failure, status == 429 ? .rateLimited : .server(statusCode: status, summary: "Request rejected"))
+            }
+        }
+    }
+
+    func testRejectedResponseDoesNotExposeProviderBody() async throws {
+        for status in [400, 401, 403, 500] {
+            MockURLProtocol.store.configure(statusCode: status, data: Data("private-provider-detail".utf8))
+            let client = DeepSeekChatClient(apiKey: "test-key", session: makeSession())
+            do {
+                _ = try await client.complete(messages: [], responseFormat: .jsonObject)
+                XCTFail("Expected a provider error")
+            } catch {
+                XCTAssertEqual(error as? AIAnalysisError, .server(statusCode: status, summary: "Request rejected"))
+                XCTAssertFalse(error.localizedDescription.contains("private-provider-detail"))
+            }
+        }
+    }
+
+    func testMalformedEnvelopeIsNotANetworkFailure() async throws {
+        MockURLProtocol.store.configure(statusCode: 200, data: Data("not JSON".utf8))
+        let client = DeepSeekChatClient(apiKey: "test-key", session: makeSession())
+        do {
+            _ = try await client.complete(messages: [], responseFormat: .jsonObject)
+            XCTFail("Expected an invalid-response error")
+        } catch {
+            XCTAssertEqual(error as? AIAnalysisError, .invalidResponse)
+        }
+    }
+
+    func testInvalidRetryAfterDoesNotHideRateLimit() async throws {
+        MockURLProtocol.store.configure(statusCode: 429, data: Data(), headers: ["Retry-After": "-5"])
+        let client = DeepSeekChatClient(apiKey: "test-key", session: makeSession())
+        do {
+            _ = try await client.complete(messages: [], responseFormat: .jsonObject)
+            XCTFail("Expected a rate-limit error")
+        } catch {
+            XCTAssertEqual(error as? AIAnalysisError, .rateLimited)
+        }
+    }
+
+    func testTransportCancellationTimeoutAndNetworkFailureRemainDistinct() async throws {
+        for code in [URLError.Code.cancelled, .timedOut, .notConnectedToInternet] {
+            MockURLProtocol.store.configure(statusCode: 0, data: Data(), transportError: URLError(code))
+            let client = DeepSeekChatClient(apiKey: "test-key", session: makeSession())
+            do {
+                _ = try await client.complete(messages: [], responseFormat: .jsonObject)
+                XCTFail("Expected a transport error")
+            } catch {
+                switch code {
+                case .cancelled: XCTAssertTrue(error is CancellationError)
+                case .timedOut: XCTAssertEqual(error as? AIAnalysisError, .timeout)
+                default:
+                    XCTAssertEqual(error as? AIAnalysisError, .network("The request could not reach the analysis service."))
+                }
+            }
+        }
+    }
+
     private func makeSession() -> URLSession {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [MockURLProtocol.self]
@@ -66,12 +138,16 @@ private final class MockURLProtocol: URLProtocol {
 
     override func startLoading() {
         let stub = Self.store.response(for: request)
+        if let error = stub.transportError {
+            client?.urlProtocol(self, didFailWithError: error)
+            return
+        }
         guard let url = request.url,
               let response = HTTPURLResponse(
                 url: url,
                 statusCode: stub.statusCode,
                 httpVersion: nil,
-                headerFields: ["Content-Type": "application/json"]
+                headerFields: stub.headers
               )
         else {
             client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
@@ -90,6 +166,8 @@ private final class MockURLProtocolStore: @unchecked Sendable {
     private let lock = NSLock()
     private var statusCode = 200
     private var data = Data()
+    private var headers: [String: String] = [:]
+    private var transportError: URLError?
     private var recordedRequest: URLRequest?
     private var recordedRequestBody: Data?
 
@@ -101,20 +179,22 @@ private final class MockURLProtocolStore: @unchecked Sendable {
         lock.withLock { recordedRequestBody }
     }
 
-    func configure(statusCode: Int, data: Data) {
+    func configure(statusCode: Int, data: Data, headers: [String: String] = [:], transportError: URLError? = nil) {
         lock.withLock {
             self.statusCode = statusCode
             self.data = data
+            self.headers = headers.merging(["Content-Type": "application/json"]) { current, _ in current }
+            self.transportError = transportError
             recordedRequest = nil
             recordedRequestBody = nil
         }
     }
 
-    func response(for request: URLRequest) -> (statusCode: Int, data: Data) {
+    func response(for request: URLRequest) -> (statusCode: Int, data: Data, headers: [String: String], transportError: URLError?) {
         lock.withLock {
             recordedRequest = request
             recordedRequestBody = request.httpBody ?? Self.readBodyStream(request.httpBodyStream)
-            return (statusCode, data)
+            return (statusCode, data, headers, transportError)
         }
     }
 

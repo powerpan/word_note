@@ -429,7 +429,15 @@ P2 若做 iCloud，需要先制定資料衝突策略，不能直接把本地模�
 
 持久化 InputRecord 繼續是待分析工作的來源，補充 queued/running/failed/cancelled 的任務狀態與 attemptID，不引入第二份不一致的任務資料庫。失敗有分類：離線、超時、限流、格式、憑據、保存。預設單 worker；可重試的網絡失敗最多自動重試 2 次，遵守 Retry-After 並採有上限退避，格式/鑰匙错误不自動反覆消費。退避上限 60 秒，超過的 Retry-After 保留為下次可手動重試時間，不提前再發。使用者主動重試是新 attempt，不改捕獲上下文。
 
-真正取消 queued 項恢復草稿可再排隊；取消 running 項嘗試終止 URLSession 並阻止舊結果落庫，但不宣稱服務端未執行或不計費。重新分析已完成/部分確認記錄時必須保護 savedTermID，舊候選不在網絡返回前被銷毀。
+取消 queued 項保留原整理狀態並標記 queueState=cancelled，可明確重新排隊；不能把已有候選/已確認內容退回空白草稿。取消 running 項嘗試終止 URLSession 並阻止舊結果落庫，但不宣稱服務端未執行或不計費。重新分析已完成/部分確認記錄時必須保護 savedTermID，舊候選不在網絡返回前被銷毀。
+
+2026-10-08 隔離實作：`WordNoteV2AnalysisQueue` 從 InputRecord 讀取值型任務列表；主線程只做短交易，網絡等待不持有 SwiftData 模型。`beginAnalysis` 先保存 running、attemptID 和 revision，再把凍結的請求值交給 handler。回應寫入同時核對 attemptID、generation、revision、容器 ticket，以及 store 日誌仍選中原 generation、沒有待切換的 restore。完成/失敗各自一次交易，保存失敗暫停全隊列，不再把已成功的付費請求自動重發。
+
+重試採 2/4 秒基準退避，至多兩次；有效 Retry-After 更晚時優先遵守，超過 60 秒改為需要人工重試的 failed，保留 deadline。取消等待中的重試仍保留未到期 deadline，不能藉取消再排隊提前發送。等待中的任務不阻塞其他已到期任務，新捕獲立即喚醒休眠 worker。
+
+中斷留下的 running 先在共用日誌寫 analysisRequiresResume，再正規化成 queued；再次崩潰/重開也不自動付費重放。正規化增加 generation 使舊回調失效，但保留 autoRetryCount；只有明確新一輪重試才重置預算。重新分析同名候選保留原字段和 saved/ignored 狀態，只追加新英文主體；pending 候選同步到目前 generation，失敗或取消後仍可人工確認。C02 的差異採納界面完成前，不自動更新既有釋義。
+
+以上是 A02/B01 的隔離核心，尚未替換主 App 的 V1 queue，也未串接 Quick Add/浮窗/Inbox 的三入口或任務視圖；見 [隊列與真實調用證據](qa/2026-10-08-a02-analysis-queue.md)。
 
 ### 原子性與撤銷
 
@@ -467,7 +475,7 @@ V2 邏輯快照沿用 formatVersion 1 的 checksum envelope，sourceSchemaVersio
 
 version 2 日誌的 pending.operation 區分 restore/migration，缺值兼容既有 restore；recoveryRequired 在失敗或 activating 中斷後保留。已寫入遷移意圖的失敗不因重啟自動重試，必須顯式 retryMigration；未完成遷移不能直接恢復分析。取消只匹配本次 pending generation，不撤銷競爭操作。原容器保留的 context 仍被屏障阻擋，不能在新庫 ready 後繼續寫舊庫。成功切換清除 recovery 標記，有未完成分析時仍需明確恢復；已有 V2 的 restore 失敗可明確恢復原庫分析。見 [啟動遷移證據](qa/2026-10-08-a02-startup-migration.md)。
 
-上述只在隔離核心使用；V2 App coordinator/worker 接入尚未完成。V2 中 queued/running/failed 工作恢复後持久標記待顯式恢復，底層不發送網絡請求，不能把隔離啟動通過當正式啟用或端到端隊列驗收。
+上述只在隔離核心使用；V2 App coordinator/worker 接入尚未完成。V2 中 queued/running/failed 工作從備份恢復後持久標記待顯式恢復；恢復和遷移本身不發送網絡請求。新 V2 queue 在隔離測試中已有持久重啟/真實調用證據，但不能把它當作正式 App 啟用或三入口 UI 驗收。
 
 `WordNoteV2IntegrityService` 提供值層檢查及修復預覽：涵蓋全部八實體、四份元資料、業務唯一鍵、來源對應與候選狀態。唯一自動提出的修復是解除指向已不存在記錄的 Term.sourceRecordID、Occurrence.sourceRecordID、LookupEvent.occurrenceID；缺課程、缺詞、孤立內容、跨 capture 關聯及重複關係均要求人工處理。修復方案保留完整來源值，stage 前後比較最新資料與偏好，變動即拒絕舊方案。只產生新 payload、更新受影響 Term.revision，不寫原庫。見 [完整性與啟動防護證據](qa/2026-10-08-a02-integrity.md)。
 

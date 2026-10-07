@@ -93,7 +93,7 @@ public struct AIAnalysisCandidate: Equatable, Sendable {
     }
 }
 
-public enum AIAnalysisError: LocalizedError, Equatable {
+public enum AIAnalysisError: LocalizedError, Equatable, Sendable {
     case missingAPIKey
     case invalidURL
     case network(String)

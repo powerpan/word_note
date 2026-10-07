@@ -313,6 +313,17 @@ Expected:
 
 ## 2026-10 補充契約
 
+### V2 隔離隊列已實作的錯誤邊界（A02、B01）
+
+- HTTP 客戶端繼續請求 `deepseek-v4-flash`、關閉 thinking，未在此批更換 prompt/分析 schema。服務回傳 model 另記，不把請求別名當作實際回傳值。
+- HTTP 429/5xx 讀取 Retry-After 的非負整數秒或 HTTP-date；兼容舊 HTTP-date 格式及兩位年份規則。格式依據：[RFC 9110 Retry-After](https://www.rfc-editor.org/rfc/rfc9110.html#name-retry-after)。超大秒數保留為很晚的人工重試期限，不溢出成即時重試。
+- 連線/超時/429/5xx 在持久化預算內最多自動重試兩次，基準 2/4 秒，絕不縮短有效服務端等待。超過 60 秒不自動等待重發，failed 保存最早人工重試時間。
+- 401/403/缺 key、其他 4xx、錯誤 envelope/JSON/schema/空結果不自動重試。成功 HTTP 的 envelope 解碼失敗不再誤分為 network。URLSession 取消保持取消語義，不進入網絡退避。
+- 不保存或展示原始 HTTP 錯誤 body、URLSession 診斷內容；保存靜態分類摘要和 HTTP 狀態碼。資料保存/世代檢查失敗暫停隊列，保留原輸入及中斷狀態，需要明確恢復。
+- 重新分析不覆寫同名既有候選的內容，臨時預覽顯示實際保留/新增的候選值，而非展示未被接受的新字段。完整差異採納仍屬 C02。
+
+此隊列尚未接到三個正式 App 入口，不把這些核心行為描述成目前 UI 已完成。V2 付費 smoke 使用獨立 `RUN_LIVE_DEEPSEEK_V2_TESTS=1`，每輪上限兩次請求，固定公開輸入，內存庫驗證候選持久化、人工確認及重查本地命中；不觸碰真實詞庫。見 [執行證據](qa/2026-10-08-a02-analysis-queue.md)。
+
 ### 方向和輸入邊界（A03、B02）
 
 請求新增 lookupIntent（auto/englishToChinese/chineseToEnglish）、已解析 lookupDirection、detectorVersion、analysisGeneration。方向提交時解析並落庫；重試使用凍結值。用戶改方向屬顯式重新分析，增加 generation、保留已保存候選，不能把正在執行的請求悄悄改向。

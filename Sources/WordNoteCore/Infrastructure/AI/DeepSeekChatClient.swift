@@ -44,6 +44,7 @@ public struct DeepSeekChatClient: AICompletionClient, Sendable {
     public let timeout: TimeInterval
     public let thinkingMode: DeepSeekThinkingMode
     private let session: URLSession
+    private let now: @Sendable () -> Date
 
     public init(
         apiKey: String,
@@ -51,7 +52,8 @@ public struct DeepSeekChatClient: AICompletionClient, Sendable {
         model: String = "deepseek-v4-flash",
         timeout: TimeInterval = 30,
         thinkingMode: DeepSeekThinkingMode = .disabled,
-        session: URLSession = .shared
+        session: URLSession = .shared,
+        now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.apiKey = apiKey
         self.baseURL = baseURL
@@ -59,6 +61,7 @@ public struct DeepSeekChatClient: AICompletionClient, Sendable {
         self.timeout = timeout
         self.thinkingMode = thinkingMode
         self.session = session
+        self.now = now
     }
 
     public func complete(messages: [DeepSeekMessage], responseFormat: DeepSeekResponseFormat) async throws -> DeepSeekCompletion {
@@ -89,14 +92,18 @@ public struct DeepSeekChatClient: AICompletionClient, Sendable {
             }
 
             guard (200..<300).contains(httpResponse.statusCode) else {
-                if httpResponse.statusCode == 429 {
-                    throw AIAnalysisError.rateLimited
+                let code = httpResponse.statusCode
+                let failure: AIAnalysisError = code == 429 ? .rateLimited : .server(statusCode: code, summary: "Request rejected")
+                if (code == 429 || (500..<600).contains(code)),
+                   let notBefore = HTTPRetryAfter.date(httpResponse.value(forHTTPHeaderField: "Retry-After"), receivedAt: now()) {
+                    throw AIAnalysisRetryAfterError(failure: failure, notBefore: notBefore)
                 }
-                let summary = String(data: data, encoding: .utf8) ?? "No response body"
-                throw AIAnalysisError.server(statusCode: httpResponse.statusCode, summary: String(summary.prefix(300)))
+                throw failure
             }
 
-            let payload = try JSONDecoder().decode(DeepSeekChatResponse.self, from: data)
+            let payload: DeepSeekChatResponse
+            do { payload = try JSONDecoder().decode(DeepSeekChatResponse.self, from: data) }
+            catch { throw AIAnalysisError.invalidResponse }
             guard let content = payload.choices.first?.message.content,
                   !TextNormalizer.isBlank(content)
             else {
@@ -104,12 +111,18 @@ public struct DeepSeekChatClient: AICompletionClient, Sendable {
             }
 
             return DeepSeekCompletion(id: payload.id, model: payload.model ?? model, content: content)
+        } catch let error as AIAnalysisRetryAfterError {
+            throw error
         } catch let error as AIAnalysisError {
             throw error
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let error as URLError where error.code == .cancelled {
+            throw CancellationError()
         } catch let error as URLError where error.code == .timedOut {
             throw AIAnalysisError.timeout
         } catch {
-            throw AIAnalysisError.network(error.localizedDescription)
+            throw AIAnalysisError.network("The request could not reach the analysis service.")
         }
     }
 }

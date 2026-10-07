@@ -4,7 +4,7 @@
 
 A01 后台與性能證據：[后台資料工作](qa/2026-10-08-a01-background-persistence.md)，含當批 188 項嚴格離線回歸、獨立 live 與 1,000/10,000 詞各 30 輪 Release 測量；不代替後續 V2 性能或實機驗收。
 
-A02 最新隔離證據：[原始證據保護與啟動修復](qa/2026-10-08-a02-startup-repair.md)，全套 348 項中 346 通過、2 跳過，Release 定向 145 項通過。V2 核心可測不代表 App 已切換。Computer Use 最近重試回報 cgWindowNotFound；實機閘門仍未通過，不能沿用歷史鎖屏診斷。
+A02 最新隔離證據：[持久分析隊列](qa/2026-10-08-a02-analysis-queue.md)，全套 390 項中 387 通過、3 跳過，Release 定向 203 項通過；V2 雙向 live 另行通過，僅兩次真實請求。原始證據保護與啟動修復的歷史測試見 [修復記錄](qa/2026-10-08-a02-startup-repair.md)。V2 核心可測不代表 App 已切換；本批沒有新增 UI 驗收證據。Computer Use 上次重試回報 cgWindowNotFound，不能沿用歷史鎖屏診斷。
 
 ## 質量目標
 
@@ -62,6 +62,17 @@ MVP 的質量重點：
 - 后台 staging 期間 MainActor 可處理其他工作；返回前重新核對日誌，取消或另一恢復先完成時不覆寫有效 pending/active 狀態。
 - 批量確認先全量驗證，任一錯誤時不部分寫入。
 - 刪除 InputRecord/Term 時按規則級聯或清空外鍵。
+
+新增 V2 隔離覆蓋（不替代以上 V1 用例）：
+
+- captureID 重送不重複發送，不同提交保留各自來源；輸入保存不等待前一筆 AI，正常單 worker 執行。
+- 重新分析保留所有既有候選內容及 savedTermID；pending 在失敗/取消後仍可確認，不套用 V1 刪除未保存候選策略。
+- begin/complete/fail/cancel 各自原子保存；保存故障回滾，暫停隊列，不為保存失敗重複付費；未提交人工修改不被回滾。
+- record revision/generation/attemptID、恢復 ticket 及 store active/pending 檢查拒絕延遲回調；刪除或取消不復活記錄。
+- 2/4 秒退避、兩次自動重試預算、60 秒自動等待上限；取消後仍遵守未到期 Retry-After，次數和 deadline 跨 SQLite 重開保留。
+- 中斷先持久暫停再正規化，二次重啟仍不自動重放；暫停日誌/恢复授权保存失敗不發請求；新即時任務可喚醒退避中的 worker。
+- HTTP envelope 格式失敗不歸為 network；取消/超時/離線分開處理，HTTP 錯誤 body 不出現在用戶錯誤摘要。
+- V2 live 僅用兩個公開測試輸入和內存库；API 完成只進候選區，人工確認後再次精確查詢顯示本地釋義，請求數不增加。
 
 ### UI Tests
 

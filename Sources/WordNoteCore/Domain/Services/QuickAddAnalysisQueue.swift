@@ -236,7 +236,7 @@ enum QuickAddQueueWaitError: Error {
     case timedOut
 }
 
-public struct AIExplanationPreview {
+public struct AIExplanationPreview: Sendable {
     public let id: UUID
     public let rawText: String
     public let sentenceMeaning: String?
@@ -269,13 +269,25 @@ public struct AIExplanationPreview {
     }
 }
 
-public struct AIExplanationCandidatePreview: Identifiable {
+public struct AIExplanationCandidatePreview: Identifiable, Sendable {
     public let id: String
     public let term: String
     public let importance: Importance
     public let chineseMeaning: String?
     public let englishDefinition: String?
     public let aiContextExplanation: String?
+
+    public init(
+        id: String, term: String, importance: Importance, chineseMeaning: String?,
+        englishDefinition: String?, aiContextExplanation: String? = nil
+    ) {
+        self.id = id
+        self.term = term
+        self.importance = importance
+        self.chineseMeaning = Self.nonBlank(chineseMeaning)
+        self.englishDefinition = Self.nonBlank(englishDefinition)
+        self.aiContextExplanation = Self.nonBlank(aiContextExplanation)
+    }
 
     public init(candidate: AIAnalysisCandidate) {
         id = "\(TextNormalizer.normalized(candidate.term))-\(candidate.termType.rawValue)-\(candidate.importance.rawValue)"

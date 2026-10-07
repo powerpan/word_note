@@ -33,7 +33,7 @@ extension WordNoteSnapshotV2Payload {
             let queue: AnalysisQueueState = try snapshotEnum(state.queueStateRaw)
             guard (0...2).contains(state.autoRetryCount),
                   queue != .running || state.attemptID != nil,
-                  state.nextAttemptAt == nil || queue == .queued || queue == .failed,
+                  state.nextAttemptAt == nil || queue == .queued || queue == .failed || queue == .cancelled,
                   records[state.id]?.statusRaw != InputRecordStatus.analyzing.rawValue,
                   records[state.id]?.statusRaw != InputRecordStatus.failed.rawValue else {
                 throw WordNoteSnapshotError.invalidValue

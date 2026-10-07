@@ -53,6 +53,7 @@ public final class WordNoteV2ContentService {
     typealias LookupEvent = WordNoteSchemaV2.LookupEventModel
 
     let context: ModelContext
+    private let container: ModelContainer
     private let save: @MainActor (ModelContext) throws -> Void
 
     public convenience init(container: ModelContainer) throws {
@@ -61,6 +62,7 @@ public final class WordNoteV2ContentService {
 
     init(container: ModelContainer, save: @escaping @MainActor (ModelContext) throws -> Void) throws {
         guard container.schema.version == WordNoteSchemaV2.versionIdentifier else { throw WordNoteV2ContentError.wrongSchema }
+        self.container = container
         context = container.mainContext
         context.autosaveEnabled = false
         self.save = save
