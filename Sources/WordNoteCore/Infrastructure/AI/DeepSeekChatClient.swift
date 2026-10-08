@@ -38,6 +38,7 @@ public enum DeepSeekThinkingMode: String, Sendable {
 }
 
 public struct DeepSeekChatClient: AICompletionClient, Sendable {
+    public static let defaultModel = "deepseek-flash"
     public let apiKey: String
     public let baseURL: URL
     public let model: String
@@ -49,7 +50,7 @@ public struct DeepSeekChatClient: AICompletionClient, Sendable {
     public init(
         apiKey: String,
         baseURL: URL = URL(string: "https://api.deepseek.com")!,
-        model: String = "deepseek-v4-flash",
+        model: String = DeepSeekChatClient.defaultModel,
         timeout: TimeInterval = 30,
         thinkingMode: DeepSeekThinkingMode = .disabled,
         session: URLSession = .shared,

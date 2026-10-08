@@ -1,6 +1,9 @@
 import SwiftUI
 import WordNoteCore
 
+#if WORDNOTE_V3_VALIDATION
+typealias SettingsView = V3SettingsView
+#else
 struct SettingsView: View {
     @Environment(WordNoteDataProtection.self) private var dataProtection
     @Environment(\.captureShortcut) private var captureShortcut
@@ -10,10 +13,6 @@ struct SettingsView: View {
     @State private var apiKey = ""
     @State private var keyStatusMessage: String?
     @State private var keyErrorMessage: String?
-    #if WORDNOTE_V3_VALIDATION
-    @AppStorage(WordNoteLearningPreferences.targetStorageKey) private var reviewTarget = 20
-    @AppStorage(WordNoteLearningPreferences.newLimitStorageKey) private var reviewNewLimit = 10
-    #endif
 
     private let environmentFileStore = DeepSeekEnvironmentFileStore(
         fileURL: AppRuntime.isUITest ? AppRuntime.fixtureCredentialURL : DeepSeekAPIKeyResolver.defaultEnvironmentFileURL
@@ -50,15 +49,6 @@ struct SettingsView: View {
                 .groupBoxStyle(WordNoteGroupBoxStyle())
 
                 if let captureShortcut { CaptureShortcutSettings(controller: captureShortcut) }
-
-                #if WORDNOTE_V3_VALIDATION
-                GroupBox("Learning") {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Stepper("Group size: \(reviewTarget)", value: $reviewTarget, in: 5...100, step: 5)
-                        Stepper("Daily new-card limit: \(reviewNewLimit)", value: $reviewNewLimit, in: 0...50)
-                    }.padding(.vertical, 4)
-                }.groupBoxStyle(WordNoteGroupBoxStyle())
-                #endif
 
                 GroupBox("Defaults") {
                     if let captureContext {
@@ -131,11 +121,6 @@ struct SettingsView: View {
         .onAppear(perform: loadKeyStatus)
         .onChange(of: appearanceRawValue) { dataProtection.noteDataChanged() }
         .onChange(of: defaultSourceType) { dataProtection.noteDataChanged() }
-        #if WORDNOTE_V3_VALIDATION
-        .onChange(of: reviewTarget) { dataProtection.noteDataChanged() }
-        .onChange(of: reviewNewLimit) { dataProtection.noteDataChanged() }
-        .onChange(of: captureContext?.defaultContext) { dataProtection.noteDataChanged() }
-        #endif
     }
 
     private func loadKeyStatus() {
@@ -173,3 +158,4 @@ struct SettingsView: View {
         }
     }
 }
+#endif

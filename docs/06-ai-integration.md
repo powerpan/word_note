@@ -15,7 +15,7 @@ AI 集成的目標是把用戶輸入的英文內容，或中文查英文意圖�
 - JSON 解析失敗時不丟失 InputRecord。
 - 實施前應核對 DeepSeek 官方當前 API 文檔；本文件只定義 App 內部契約。
 
-目前客戶端使用 `deepseek-v4-flash`，並顯式發送 `thinking.type = disabled`。查詞是結構化抽取任務，預設關閉思考以降低延遲；若後續切換模型或開啟思考，必須更新請求契約測試與 live smoke test。
+目前客戶端使用 `deepseek-flash`，統一由 `DeepSeekChatClient.defaultModel` 提供，並顯式發送 `thinking.type = disabled`。2026-10-08 核對 [DeepSeek 官方模型文檔](https://api-docs.deepseek.com/quick_start/pricing/)：這是當前正式名稱，舊 `deepseek-v4-flash` 仍接受，但已轉發至 DeepSeek-V4.1-Flash，不能用舊別名鎖定已退役模型。查詞是結構化抽取任務，預設關閉思考以降低延遲；更換請求模型名時核對 HTTP 契約並做一次受控 live 驗證，實際換模型或 prompt 的語義評測仍按 C02 執行。下文歷史驗證保留當時的請求與回報名稱，不追改測試記錄。
 
 ## AIAnalysisService 介面
 
@@ -426,6 +426,8 @@ AI 請求只包含當次原文、必要的課程/備註和用戶選定內容。�
 
 ### 按需練習與連接測試（B08、C04）
 
-連接測試是用戶觸發的獨立小請求，明示會發送網絡請求；不夾帶私人詞庫，返回實際模型、時間及可理解的錯誤類型，不顯示鑰匙。配置變更後舊「成功」標為歷史結果，不能冒充新配置已驗證。
+連接測試是用戶觸發的獨立小請求，明示會發送網絡請求；不夾帶私人詞庫，返回實際模型、時間及可理解的錯誤類型，不顯示鑰匙。配置變更後舊「成功」結果失效，不能冒充新配置已驗證。
+
+B08 已在隔離 V3 接入 `DeepSeekConnectionProbe` 和 `AIConnectionTestController`：固定 JSON 探針、单飛、取消與憑據變更失效、手動 Retry-After，不自動重試。QA App 在解析憑據前拒絕真實連接，獨立 `RUN_LIVE_DEEPSEEK_CONNECTION_TEST=1` 每次只發一個公開請求；[實測記錄](qa/2026-10-08-b08-settings.md) 區分請求名與服務回報名。成功只證明這次連通及 JSON 契約有效，不替代查詞品質評測。
 
 近義辨析、自然表達及單題填空/造句只發選定內容，生成結果清楚標 AI 建議。不完整答案或多種合理表達交由用戶判斷，模型不自動累加錯題。取消、失敗及忽略不改正式詞庫或排程。離線時既有詞庫、確定性填空與普通復習繼續可用。

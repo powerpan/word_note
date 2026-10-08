@@ -95,7 +95,12 @@ final class LearningWorkspace {
         return true
     }
 
-    func select(_ value: SidebarDestination, protection: WordNoteEditProtection?) {
+    func restoreDestination(_ value: SidebarDestination) {
+        destination = value == .settings ? .dashboard : value
+    }
+
+    func select(_ value: SidebarDestination, protection: WordNoteEditProtection?, openSettings: () -> Void = {}) {
+        if value == .settings { openSettings(); return }
         guard destination != value else { return }
         protectingEdits(protection) {
             self.destination = value

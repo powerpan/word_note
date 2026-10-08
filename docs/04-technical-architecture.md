@@ -589,6 +589,10 @@ V3 詞库撤下 Term mastery 編輯/篩選，改為獨立卡片閱讀、方向�
 
 卡片深鏈只在詞庫閱讀指定 term/card，失效 ID 顯示不可用，不替換成鄰近項、不作答。課程復習僅預選新組參數，已有持久組保持原範圍；加詞在保護通過後只更改當前 capture course，不改持久預設、source/intent 或已排隊請求。`RememberingList`/`RememberingScrollView` 記錄最上方可見行，窗口各自恢復。V3 詞庫的方向/mastery/state 必須同時匹配同一張卡；無卡片條件時仍可閱讀無卡詞條，不能以 Term 的 legacy mastery 代替卡片能力。新增 `learning` 合成 fixture 供長列表驗證，原 `populated` fixture 不變。證據及原生限制見 [B07](qa/2026-10-08-b07-learning-navigation.md)。
 
+### 統一設定窗口（B08 第二批）
+
+第二批的 V3 `SettingsView` 路由到唯一 `V3SettingsView`，側欄調用系統 `openSettings` 而不改主窗口 `LearningWorkspace`；舊持久導航值 `.settings` 回退至 Dashboard。General/Capture/Learning/AI/Data 復用既有服務與偏好。連接狀態由窗口內的 `AIConnectionTestController` 持有，固定探針走既有 HTTP 客戶端，不經分析隊列或持久化服務。取消和憑據變更使 attempt ID 失效，遲到結果不可回填；QA runtime 在憑據解析前拒絕探針。實施和未驗收項見 [設定窗口記錄](qa/2026-10-08-b08-settings.md)。
+
 ### 可攜式偏好（B08 第一批）
 
 `WordNoteLearningPreferences` 是版本為 1 的白名單值型，只含預設課程、查詢方向、組大小和每日新卡限額。它復用既有本機 storage keys，但不讀取當前捕獲上下文、窗口狀態、快捷鍵或 API 設定。V3 runtime 注入捕獲 provider；V1/V2 不附加此值，也不擴寫其凍結的 Preferences/codec。

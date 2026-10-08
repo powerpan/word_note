@@ -4,6 +4,35 @@ import WordNoteCore
 
 @MainActor
 final class LearningWorkspaceTests: XCTestCase {
+    func testSettingsActionPreservesMainReadingStateHistoryAndDirtyDraft() {
+        let state = LearningWorkspace(), protection = WordNoteEditProtection()
+        state.vocabulary.query.text = "preserve me"
+        state.open(.term(UUID()))
+        let before = state.vocabulary
+        var dirty = true, settingsOpened = 0
+        protection.track(id: UUID(), title: "Draft", preview: { "Draft" }, isDirty: { dirty },
+                         save: { dirty = false }, discard: { dirty = false })
+        state.select(.settings, protection: protection) { settingsOpened += 1 }
+        XCTAssertEqual(settingsOpened, 1)
+        XCTAssertEqual(state.destination, .vocabulary)
+        XCTAssertEqual(state.vocabulary, before)
+        XCTAssertTrue(state.canGoBack)
+        XCTAssertTrue(dirty)
+        XCTAssertTrue(protection.hasUnsavedChanges)
+    }
+
+    func testRestoredSettingsSelectionCannotBecomeAnEmbeddedSettingsPage() {
+        let state = LearningWorkspace()
+        state.restoreDestination(.settings)
+        XCTAssertEqual(state.destination, .dashboard)
+        for value in SidebarDestination.allCases where value != .settings {
+            state.restoreDestination(value)
+            XCTAssertEqual(state.destination, value)
+        }
+        state.select(.settings, protection: nil)
+        XCTAssertNotEqual(state.destination, .settings)
+    }
+
     func testLinkedTermKeepsFiltersSelectionAndScrollThenBackRestoresThem() {
         let state = LearningWorkspace()
         state.destination = .vocabulary

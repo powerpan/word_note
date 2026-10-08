@@ -10,6 +10,7 @@ struct ContentView: View {
     @State private var captureNavigation = CaptureNavigationState()
     #endif
     #if WORDNOTE_V3_VALIDATION
+    @Environment(\.openSettings) private var openSettings
     @State private var workspace = LearningWorkspace()
     @State private var initializedWorkspace = false
     #endif
@@ -17,7 +18,9 @@ struct ContentView: View {
 
     private var protectedSelection: Binding<SidebarDestination> {
         #if WORDNOTE_V3_VALIDATION
-        Binding(get: { workspace.destination }, set: { workspace.select($0, protection: editProtection) })
+        Binding(get: { workspace.destination }, set: {
+            workspace.select($0, protection: editProtection, openSettings: { openSettings() })
+        })
         #else
         Binding(get: { selection }, set: { destination in
             guard selection != destination else { return }
@@ -67,7 +70,7 @@ struct ContentView: View {
         #if WORDNOTE_V3_VALIDATION
         .environment(\.learningWorkspace, workspace)
         .onAppear {
-            if !initializedWorkspace { workspace.destination = selection; initializedWorkspace = true }
+            if !initializedWorkspace { workspace.restoreDestination(selection); initializedWorkspace = true }
         }
         .onChange(of: workspace.destination) { selection = workspace.destination }
         #endif
@@ -278,7 +281,11 @@ private struct DetailRouter: View {
             CoursesOverviewView()
             #endif
         case .settings:
+            #if WORDNOTE_V3_VALIDATION
+            EmptyView()
+            #else
             SettingsView()
+            #endif
         }
     }
 }

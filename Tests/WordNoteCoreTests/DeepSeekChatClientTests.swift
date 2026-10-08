@@ -8,12 +8,12 @@ final class DeepSeekChatClientTests: XCTestCase {
         super.tearDown()
     }
 
-    func testCompleteSendsV4FlashWithThinkingDisabled() async throws {
+    func testCompleteSendsFlashWithThinkingDisabled() async throws {
         MockURLProtocol.store.configure(
             statusCode: 200,
             data: Data(
                 """
-                {"id":"response-1","model":"deepseek-v4-flash","choices":[{"message":{"content":"{\\"input_type\\":\\"word\\",\\"sentence_meaning\\":\\"\\",\\"items\\":[]}"}}]}
+                {"id":"response-1","model":"deepseek-flash","choices":[{"message":{"content":"{\\"input_type\\":\\"word\\",\\"sentence_meaning\\":\\"\\",\\"items\\":[]}"}}]}
                 """.utf8
             )
         )
@@ -24,14 +24,14 @@ final class DeepSeekChatClientTests: XCTestCase {
             responseFormat: .jsonObject
         )
 
-        XCTAssertEqual(completion.model, "deepseek-v4-flash")
+        XCTAssertEqual(completion.model, "deepseek-flash")
         let request = try XCTUnwrap(MockURLProtocol.store.lastRequest)
         XCTAssertEqual(request.url?.absoluteString, "https://api.deepseek.com/chat/completions")
         XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer test-key")
 
         let body = try XCTUnwrap(MockURLProtocol.store.lastRequestBody)
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
-        XCTAssertEqual(json["model"] as? String, "deepseek-v4-flash")
+        XCTAssertEqual(json["model"] as? String, "deepseek-flash")
         XCTAssertEqual((json["thinking"] as? [String: Any])?["type"] as? String, "disabled")
         XCTAssertEqual((json["response_format"] as? [String: Any])?["type"] as? String, "json_object")
     }

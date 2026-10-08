@@ -29,6 +29,13 @@ enum AppRuntime {
         return try await AIAnalysisService(client: DeepSeekChatClient(apiKey: apiKey)).analyze(request)
     }
 
+    @MainActor
+    static func testAIConnection() async throws -> String {
+        guard !isUITest else { throw AIAnalysisError.network("Live connection tests are disabled in QA.") }
+        guard let apiKey = DeepSeekAPIKeyResolver.resolve() else { throw AIAnalysisError.missingAPIKey }
+        return try await DeepSeekConnectionProbe(client: DeepSeekChatClient(apiKey: apiKey)).run()
+    }
+
     private static func argument(after flag: String) -> String? {
         let arguments = ProcessInfo.processInfo.arguments
         guard let index = arguments.firstIndex(of: flag), arguments.indices.contains(index + 1) else {
