@@ -79,7 +79,7 @@ public struct ReviewScheduler {
         )
     }
 
-    private static func goodIntervalDays(currentIntervalDays: Int, currentCorrectStreak: Int) -> Int {
+    static func goodIntervalDays(currentIntervalDays: Int, currentCorrectStreak: Int) -> Int {
         switch currentCorrectStreak {
         case ..<1:
             return 2
@@ -92,7 +92,7 @@ public struct ReviewScheduler {
         }
     }
 
-    private static func easyIntervalDays(currentIntervalDays: Int, currentCorrectStreak: Int) -> Int {
+    static func easyIntervalDays(currentIntervalDays: Int, currentCorrectStreak: Int) -> Int {
         switch currentCorrectStreak {
         case ..<1:
             return 4

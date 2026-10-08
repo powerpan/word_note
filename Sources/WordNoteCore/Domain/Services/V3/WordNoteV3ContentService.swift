@@ -10,6 +10,7 @@ public struct WordNoteV3CourseUsage: Equatable, Sendable {
 
 public enum WordNoteV3ContentError: LocalizedError, Equatable {
     case wrongSchema, unsavedChanges, missingEntity, invalidValue, counterLimit
+    case captureConflict, ambiguousExactMatch, invalidState
     case revisionConflict(expected: Int, actual: Int)
     case courseInUse(WordNoteV3CourseUsage)
 
@@ -20,6 +21,9 @@ public enum WordNoteV3ContentError: LocalizedError, Equatable {
         case .missingEntity: "The selected item no longer exists. Refresh and try again."
         case .invalidValue: "The operation contains an unsupported value. No changes were saved."
         case .counterLimit: "A stored counter has reached its supported limit. No changes were saved."
+        case .captureConflict: "This submission identifier was already used for different content."
+        case .ambiguousExactMatch: "Multiple vocabulary entries match exactly. Resolve the duplicate entries before looking up this term."
+        case .invalidState: "The stored content has conflicting states or references. No changes were saved."
         case .revisionConflict: "This item changed after it was selected. Refresh before saving."
         case .courseInUse: "This course is still referenced by input records, vocabulary, or sources."
         }
@@ -60,7 +64,7 @@ public final class WordNoteV3ContentService {
     func transaction<T>(_ body: () throws -> T) throws -> T {
         try WordNoteWriteGate.check(context)
         guard !context.hasChanges else { throw WordNoteV3ContentError.unsavedChanges }
-        // A deletion must not double as an unreviewed repair of preexisting damage.
+        // Content mutations must not double as an unreviewed repair of preexisting damage.
         _ = try WordNoteSnapshotV3Payload.capture(from: context)
         do {
             let result = try body()
@@ -83,6 +87,11 @@ public final class WordNoteV3ContentService {
         return value
     }
 
+    func course(_ id: UUID) throws -> Course {
+        guard let value = try fetch(Course.self).first(where: { $0.id == id }) else { throw WordNoteV3ContentError.missingEntity }
+        return value
+    }
+
     func requireRevision(_ actual: Int, _ expected: Int) throws {
         guard actual == expected else { throw WordNoteV3ContentError.revisionConflict(expected: expected, actual: actual) }
     }
@@ -101,5 +110,23 @@ public final class WordNoteV3ContentService {
     func touch(_ term: Term, at date: Date) throws {
         term.revision = try increment(term.revision)
         term.updatedAt = date
+    }
+
+    func validateText(_ values: [String?]) throws {
+        guard values.allSatisfy({ ($0?.count ?? 0) <= WordNoteSnapshotPayload.maximumTextCharacters }) else {
+            throw WordNoteV3ContentError.invalidValue
+        }
+    }
+
+    func optionalText(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed?.isEmpty == true ? nil : trimmed
+    }
+
+    @discardableResult
+    func addMembership(termID: UUID, courseID: UUID, at date: Date) throws -> Bool {
+        guard try !fetch(CourseLink.self).contains(where: { $0.termID == termID && $0.courseID == courseID }) else { return false }
+        context.insert(CourseLink(termID: termID, courseID: courseID, createdAt: date))
+        return true
     }
 }

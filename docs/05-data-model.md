@@ -421,6 +421,10 @@ V3 的 `WordNoteBackupCounts` 包含 cards/sessions/sessionItems；舊版摘要�
 
 證據與剩餘啟用門檻見 [B03 隔離基礎](qa/2026-10-08-b03-isolated-foundation.md)、[B03 受保護恢復](qa/2026-10-08-b03-protected-recovery.md) 及 [B03 刪除與修復](qa/2026-10-08-b03-deletion-integrity.md)。
 
+B04 第一批沒有新增 SwiftData 欄位或改動 V1/V2 格式。`ReviewCardSchedule` 的狀態/日期校驗由純排程與 V3 snapshot 共用；dayKey 必須是在保存時區真實存在的公元日期，例如 Pacific/Apia 的 2011-12-30 不可被自動換成翌日。桶與 repeatCount 保留跨日/時區判斷；`card.updatedAt` 在查詢信號交易中保持最近交互高水位，供後續正式 writer 防止時鐘倒退。
+
+本地精確命中增加 occurrence/LookupEvent 和必要 membership，既有卡只更新 priorityRequestedAt、revision、updatedAt；Term 只更新 revision/updatedAt，legacy 三計數及其快照不變，沒有 version=2 ReviewEvent。只有完全無卡時建立 new 英文卡，不複製 legacy 能力。這是隔離交易測試結果，尚未啟用 V3 App。見 [B04 第一批證據](qa/2026-10-08-b04-scheduler-signals.md)。
+
 ### V4：義項與版本
 
 | 實體 | 核心字段與約束 |

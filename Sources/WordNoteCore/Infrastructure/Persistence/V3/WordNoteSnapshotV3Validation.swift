@@ -191,36 +191,11 @@ extension WordNoteSnapshotV3Payload {
     }
 
     private func studyDay(_ key: String?, timeZone: String?, required: Bool) throws {
-        if key == nil, timeZone == nil, !required { return }
-        guard let key, let timeZone, TimeZone(identifier: timeZone) != nil,
-              key.utf8.count == 10, key.allSatisfy({ $0.isASCII && ($0.isNumber || $0 == "-") }) else { throw WordNoteSnapshotError.invalidValue }
-        let parts = key.split(separator: "-", omittingEmptySubsequences: false)
-        guard parts.count == 3, parts[0].count == 4, parts[1].count == 2, parts[2].count == 2,
-              let year = Int(parts[0]), let month = Int(parts[1]), let day = Int(parts[2]), (1...9999).contains(year) else { throw WordNoteSnapshotError.invalidValue }
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
-        guard let date = calendar.date(from: DateComponents(year: year, month: month, day: day)),
-              calendar.component(.year, from: date) == year, calendar.component(.month, from: date) == month,
-              calendar.component(.day, from: date) == day else { throw WordNoteSnapshotError.invalidValue }
+        _ = try ReviewStudyDay.optional(key: key, timeZoneID: timeZone, required: required)
     }
 
     private func schedule(_ value: ReviewCardSchedule) throws {
-        try [value.intervalDays, value.confidentStreak, value.lapseCount].forEach(counter)
-        guard (0...2).contains(value.relearningRepeatCount) else { throw WordNoteSnapshotError.invalidValue }
-        try studyDay(value.relearningDayKey, timeZone: value.relearningTimeZoneID, required: value.relearningRepeatCount > 0)
-        try [value.nextReviewAt, value.priorityRequestedAt, value.introducedAt, value.lastReviewedAt, value.buriedUntil].forEach(date)
-        switch value.phase {
-        case .new:
-            guard value.nextReviewAt == nil, value.masteryLevel == .new, value.intervalDays == 0,
-                  value.confidentStreak == 0, value.lapseCount == 0, value.lastReviewedAt == nil,
-                  value.relearningRepeatCount == 0 else { throw WordNoteSnapshotError.invalidValue }
-        case .review:
-            guard value.nextReviewAt != nil else { throw WordNoteSnapshotError.invalidValue }
-        case .relearning:
-            guard value.nextReviewAt != nil, value.masteryLevel == .vague, value.confidentStreak == 0 else { throw WordNoteSnapshotError.invalidValue }
-            try studyDay(value.relearningDayKey, timeZone: value.relearningTimeZoneID, required: true)
-        case .suspended: break
-        }
+        try value.validate()
     }
 
     private func cloze(_ target: ReviewClozeTarget, source: String) throws {

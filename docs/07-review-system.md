@@ -292,11 +292,22 @@ easy:
 
 日級曲線使用反饋前的 confidentStreak：Good 在 0/1/2 時為 2/4/7 天，其後 `min(max(intervalDays,1)*2,30)`；Easy 在 0/1/2 時為 4/7/14 天，其後 `min(max(intervalDays,1)*2,60)`。重學退出後實際間隔覆蓋 intervalDays。新版仍是產品內的透明簡化算法，不稱為 SM-2 或 FSRS。
 
-重學上限按「同一卡片在當地日第一次正式呈現後，最多再呈現 2 次重學」計算。若兩次再呈現後仍 Again/Hard，轉為次日待復習，保持 vague，不顯示掌握。次數保存在卡片的 dayKey/repeatCount，另開會話或重啟不能重置；只有新日首次使用時才換桶。排程跨度跨午夜時保持真正的 10 分鐘，不提前到午夜抽卡。
+重學上限按「同一卡片在當地日第一次正式呈現後，最多再呈現 2 次重學」計算。若兩次再呈現後仍 Again/Hard，轉為次日待復習，保持 vague，不顯示掌握。次數保存在卡片的 dayKey/repeatCount，另開會話或重啟不能重置；既有桶只在新日第一次正式呈現時切換。排程跨度跨午夜時保持真正的 10 分鐘，不提前到午夜抽卡。
 
 日級日期使用 Calendar 加日，不以 86,400 秒替代本地日。分钟級重學使用絕對到期時間；裝置時鐘回調、睡眠喚醒後重新計算剩餘時間，已到期只入隊一次。明顯時鐘倒退時不寫負間隔或重置每日配額，保留事件時間及異常標記供本機核對。
 
 按鈕上的「10 分鐘 / 明天 / N 天」與實際保存共用 scheduler 的同一輸入快照；點擊時如果卡片已被其他窗口修改，刷新預覽，不沿用過期結果。
+
+B04 實施細則（2026-10-08）：
+
+- 重學 quota 在正式呈現的交易中更新，不在預覽或點擊答案時增加。新日第一次呈現為基準（repeatCount=0）；同日再次呈現 relearning 才加 1，最多 2。恢復已呈現項只重新顯示正面，不再記一次；B05 必須依 session item 狀態保障冪等。Good/Easy 退出重學仍保留當日桶與已用次數，不能靠再次查詞或另開會話重新取得配額。
+- 既有桶只在新日第一次正式呈現才切換；時區改變不能立即清零，既有桶按原時區保存到其日末，過界後才使用新會話時區。午夜前呈現、午夜後作答時，反饋按新日尚無再呈現計算等待，但仍保留上次呈現桶；不能把該次作答當作新日第一次呈現。跨午夜的 10 分鐘仍是完整 600 秒；到期後新日首次呈現不算前一日的再呈現。
+- 早於卡片最近已保存交互時間的時鐘輸入標記 movedBackward。事件 reviewedAt/studyDay 保留觀察到的實際時間；計算到期使用不倒退的 effectiveAt，未來 writer 以 effectiveAt 維護 card.updatedAt 的高水位。倒退不清每日次數，不把 nextReviewAt 推到已知交互時間以前。日級加日使用會話的 Gregorian Calendar/時區，沒有日期時回退成「現在」的路徑。
+- Again，或 relearning 的 Hard，在 repeatCount=2 時轉 review/vague、intervalDays=1，安排到次日本地日開始（不能早於既有 quota 桶結束）；結果標為上限延期，而非 reviewed 成功。仍保留這次真實 Again/Hard 事件，只有 Again 增 lapse。B05 對該項使用 postponed 終態，不混入成功完成量。
+- 到期分類僅用於挑選下一張/新組，不能把已呈現項的顯示恢復當再次呈現。優先請求不能越過 suspended、sibling burial、未到時的 relearning 或 new 卡配額；新卡先分類為 new，再由每日配額/包含新卡選項決定是否呈現。
+- 新排程核心與舊 ReviewScheduler 分開，復用原 Good/Easy 日級曲線；V1/V2 的 Hard/wrongCount 歷史語義不在隔離開發期間改寫。未完成 V3 writer/queue/UI 共同切換前，不能把純 scheduler 測試當成 B04 完整交付。
+
+`ReviewCardScheduler`/`ReviewCardQueuePolicy` 的第一批隔離實作與測試見 [排程與查詢信號證據](qa/2026-10-08-b04-scheduler-signals.md)。純 feedback plan 不等於正式作答保存；未來 writer 還須核對已呈現項、revision、actionID 和窗口回答權，並原子保存事件/卡片/會話。
 
 ### 查詢信號，不是答錯（B04）
 
@@ -305,6 +316,10 @@ easy:
 優先選已啟用的英文識別卡，沒有則選已啟用主卡；設 priorityRequestedAt=now，使它進今日待辦，不直接覆寫原始排程。明確 suspended 的卡不自動啟用，界面顯示可恢復復習；詞條尚無卡時正常建立默認識別新卡，仍受新卡配額管理。
 
 同一卡只保留一個未處理優先請求，反覆查詢更新時間，原始查詢事件仍各自去重保存。若是等待中的重學，優先請求不突破 10 分鐘到期時間。正式反饋消費在它之前的請求；反饋後發生的新查詢保留到下一組，不向正在完成的快照無限塞新卡。
+
+V3 本地命中寫入 source、LookupEvent、membership 和優先請求，Term 只更新内容 revision/updatedAt；舊 wrongCount/reviewCount/duplicateHitCount、lastDuplicateHitAt、mastery、streak、interval、due、importance 全部保留為兼容快照，不雙寫。選卡限已啟用的 wholeTerm：先英文識別，沒有則回退其他已啟用 wholeTerm 主卡，不隨機挑一張原句填空；只有 cloze 或停用卡時保留查詢事實，不自動增卡。真正沒有任何卡時才建立默認英文 new 卡，其優先信號仍不能繞過新卡配額。
+
+captureID 重送只返回已有保存結果，不再加來源、查詢事件、課程關聯或優先請求；來源已刪除則報重送衝突，不靠重送復活內容。Save Only/中文查英文/未命中仍保存相應草稿或待分析記錄，不走本地英文重查信號；capture 本身不持有網絡客戶端。正式反饋只清除 observedAt 之前已存在的優先請求，未來時間的請求（包括時鐘倒退造成的情況）保守保留。
 
 ### 隊列與會話（B05）
 

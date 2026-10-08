@@ -491,6 +491,18 @@ A06 的 `VocabularyBrowseIndex` 僅持有不可變 DTO 和預計算的中英文�
 
 此方案不新增持久 token；成功後重送原方案會因版本不符而拒絕，重新預覽相同增減得到 no-op，零保存且不替換既有 undo receipt。取消只丟棄值草稿；不提供恢復後自動重放整理操作。詳見 [A06 閱讀與批量整理證據](qa/2026-10-08-a06-vocabulary-reading.md)。
 
+### 卡片排程與查詢信號（B04 第一批）
+
+`ReviewCardScheduler` 是不持有 ModelContext 的純值服務，分開 `presentation` 與 `feedback`：前者只在真正呈現時消耗重學次數/首次新卡標記，後者產出不可變 before/after、排程延遲、處理結果及時鐘異常。預覽可重複計算，不寫庫；新規則只復用舊 Good/Easy 曲線，不改 V1/V2 的反饋歷史語義。
+
+`ReviewStudyClock` 保留 observedAt 與非倒退 effectiveAt。到期使用有效交互高水位，事件時間仍是 observedAt；每日桶以明確 Gregorian 日期和時區解析，不接受被系統正規化的非法/不存在民用日期或公元前年份。排程和完整 V3 snapshot 共用標量/狀態校驗，避免兩套約束漂移。時區變更先保留既有桶的結束邊界；詳細 quota 與跨日規則見 [07](07-review-system.md)。
+
+`ReviewCardQueuePolicy` 只分類下一次可用性，不建會話。停用/埋藏先阻擋，新卡始終留在 new 分類，重學按精確分鐘與日上限判断，日級卡才使用當地日末。pending priority 不繞過上述限制。它不應用來重新計數已呈現項；B05 仍須提供固定組、全局每日新卡配額、呈現冪等和窗口租約。
+
+V3 `capture` 復用既有不可變 request/result 契約，但本地命中交易改為來源、LookupEvent、membership 和一個 priorityRequestedAt。Term 僅 touch revision/updatedAt，舊計數、重要度、能力及排程不雙寫。選卡先啟用的英文 wholeTerm，再其他啟用 wholeTerm；無任何卡才建立 new 英文卡，僅 cloze/停用卡不自動擴卡。captureID 重送不刷新優先時間，已刪來源不因重送復活。服務沒有 provider 引用，未命中只持久排隊。沿用前後全圖校驗及單次保存/回滾，性能門檻仍須另測。
+
+這批沒有接入正式反饋 writer、按鈕預覽或 V3 runtime。後續必須將 snapshot/revision/lease/actionID 校驗和 card/event/item/cursor 寫入放在單一交易；不能由 UI 直接把純 plan 寫進卡片，也不能把 presentation 重跑當會話恢復。證據見 [B04 排程與信號](qa/2026-10-08-b04-scheduler-signals.md)。
+
 ### 備份、恢復與啟動
 
 備份取得一致、不可變的 DTO 後才序列化及原子寫文件，不跨 executor 共用可變 ModelContext/model。A01 大庫測量發現 MainActor 全量捕獲會阻塞，因此日常/手動備份改用樂觀一致性讀取：V1 先保存當前已修改 context；V2 若存在直接模型的未提交修改則拒絕捕獲，不代替 revision 交易提交或丟棄表單。后台 worker 建自己的唯讀 context，讀取前後同步比較同容器的 willSave/didSave 計數；有任何保存或主 context 待保存修改就丟棄整次讀取並重試，最多三次，仍不穩定則保留舊備份並明確報錯。V2 重試時仍檢查未提交修改。不能把混合版本或只截取部分實體的結果當成成功快照。
