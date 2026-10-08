@@ -33,6 +33,7 @@ public extension WordNoteSnapshotV3Payload {
         public var updatedAt: Date
         public var endedAt: Date?
         public var revision: Int
+        public var introductions: [ReviewNewCardIntroduction]? = nil
     }
 
     struct SessionItem: Codable, Equatable, Sendable {

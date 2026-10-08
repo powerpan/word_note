@@ -89,6 +89,7 @@ extension WordNoteSnapshotV3Payload.Session {
         revision = model.revision
         status = try snapshotEnum(model.statusRaw)
         scope = try ReviewPersistenceJSON.decode(model.scopeSnapshotJSON)
+        introductions = try model.introductionsJSON.map { try ReviewPersistenceJSON.decode($0) }
     }
 
     func model() throws -> WordNoteSchemaV3.ReviewSessionModel {
@@ -99,6 +100,7 @@ extension WordNoteSnapshotV3Payload.Session {
         model.endedAt = endedAt
         model.revision = revision
         model.statusRaw = status.rawValue
+        model.introductionsJSON = try introductions.map { try ReviewPersistenceJSON.encode($0) }
         return model
     }
 }

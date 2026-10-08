@@ -434,3 +434,17 @@ actionID 的權威是已保存 ReviewEvent，而非 UI 的「已點擊」標誌�
 取捨邊界：未提供獨立進程同寫支持，依賴 App 的唯一 runtime 容器及 MainActor writer。評分不能替代呈現/新卡配額；缺 introducedAt 的已呈現 new 卡在共享完整校驗處阻止。正式啟用前還須接 B05/B06 的生命周期、控制與題型，不能拿核心交易測試代替頁面驗收。
 
 落地契約：[復習規則](07-review-system.md)、[作答架構](04-technical-architecture.md)、[B04 第二批證據](qa/2026-10-08-b04-answer-transactions.md)。
+
+## Decision 027: 首次引入台帳與備份格式保護
+
+日期：2026-10-08。狀態：隔離 V3 已實作；正式 runtime/UI 尚未啟用。
+
+決策：建組不等於呈現。首次呈現 new 卡才保存 introducedAt，並在所屬會話保存不含詞文的引入台帳；它與卡片/項/游標同交易。全局按 originalCardID 計量，凍結當時日/時區與不倒退的 chargedAt，刪詞/卡不退還用量。既有已引入未評分卡可繼續，但不再佔新卡額度。恢復 presented 項不重跑 presentation。
+
+原因與取捨：只數當前卡片上的 introducedAt，刪卡會改小當日用量，切時區也可能立刻換桶。會話台帳增加少量持久資料，但保留原身份即可跨課程/方向/刪除/恢復計數，不必新增實體或保存刪除詞文。時區重疊時保守計數，可能縮少旅行當天可用量；比重複發放額度更符合既定上限。
+
+早期隔離 V3 沒有台帳，不補造正式引入歷史；存活卡的 introducedAt 作保守 fallback，已刪且从未記錄的歷史用量不可推斷。正式 V1/V2 遷移本身沒有 introducedAt，不受這個原型兼容限制影響。V3 模型尚未發布，增加可空欄位不改 V1/V2；原型 SQLite 的跨模型直接開啟不在驗收聲明中。
+
+備份與修復證據各自升到 format=2：舊 decoder 不能只忽略新欄位後報成功，新 reader 兼容無台帳 format=1。帶台帳降標拒絕，修復證據仍能原樣保存損壞台帳。這是持久資料兼容保護，不是 App 分發工作。
+
+落地契約：[資料模型](05-data-model.md)、[會話規則](07-review-system.md)、[B05 第一批證據](qa/2026-10-08-b05-session-presentation.md)。

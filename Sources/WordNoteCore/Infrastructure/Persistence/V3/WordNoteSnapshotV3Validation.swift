@@ -62,6 +62,7 @@ extension WordNoteSnapshotV3Payload {
             }
         }
         let itemsBySession = Dictionary(grouping: sessionItems, by: \.sessionID)
+        var introducedCardIDs = Set<UUID>()
         for session in sessions {
             try counter(session.revision)
             try date(session.createdAt)
@@ -73,6 +74,22 @@ extension WordNoteSnapshotV3Payload {
                   session.scope.courseID != nil || session.scope.courseName == nil else { throw WordNoteSnapshotError.invalidValue }
             let items = itemsBySession[session.id, default: []]
             guard items.count <= session.targetCardCount else { throw WordNoteSnapshotError.invalidValue }
+            for introduction in session.introductions ?? [] {
+                guard introducedCardIDs.insert(introduction.originalCardID).inserted,
+                      items.contains(where: { $0.originalCardID == introduction.originalCardID }) else {
+                    throw WordNoteSnapshotError.invalidValue
+                }
+                try date(introduction.introducedAt)
+                try date(introduction.chargedAt)
+                let day = try ReviewStudyDay(key: introduction.studyDayKey, timeZoneID: introduction.studyTimeZoneID)
+                guard introduction.chargedAt >= introduction.introducedAt,
+                      introduction.chargedAt >= day.start, introduction.chargedAt < day.end else {
+                    throw WordNoteSnapshotError.invalidValue
+                }
+                if let card = cardByID[introduction.originalCardID], card.schedule.introducedAt != introduction.introducedAt {
+                    throw WordNoteSnapshotError.invalidValue
+                }
+            }
             if let id = session.currentItemID {
                 guard let item = itemByID[id], item.sessionID == session.id, !item.status.isTerminal,
                       item.status != .waiting else { throw WordNoteSnapshotError.missingReference }

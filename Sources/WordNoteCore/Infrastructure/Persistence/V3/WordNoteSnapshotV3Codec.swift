@@ -36,7 +36,7 @@ public struct DecodedWordNoteSnapshotV3: Sendable {
 
 public enum WordNoteSnapshotV3Codec {
     public static let maximumDocumentBytes = 64 * 1_024 * 1_024
-    public static let currentFormatVersion = 1
+    public static let currentFormatVersion = 2
     public static let currentSchemaVersion = "3.0.0"
 
     public static func encode(
@@ -71,7 +71,7 @@ public enum WordNoteSnapshotV3Codec {
         } catch {
             throw WordNoteSnapshotError.invalidDocument
         }
-        guard document.formatVersion == currentFormatVersion else { throw WordNoteSnapshotError.unsupportedFormat }
+        guard (1...currentFormatVersion).contains(document.formatVersion) else { throw WordNoteSnapshotError.unsupportedFormat }
         guard document.sourceSchemaVersion == currentSchemaVersion else { throw WordNoteSnapshotError.unsupportedSchema }
         guard document.appVersion.count <= 128,
               document.createdAt.timeIntervalSince1970.isFinite,
@@ -85,6 +85,9 @@ public enum WordNoteSnapshotV3Codec {
             payload = try JSONDecoder().decode(WordNoteSnapshotV3Payload.self, from: payloadData)
         } catch {
             throw WordNoteSnapshotError.invalidDocument
+        }
+        if document.formatVersion == 1, payload.sessions.contains(where: { $0.introductions != nil }) {
+            throw WordNoteSnapshotError.unsupportedFormat
         }
         try payload.validate()
         guard document.counts == payload.counts else { throw WordNoteSnapshotError.countMismatch }

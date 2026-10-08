@@ -517,6 +517,20 @@ V3 `capture` 復用既有不可變 request/result 契約，但本地命中交易
 
 正式 UI 尚未接入此服務。B05 仍需會話建立/排序、全局新卡配額、呈現冪等、暫停/繼續/Skip/Later 及窗口生命週期接入；B06 尚須可用的題型內容與原句範圍處理。證據見 [B04 作答交易](qa/2026-10-08-b04-answer-transactions.md)。
 
+### 固定會話與首次呈現（B05 第一批）
+
+`WordNoteV3ReviewService.startSession` 在同一交易讀取範圍、時鐘、卡片與全局配額；按 membership 篩課程、按 mode 篩方向，使用 `ReviewSessionSelection` 固定最多 target 張不同 cardID 及順序。空隊列不建空會話；既有可恢復會話阻止第二組。呼叫方保留同一 sessionID 重試時只讀回原組，範圍/target/limit 不同則衝突。課程名稱在建立時取真實庫值，後续改名/移除 membership 不重建本組。
+
+建立時只保存 pending 項，不扣配額。`presentNextCard` 經租約和 session revision 檢查：當前 presented 項原樣恢復，不重跑 scheduler；沒有已呈現項時先取本組已到分鐘的重學，再取固定順序的 pending。首次呈現同時保存 Card 排程/introducedAt、SessionItem 狀態和 Session 游標/revision/引入台帳，任一步失敗全部回滾。未到重學時間返回 nil，不擴組或造事件。pending 排程已改成未到期時要求刷新，不偷偷提前評分。
+
+`ReviewNewCardQuota` 從全部會話台帳按 originalCardID 去重，不按課程/方向分配多份額度。會話新增可空 introductionsJSON，首次引入記錄觀察時間、配額高水位和凍結日桶；刪卡/刪詞保留匿名身份用量。時鐘倒退不重置，時區切換先等舊日末，重疊區間保守計入；DST 使用本地日曆邊界。舊原型 V3 缺台帳時僅以存活卡 introducedAt 作保守計算，從未記錄且已刪除的舊用量不能推斷或重造。
+
+`pauseSession` 保存 paused 後釋放回答權，`resumeSession` 維持原 item/範圍並重新顯示正面；`endSession` 提前結束不修改卡片排程、不造完成量/事件。所有控制受 revision/恢復屏障/草稿保護，保存失敗保留原租約。應用仍需把原生窗口/頁面生命周期接到這些入口。
+
+新台帳改變必需保留的備份語義，因此 V3 ordinary backup 與 repair evidence 的各自格式號升為 2；舊讀取器明確拒絕，新版兼容沒有台帳的 format=1。不得把帶台帳資料降標為 1；V1/V2 格式/模型不改。V3 仍為未發布原型 schema，不聲稱舊 V3 SQLite 能直接跨此模型改動打開。
+
+B05 的 Skip/Later、分類統計、Settings/Review UI 和 V3 runtime 整套接入尚待實施；大庫 MainActor 全圖校驗仍有性能出口。測試及兼容邊界見 [B05 會話與呈現](qa/2026-10-08-b05-session-presentation.md)。
+
 ### 備份、恢復與啟動
 
 備份取得一致、不可變的 DTO 後才序列化及原子寫文件，不跨 executor 共用可變 ModelContext/model。A01 大庫測量發現 MainActor 全量捕獲會阻塞，因此日常/手動備份改用樂觀一致性讀取：V1 先保存當前已修改 context；V2 若存在直接模型的未提交修改則拒絕捕獲，不代替 revision 交易提交或丟棄表單。后台 worker 建自己的唯讀 context，讀取前後同步比較同容器的 willSave/didSave 計數；有任何保存或主 context 待保存修改就丟棄整次讀取並重試，最多三次，仍不穩定則保留舊備份並明確報錯。V2 重試時仍檢查未提交修改。不能把混合版本或只截取部分實體的結果當成成功快照。

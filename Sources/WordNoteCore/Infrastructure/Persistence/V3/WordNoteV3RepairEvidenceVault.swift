@@ -23,7 +23,7 @@ public actor WordNoteV3RepairEvidenceVault {
 
     private struct Document: Codable {
         var purpose = "wordnote-integrity-evidence"
-        var evidenceFormatVersion = 1
+        var evidenceFormatVersion = 2
         var schemaVersion = "3.0.0"
         let id: UUID
         let generation: WordNoteStoreGeneration
@@ -70,7 +70,7 @@ public actor WordNoteV3RepairEvidenceVault {
         catch { throw WordNoteSnapshotError.invalidDocument }
         guard document.purpose == "wordnote-integrity-evidence", document.id == id,
               document.generation != .legacy else { throw WordNoteSnapshotError.invalidDocument }
-        guard document.evidenceFormatVersion == 1 else { throw WordNoteSnapshotError.unsupportedFormat }
+        guard (1...2).contains(document.evidenceFormatVersion) else { throw WordNoteSnapshotError.unsupportedFormat }
         guard document.schemaVersion == "3.0.0" else { throw WordNoteSnapshotError.unsupportedSchema }
         guard document.createdAt.timeIntervalSince1970.isFinite,
               abs(document.createdAt.timeIntervalSince1970) < 100_000_000_000 else { throw WordNoteSnapshotError.invalidValue }
@@ -79,6 +79,9 @@ public actor WordNoteV3RepairEvidenceVault {
         let payload: WordNoteSnapshotV3Payload
         do { payload = try JSONDecoder().decode(WordNoteSnapshotV3Payload.self, from: payloadData) }
         catch { throw WordNoteSnapshotError.invalidDocument }
+        if document.evidenceFormatVersion == 1, payload.sessions.contains(where: { $0.introductions != nil }) {
+            throw WordNoteSnapshotError.unsupportedFormat
+        }
         guard payload.counts == document.counts else { throw WordNoteSnapshotError.countMismatch }
         return .init(summary: document.summary, payload: payload)
     }

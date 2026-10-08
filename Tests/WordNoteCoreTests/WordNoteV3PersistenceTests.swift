@@ -100,7 +100,7 @@ final class WordNoteV3PersistenceTests: XCTestCase {
         let original = try WordNoteSnapshotV3Codec.decode(data).document
         let changes: [(WordNoteSnapshotError, (inout WordNoteSnapshotV3Document) -> Void)] = [
             (.checksumMismatch, { $0.payload += " " }), (.countMismatch, { $0.counts.cards += 1 }),
-            (.unsupportedSchema, { $0.sourceSchemaVersion = "4.0.0" }), (.unsupportedFormat, { $0.formatVersion = 2 }),
+            (.unsupportedSchema, { $0.sourceSchemaVersion = "4.0.0" }), (.unsupportedFormat, { $0.formatVersion = WordNoteSnapshotV3Codec.currentFormatVersion + 1 }),
             (.invalidValue, { $0.appVersion = String(repeating: "x", count: 129) })
         ]
         for (error, change) in changes {
@@ -120,7 +120,12 @@ final class WordNoteV3PersistenceTests: XCTestCase {
         let data = try WordNoteSnapshotV3Codec.encode(payload, kind: .manual)
         for decode in [WordNoteSnapshotCodec.decode as (Data) throws -> Any,
                        WordNoteSnapshotV2Codec.decode as (Data) throws -> Any] {
-            XCTAssertThrowsError(try decode(data)) { XCTAssertEqual($0 as? WordNoteSnapshotError, .unsupportedSchema) }
+            XCTAssertThrowsError(try decode(data)) { XCTAssertEqual($0 as? WordNoteSnapshotError, .unsupportedFormat) }
+            var oldEnvelope = try JSONDecoder().decode(WordNoteSnapshotV3Document.self, from: data)
+            oldEnvelope.formatVersion = 1
+            XCTAssertThrowsError(try decode(JSONEncoder().encode(oldEnvelope))) {
+                XCTAssertEqual($0 as? WordNoteSnapshotError, .unsupportedSchema)
+            }
         }
         XCTAssertEqual(try WordNoteSnapshotReader.decode(data).payload, .v3(payload.canonicalized))
         XCTAssertTrue(TermModel.self == WordNoteSchemaV1.TermModel.self)

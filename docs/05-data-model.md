@@ -389,12 +389,18 @@ A06 的批量整理沿用 V2 schema，不新增表或快照字段。課程關係
 | 實體 | 核心字段與約束 |
 |---|---|
 | ReviewCard | termID、mode、contentScopeKey、phase、masteryLevel、intervalDays、confidentStreak、lapseCount、nextReviewAt?、priorityRequestedAt?、introducedAt?、lastReviewedAt?、relearningDayKey?、relearningTimeZoneID?、relearningRepeatCount、buriedUntil?、clozeTarget?、revision、schedulerVersion；唯一 `(termID, mode, contentScopeKey)` |
-| ReviewSession | scopeSnapshot（課程/模式/隊列）、targetCardCount、newCardLimitSnapshot、status、currentItemID?、createdAt、updatedAt、endedAt?、revision；只保留一個可恢復的活動會話 |
+| ReviewSession | scopeSnapshot（課程/模式/隊列）、targetCardCount、newCardLimitSnapshot、introductionsJSON?、status、currentItemID?、createdAt、updatedAt、endedAt?、revision；只保留一個可恢復的活動會話 |
 | ReviewSessionItem | sessionID、cardID?、originalCardID、position、status、attemptCount、availableAt?、lastActionID?、completionOutcome?；唯一 `(sessionID, originalCardID)`，目標刪除時保留不可用項但解除 cardID |
 | ReviewEvent 擴展 | cardID?、originalCardID?、sessionID?、actionID?、feedbackSemanticsVersion、schedulerVersion、studyDayKey、studyTimeZoneID、before/after 排程快照、clockAnomaly?、invalidatedAt?；新事件的 actionID 必填且唯一，originalCardID 保留刪卡後的歷史身份 |
 | Term 歷史快照 | legacyWrongCount、legacyReviewCount、legacyDuplicateHitCount、legacySnapshotAt；完整保留切換前混合計數，不標成新版實際錯題 |
 
 phase 為 new/review/relearning/suspended；contentScopeKey 在 V3 為 wholeTerm 或 cloze:<穩定目標 ID>，V4 才增加 sense:<UUID>。B06 的 clozeTarget 包括 occurrenceID、原文 hash、Unicode 安全範圍與答案形式；不能等到 V4 才補 B06 所需字段。新事件由正式反饋產生；Later/Skip/Lookup 不建 ReviewEvent。`introducedAt` 在第一次正式展示新卡時與會話項狀態一起保存，使切換會話不能繞過新卡配額。
+
+B05 引入台帳保存在會話的可空 JSON 欄位；每筆含 originalCardID、introducedAt（原始時間）、chargedAt（配額高水位）、studyDayKey、studyTimeZoneID，不保存詞文。台帳跨會話按 originalCardID 唯一，且必須對應本組 item；卡片仍存在時 introducedAt 必須一致。刪卡、刪詞不刪 item/台帳，完整備份一併保存。早期隔離 V3 的缺省台帳解碼為 nil，不偽造歷史；本輪 V3 尚未對正式 App 啟用，此欄位屬同一未發布模型階段，V1/V2 不變。
+
+B05 起 V3 備份 envelope 的 formatVersion 為 2，sourceSchemaVersion 仍為 3.0.0。舊 reader 會拒絕 format=2，不能忽略新台帳後默默恢復；新 reader 同時讀取沒有台帳欄位的 V3 format=1。把帶台帳 payload 改標 format=1 明確拒絕。V1/V2 的 envelope 仍僅支持原 format=1；沒有承諾原型 V3 SQLite 可直接被舊版本 App 打開。
+
+V3 修復證據同樣提升 evidenceFormatVersion 至 2，完整保留損壞的台帳供診斷，不能以 ordinary backup 讀取。新 evidence reader 可讀無台帳的舊 format=1，有台帳降標則拒絕；V1/V2 evidence 格式不變。
 
 揭示答案時將已啟用 sibling 的 buriedUntil 保存為次日本地日開始，並把本組相應項標為 siblingDeferred；此為防洩題狀態，不寫作答事件。重學中的同一卡不視為自己的 sibling。暫時埋藏不改原間隔，次日自動恢復資格。
 
