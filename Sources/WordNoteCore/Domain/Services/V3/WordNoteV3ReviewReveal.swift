@@ -18,8 +18,8 @@ extension WordNoteV3ReviewService {
             let term = try content.term(source.card.termID)
             term.reviewExposedUntil = max(term.reviewExposedUntil ?? until, until)
             var siblingIDs = Set<UUID>()
-            for sibling in try content.fetch(Card.self) where sibling.termID == source.card.termID
-                && sibling.id != source.card.id && sibling.phaseRaw != ReviewCardPhase.suspended.rawValue {
+            for sibling in try content.fetch(Card.self, matching: \.termID, in: [source.card.termID])
+                where sibling.id != source.card.id && sibling.phaseRaw != ReviewCardPhase.suspended.rawValue {
                 siblingIDs.insert(sibling.id)
                 if (sibling.buriedUntil ?? .distantPast) < until {
                     sibling.buriedUntil = until
@@ -28,7 +28,7 @@ extension WordNoteV3ReviewService {
                 }
             }
             var changedItems = false
-            for item in try content.fetch(Item.self) where item.sessionID == source.session.id {
+            for item in try content.fetch(Item.self, matching: \.sessionID, in: [source.session.id]) {
                 let status: ReviewSessionItemStatus = try snapshotEnum(item.statusRaw)
                 guard !status.isTerminal, let cardID = item.cardID, siblingIDs.contains(cardID) else { continue }
                 item.statusRaw = ReviewSessionItemStatus.siblingDeferred.rawValue

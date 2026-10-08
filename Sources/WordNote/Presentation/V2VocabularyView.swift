@@ -210,7 +210,8 @@ struct V2VocabularyView: View {
     #if WORDNOTE_V3_VALIDATION
     private func rebuildCardIndex() {
         do {
-            cardIndex = try ReviewCardLearningIndex(payload: .capture(from: context), studyTimeZoneID: TimeZone.current.identifier, at: now)
+            cardIndex = try WordNoteV3ReviewService(container: context.container)
+                .cardLearningIndex(studyTimeZoneID: TimeZone.current.identifier, at: now)
         } catch { cardIndex = nil; message = error.localizedDescription }
     }
     #endif

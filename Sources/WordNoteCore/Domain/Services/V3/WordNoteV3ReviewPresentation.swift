@@ -34,7 +34,7 @@ extension WordNoteV3ReviewService {
                 let plan = try scheduler.presentation(for: before.schedule, at: date,
                     studyTimeZoneID: snapshot.session.scope.studyTimeZoneID, lastInteractionAt: card.updatedAt)
                 if before.schedule.phase == .new, before.schedule.introducedAt == nil {
-                    let quota = try ReviewNewCardQuota(payload: Payload.capture(from: context), limit: session.newCardLimitSnapshot,
+                    let quota = try ReviewNewCardQuota(payload: content.snapshot(), limit: session.newCardLimitSnapshot,
                         at: date, timeZoneID: snapshot.session.scope.studyTimeZoneID)
                     guard quota.remaining > 0 else { throw WordNoteV3ReviewError.newCardLimitReached }
                     var introductions = snapshot.session.introductions ?? []
@@ -47,7 +47,7 @@ extension WordNoteV3ReviewService {
                 // Legacy due dates stay intact until feedback, but presentation now has current semantics.
                 card.schedulerVersion = ReviewSchedulerVersion.current
             }
-            guard let item = try content.fetch(Item.self).first(where: { $0.id == selected.id }) else { throw WordNoteV3ContentError.missingEntity }
+            guard let item = try content.fetch(Item.self, matching: \.id, in: [selected.id]).first else { throw WordNoteV3ContentError.missingEntity }
             item.statusRaw = ReviewSessionItemStatus.presented.rawValue
             item.availableAt = nil
             item.updatedAt = max(item.updatedAt, date)

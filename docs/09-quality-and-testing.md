@@ -478,6 +478,8 @@ scratch path 每輪使用獨立目錄，不能為了通過測試清除生產 sto
 
 性能測試記錄硬件與 Release 配置，預熱後至少 30 次測量並列 p50/p95/max：1,000 詞時保存到可再輸入 p95 <= 300 ms；10,000 詞時輸入停止到搜索列表穩定（含 debounce）p95 <= 200 ms。超出先定位，不能降低門檻後宣稱原目標通過。AI 延遲獨立量測，不含在本地保存指標中。
 
+V3 另有 `RUN_V3_PERFORMANCE_TESTS=1 swift test -c release --filter WordNoteV3PerformanceTests`，在隔離磁盤庫測保存、本地命中及實際復習服務組合；1,000／10,000 詞各預熱後 30 輪。它驗證交易耗時和結果，不包含 SwiftUI／文字框事件，不替代上述端到端閘門。最終數值、環境及具體命令見 [B03 交易性能](qa/2026-10-09-b03-transaction-performance.md)。
+
 A01 另有顯式 opt-in 的備份/恢復性能組，不混入快速單測，也不調 API 或讀真實詞庫：`RUN_BACKUP_PERFORMANCE_TESTS=1 swift test -c release --filter WordNoteBackupPerformanceTests`。默認使用 1,000/10,000 詞、每詞一筆來源/候選/事件的合成庫，預熱後各 30 次；記錄同步捕獲參考、后台捕獲、編解碼、staging、啟動驗證及快照寫入的 p50/p95/max。10 ms MainActor probe 的最大調度間隔只作卡頓代理指標，不等同真實界面的輸入/渲染延遲，也不替代上述保存/搜索門檻。探測可指定 `BACKUP_PERFORMANCE_ITERATIONS` / `BACKUP_PERFORMANCE_SIZE`；少於 30 次不能宣稱正式性能驗收。
 
 ### 階段驗收與證據

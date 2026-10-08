@@ -49,7 +49,7 @@ public final class WordNoteV3ReviewService {
 
     public func feedbackReceipt(actionID: UUID) throws -> WordNoteV3FeedbackReceipt? {
         try content.transaction {
-            try content.fetch(Event.self).first { $0.actionID == actionID }.map { try receipt($0, replay: true) }
+            try content.fetch(Event.self, matching: \.actionID, in: [actionID]).first.map { try receipt($0, replay: true) }
         }
     }
 
@@ -57,7 +57,7 @@ public final class WordNoteV3ReviewService {
         let session = try Payload.Session(session(sessionID))
         guard session.status == .active, let itemID = session.currentItemID,
               session.controls?.skippedItemIDs.contains(itemID) != true,
-              let item = try content.fetch(Item.self).first(where: { $0.id == itemID }),
+              let item = try content.fetch(Item.self, matching: \.id, in: [itemID]).first,
               item.sessionID == sessionID, item.statusRaw == ReviewSessionItemStatus.presented.rawValue,
               let cardID = item.cardID else { throw WordNoteV3ReviewError.noActivePresentedItem }
         let card = try Payload.Card(card(cardID))
@@ -67,12 +67,12 @@ public final class WordNoteV3ReviewService {
     }
 
     func session(_ id: UUID) throws -> Session {
-        guard let session = try content.fetch(Session.self).first(where: { $0.id == id }) else { throw WordNoteV3ContentError.missingEntity }
+        guard let session = try content.fetch(Session.self, matching: \.id, in: [id]).first else { throw WordNoteV3ContentError.missingEntity }
         return session
     }
 
     func card(_ id: UUID) throws -> Card {
-        guard let card = try content.fetch(Card.self).first(where: { $0.id == id }) else { throw WordNoteV3ContentError.missingEntity }
+        guard let card = try content.fetch(Card.self, matching: \.id, in: [id]).first else { throw WordNoteV3ContentError.missingEntity }
         return card
     }
 

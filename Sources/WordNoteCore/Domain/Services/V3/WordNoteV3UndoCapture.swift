@@ -5,13 +5,7 @@ extension WordNoteV3ContentService {
     func undoModels<Model: PersistentModel, Value: Hashable & Codable & Sendable>(
         _ type: Model.Type, matching keyPath: KeyPath<Model, Value> & Sendable, in values: [Value]
     ) throws -> [Model] {
-        guard !values.isEmpty else { return [] }
-        let predicate = Predicate<Model> { root in
-            PredicateExpressions.SequenceContains(
-                sequence: PredicateExpressions.Value(values), element: PredicateExpressions.KeyPath(root: root, keyPath: keyPath)
-            )
-        }
-        return try context.fetch(FetchDescriptor<Model>(predicate: predicate))
+        try fetch(type, matching: keyPath, in: values)
     }
 
     private func union<Model: PersistentModel>(_ first: [Model], _ second: [Model]) -> [Model] {

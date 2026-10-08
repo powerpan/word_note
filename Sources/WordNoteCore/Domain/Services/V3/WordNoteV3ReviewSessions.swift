@@ -16,7 +16,7 @@ extension WordNoteV3ReviewService {
 
     public func newCardQuota(limit: Int = 10, studyTimeZoneID: String, at date: Date = Date()) throws -> ReviewNewCardQuota {
         try content.transaction {
-            try ReviewNewCardQuota(payload: Payload.capture(from: context), limit: limit, at: date, timeZoneID: studyTimeZoneID)
+            try ReviewNewCardQuota(payload: content.snapshot(), limit: limit, at: date, timeZoneID: studyTimeZoneID)
         }
     }
 
@@ -26,7 +26,7 @@ extension WordNoteV3ReviewService {
             try content.validateDate(date)
             guard (5...100).contains(targetCardCount), (0...50).contains(newCardLimit),
                   TimeZone(identifier: scope.studyTimeZoneID) != nil else { throw WordNoteSnapshotError.invalidValue }
-            let snapshot = try Payload.capture(from: context)
+            let snapshot = try content.snapshot()
             if let existing = snapshot.sessions.first(where: { $0.id == id }) {
                 var requestScope = scope
                 requestScope.courseName = existing.scope.courseName
@@ -94,7 +94,7 @@ extension WordNoteV3ReviewService {
     }
 
     func sessionSnapshot(_ id: UUID) throws -> WordNoteV3ReviewSessionSnapshot {
-        let items = try content.fetch(Item.self).filter { $0.sessionID == id }.map { try Payload.SessionItem($0) }
+        let items = try content.fetch(Item.self, matching: \.sessionID, in: [id]).map { try Payload.SessionItem($0) }
             .sorted { ($0.position, $0.id.uuidString) < ($1.position, $1.id.uuidString) }
         return try .init(session: Payload.Session(session(id)), items: items)
     }

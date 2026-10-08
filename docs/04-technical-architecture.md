@@ -571,6 +571,14 @@ V3 撤銷收據除內容/關聯外還記錄範圍內 TermHistory、卡片、正�
 
 實作和兩次合成 live 的完整鏈路證據見 [V3 內容流水線](qa/2026-10-08-b03-v3-content-pipeline.md)。普通 App/V2 QA 尚未改用 V3，沒有正式詞庫升級，性能和原生 UI 仍待驗收。
 
+### V3 交易快照重用（B03 性能收尾）
+
+2026-10-09 的大庫短測確認，每次服務調用重新抓取全庫模型的成本不可接受。`WordNoteV3TransactionState` 改為按主 context 共用已驗證的值快照，首次使用才全量讀取。後續只讀服務及同次揭示的四個評分預覽重用同一資料版本；詞庫卡片篩選亦經 ReviewService 讀取，不自行重建整庫快照。捕獲／復習的 ID、詞頭及所屬關係查找用 predicate，取最大正式事件序號用降序 limit=1，不實例化整表。測量及仍未通過的端到端門檻見 [性能證據](qa/2026-10-09-b03-transaction-performance.md)。
+
+寫入仍是同一 MainActor 上的一次交易，不移除完整性檢查。交易把 SwiftData 的新增、修改、刪除投影到值快照，校驗**完整**十一實體關係後才 save；以 persistent identifier 對應舊業務 ID，避免改 ID 或級聯刪除遺留幽靈記錄。只有成功保存才發佈新值。保存失敗會 rollback 並清掉快照，原本就未提交的直接模型編輯則在入口拒絕，不代替用戶回滾。
+
+同容器的 willSave/didSave 通知在保存執行緒同步計數，其他服務、context 或直接保存會令快照失效；交易途中出現額外保存則拒絕過期提交。恢復屏障、revision、lease、actionID 和草稿保護保持原規則。這不是跨進程資料庫快取：正式 writer 仍只允許主 context，若將來增加後台 writer 或另一個寫庫進程，須重新設計同步邊界。備份、修復、遷移仍獨立完整讀庫，不以運行期快照作為恢復材料；V1/V2 模型與 bytes 不變。
+
 ### V3 隔離 App（B03-B06）
 
 `script/build_and_run.sh --ui-v3-fixture` 使用獨立 scratch path 和 `WORDNOTE_V3_VALIDATION`。普通/V2 入口不變，兩個 validation 標記同時存在會編譯報錯。App-only `VersionedAppConfiguration` 選擇 schema/內容服務/Undo/queue；共用純值 plan 保留既有名稱，不影響核心模型別名。`VersionedValidationRuntime` 只在 QA bundle/fixture 下啟動，透過共用受保護 coordinator 先建立完整 V3 session，再建立唯一 queue 和共享 capture、備份及 Undo 依賴。恢復/遷移的顯式分析暫停規則保持。

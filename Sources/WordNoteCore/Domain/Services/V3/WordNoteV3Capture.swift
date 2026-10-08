@@ -11,8 +11,8 @@ extension WordNoteV3ContentService {
             guard !text.isEmpty else { throw InputRecordValidationError.blankRawText }
             let direction = request.intent.resolvedDirection(for: request.rawText)
             let note = optionalText(request.note)
-            let records = try fetch(Record.self).filter { $0.captureID == request.captureID }
-            let events = try fetch(LookupEvent.self).filter { $0.captureID == request.captureID }
+            let records = try fetch(Record.self, matching: \.captureID, in: [request.captureID])
+            let events = try fetch(LookupEvent.self, matching: \.captureID, in: [request.captureID])
             guard records.count <= 1, events.count <= 1, records.isEmpty || events.isEmpty else { throw WordNoteV3ContentError.invalidState }
             if let existing = records.first {
                 guard existing.rawText == text, existing.courseID == request.courseID,
@@ -25,17 +25,17 @@ extension WordNoteV3ContentService {
             }
             if let event = events.first {
                 guard analyze, direction == .englishToChinese, let sourceID = event.occurrenceID,
-                      let source = try fetch(Occurrence.self).first(where: { $0.id == sourceID }),
+                      let source = try fetch(Occurrence.self, matching: \.id, in: [sourceID]).first,
                       source.rawTextSnapshot == text, source.note == note, source.courseID == request.courseID,
                       source.sourceTypeRaw == request.sourceType.rawValue, source.capturedViaRaw == request.capturedVia.rawValue,
                       source.termID == event.termID, source.captureID == event.captureID else { throw WordNoteV3ContentError.captureConflict }
                 return localResult(try term(event.termID), captureID: request.captureID, replay: true)
             }
-            guard try !fetch(Occurrence.self).contains(where: { $0.captureID == request.captureID }) else { throw WordNoteV3ContentError.captureConflict }
+            guard try fetch(Occurrence.self, matching: \.captureID, in: [request.captureID]).isEmpty else { throw WordNoteV3ContentError.captureConflict }
             if let courseID = request.courseID { _ = try course(courseID) }
             if analyze, direction == .englishToChinese, LookupDirectionDetector.isEnglishVocabularyTerm(text) {
                 let normalized = TextNormalizer.normalized(text)
-                let matches = try fetch(Term.self).filter { $0.normalizedTerm == normalized }
+                let matches = try fetch(Term.self, matching: \.normalizedTerm, in: [normalized])
                 guard matches.count <= 1 else { throw WordNoteV3ContentError.ambiguousExactMatch }
                 if let existing = matches.first {
                     let source = Occurrence(termID: existing.id, captureID: request.captureID, rawTextSnapshot: text,
@@ -72,7 +72,7 @@ extension WordNoteV3ContentService {
     }
 
     private func requestReviewPriority(for term: Term, at date: Date) throws {
-        let cards = try fetch(Card.self).filter { $0.termID == term.id }
+        let cards = try fetch(Card.self, matching: \.termID, in: [term.id])
         if cards.isEmpty {
             let card = Card(termID: term.id, createdAt: date)
             card.priorityRequestedAt = date

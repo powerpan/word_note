@@ -1,10 +1,11 @@
 import Foundation
+import SwiftData
 
 extension WordNoteV3ReviewService {
     public func recordFeedback(_ preview: WordNoteV3FeedbackPreview, actionID: UUID,
                                lease: WordNoteV3ReviewLease, at date: Date = Date()) throws -> WordNoteV3FeedbackReceipt {
         let result: (receipt: WordNoteV3FeedbackReceipt, ended: Bool) = try content.transaction {
-            if let existing = try content.fetch(Event.self).first(where: { $0.actionID == actionID }) {
+            if let existing = try content.fetch(Event.self, matching: \.actionID, in: [actionID]).first {
                 let saved = try receipt(existing, replay: true)
                 guard saved.sessionID == preview.source.session.id, saved.originalCardID == preview.source.card.id,
                       existing.termID == preview.source.term.id, existing.modeRaw == preview.source.card.mode.rawValue,
@@ -32,7 +33,7 @@ extension WordNoteV3ReviewService {
                 schedulerVersion: ReviewSchedulerVersion.current, studyDayKey: actual.clock.studyDayKey,
                 studyTimeZoneID: actual.clock.studyTimeZoneID, beforeSchedule: actual.before, afterSchedule: actual.after,
                 clockAnomaly: actual.clock.anomaly, invalidatedAt: nil,
-                recordedOrder: content.increment(content.fetch(Event.self).compactMap(\.recordedOrder).max() ?? 0)).apply(to: event)
+                recordedOrder: content.increment(latestRecordedOrder())).apply(to: event)
             context.insert(event)
 
             let card = try card(current.card.id)
@@ -40,7 +41,7 @@ extension WordNoteV3ReviewService {
             card.schedulerVersion = ReviewSchedulerVersion.current
             card.revision = try content.increment(card.revision)
             card.updatedAt = max(card.updatedAt, actual.clock.effectiveAt)
-            guard let item = try content.fetch(Item.self).first(where: { $0.id == current.item.id }) else { throw WordNoteV3ContentError.missingEntity }
+            guard let item = try content.fetch(Item.self, matching: \.id, in: [current.item.id]).first else { throw WordNoteV3ContentError.missingEntity }
             item.attemptCount = try content.increment(item.attemptCount)
             item.lastActionID = actionID
             item.updatedAt = max(item.updatedAt, actual.clock.effectiveAt)
@@ -82,8 +83,14 @@ extension WordNoteV3ReviewService {
         }
     }
 
+    private func latestRecordedOrder() throws -> Int {
+        var descriptor = FetchDescriptor<Event>(sortBy: [SortDescriptor(\.recordedOrder, order: .reverse)])
+        descriptor.fetchLimit = 1
+        return try context.fetch(descriptor).first?.recordedOrder ?? 0
+    }
+
     func advanceCursor(in session: Session, at date: Date) throws {
-        let items = try content.fetch(Item.self).filter { $0.sessionID == session.id }.map { try Payload.SessionItem($0) }
+        let items = try content.fetch(Item.self, matching: \.sessionID, in: [session.id]).map { try Payload.SessionItem($0) }
         let remaining = items.filter { !$0.status.isTerminal }.sorted { ($0.position, $0.id.uuidString) < ($1.position, $1.id.uuidString) }
         if let next = remaining.first(where: { $0.status == .pending || $0.status == .presented }) {
             session.currentItemID = next.id

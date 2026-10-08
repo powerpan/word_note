@@ -25,6 +25,6 @@ extension WordNoteV3ReviewService {
 
     private func questionOccurrence(card: Payload.Card) throws -> WordNoteSnapshotV2Payload.Occurrence? {
         guard let id = card.clozeTarget?.occurrenceID else { return nil }
-        return try content.fetch(WordNoteSchemaV3.TermOccurrenceModel.self).first { $0.id == id }.map { .init($0) }
+        return try content.fetch(WordNoteSchemaV3.TermOccurrenceModel.self, matching: \.id, in: [id]).first.map { .init($0) }
     }
 }

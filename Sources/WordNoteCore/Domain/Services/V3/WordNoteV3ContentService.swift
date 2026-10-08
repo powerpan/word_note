@@ -51,6 +51,7 @@ public final class WordNoteV3ContentService {
 
     let context: ModelContext
     let undoHistory: WordNoteV3UndoHistory?
+    let transactionState: WordNoteV3TransactionState
     private let container: ModelContainer
     private let beforeSave: @MainActor (ModelContext) throws -> Void
 
@@ -66,6 +67,7 @@ public final class WordNoteV3ContentService {
         self.undoHistory = undoHistory
         context = container.mainContext
         context.autosaveEnabled = false
+        transactionState = .shared(for: context)
         self.beforeSave = beforeSave
     }
 
@@ -73,35 +75,49 @@ public final class WordNoteV3ContentService {
         try WordNoteWriteGate.check(context)
         guard !context.hasChanges else { throw WordNoteV3ContentError.unsavedChanges }
         // Content mutations must not double as an unreviewed repair of preexisting damage.
-        _ = try WordNoteSnapshotV3Payload.capture(from: context)
+        _ = try transactionState.validatedSnapshot()
         do {
             let result = try body()
             if context.hasChanges {
-                _ = try WordNoteSnapshotV3Payload.capture(from: context)
                 try beforeSave(context)
-                try context.save()
+                try transactionState.save()
             }
             return result
         } catch {
             context.rollback()
+            transactionState.invalidate()
             throw error
         }
     }
 
+    func snapshot() throws -> WordNoteSnapshotV3Payload { try transactionState.validatedSnapshot() }
+
     func fetch<T: PersistentModel>(_ type: T.Type) throws -> [T] { try context.fetch(FetchDescriptor<T>()) }
 
+    func fetch<Model: PersistentModel, Value: Hashable & Codable & Sendable>(
+        _ type: Model.Type, matching keyPath: KeyPath<Model, Value> & Sendable, in values: [Value]
+    ) throws -> [Model] {
+        guard !values.isEmpty else { return [] }
+        let predicate = Predicate<Model> { root in
+            PredicateExpressions.SequenceContains(
+                sequence: PredicateExpressions.Value(values), element: PredicateExpressions.KeyPath(root: root, keyPath: keyPath)
+            )
+        }
+        return try context.fetch(FetchDescriptor<Model>(predicate: predicate))
+    }
+
     func term(_ id: UUID) throws -> Term {
-        guard let value = try fetch(Term.self).first(where: { $0.id == id }) else { throw WordNoteV3ContentError.missingEntity }
+        guard let value = try fetch(Term.self, matching: \.id, in: [id]).first else { throw WordNoteV3ContentError.missingEntity }
         return value
     }
 
     func record(_ id: UUID) throws -> Record {
-        guard let value = try fetch(Record.self).first(where: { $0.id == id }) else { throw WordNoteV3ContentError.missingEntity }
+        guard let value = try fetch(Record.self, matching: \.id, in: [id]).first else { throw WordNoteV3ContentError.missingEntity }
         return value
     }
 
     func course(_ id: UUID) throws -> Course {
-        guard let value = try fetch(Course.self).first(where: { $0.id == id }) else { throw WordNoteV3ContentError.missingEntity }
+        guard let value = try fetch(Course.self, matching: \.id, in: [id]).first else { throw WordNoteV3ContentError.missingEntity }
         return value
     }
 
@@ -138,7 +154,7 @@ public final class WordNoteV3ContentService {
 
     @discardableResult
     func addMembership(termID: UUID, courseID: UUID, at date: Date) throws -> Bool {
-        guard try !fetch(CourseLink.self).contains(where: { $0.termID == termID && $0.courseID == courseID }) else { return false }
+        guard try !fetch(CourseLink.self, matching: \.termID, in: [termID]).contains(where: { $0.courseID == courseID }) else { return false }
         context.insert(CourseLink(termID: termID, courseID: courseID, createdAt: date))
         return true
     }
