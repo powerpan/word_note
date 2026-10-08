@@ -354,7 +354,10 @@ final class WordNoteV3DeletionTests: XCTestCase {
 
     private func clozeSessionPayload() throws -> Payload {
         var payload = try V3TestSupport.clozePayload()
-        let card = try XCTUnwrap(payload.cards.first { $0.mode == .contextCloze })
+        let index = try XCTUnwrap(payload.cards.firstIndex { $0.mode == .contextCloze })
+        payload.cards[index].schedule = try ReviewCardScheduler().presentation(for: payload.cards[index].schedule,
+            at: now, studyTimeZoneID: "Asia/Hong_Kong").after
+        let card = payload.cards[index]
         let sessionID = UUID(), itemID = UUID()
         payload.sessions = [.init(id: sessionID, scope: .init(mode: .contextCloze, queue: .dueToday,
             includesNewCards: true, studyTimeZoneID: "Asia/Hong_Kong"), targetCardCount: 20, newCardLimitSnapshot: 10,

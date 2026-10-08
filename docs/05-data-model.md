@@ -425,6 +425,10 @@ B04 第一批沒有新增 SwiftData 欄位或改動 V1/V2 格式。`ReviewCardSc
 
 本地精確命中增加 occurrence/LookupEvent 和必要 membership，既有卡只更新 priorityRequestedAt、revision、updatedAt；Term 只更新 revision/updatedAt，legacy 三計數及其快照不變，沒有 version=2 ReviewEvent。只有完全無卡時建立 new 英文卡，不複製 legacy 能力。這是隔離交易測試結果，尚未啟用 V3 App。見 [B04 第一批證據](qa/2026-10-08-b04-scheduler-signals.md)。
 
+B04 第二批在既有十一實體上接入正式 writer，沒有新增 schema 欄位。新事件帶完整 before/after、originalCardID、sessionID、actionID、日/時區及異常；Item 的 attemptCount 和 lastActionID 隨同事件一次提交，waiting/completed/postponed 分開保存。Session 只在固定集合內推進，游標指向 pending 不代表已呈現。已呈現 new 卡的 introducedAt 成為完整快照必需約束，缺失不靠導入/評分补造。
+
+揭示成功後保存啟用 sibling 的 buriedUntil 及本組 siblingDeferred，不寫 ReviewEvent/能力/legacy 計數；當前卡的 revision/updatedAt 更新用於快照及交互高水位。lease 和揭示能力是容器內的進程態，不備份，不保存到 UserDefaults。完整備份包含已落地結果及 actionID，恢復後可查既有收據，但新的回答仍需取得新 lease 並重新揭示。見 [B04 第二批證據](qa/2026-10-08-b04-answer-transactions.md)。
+
 ### V4：義項與版本
 
 | 實體 | 核心字段與約束 |

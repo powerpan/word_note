@@ -307,7 +307,19 @@ B04 實施細則（2026-10-08）：
 - 到期分類僅用於挑選下一張/新組，不能把已呈現項的顯示恢復當再次呈現。優先請求不能越過 suspended、sibling burial、未到時的 relearning 或 new 卡配額；新卡先分類為 new，再由每日配額/包含新卡選項決定是否呈現。
 - 新排程核心與舊 ReviewScheduler 分開，復用原 Good/Easy 日級曲線；V1/V2 的 Hard/wrongCount 歷史語義不在隔離開發期間改寫。未完成 V3 writer/queue/UI 共同切換前，不能把純 scheduler 測試當成 B04 完整交付。
 
-`ReviewCardScheduler`/`ReviewCardQueuePolicy` 的第一批隔離實作與測試見 [排程與查詢信號證據](qa/2026-10-08-b04-scheduler-signals.md)。純 feedback plan 不等於正式作答保存；未來 writer 還須核對已呈現項、revision、actionID 和窗口回答權，並原子保存事件/卡片/會話。
+`ReviewCardScheduler`/`ReviewCardQueuePolicy` 的第一批隔離實作與測試見 [排程與查詢信號證據](qa/2026-10-08-b04-scheduler-signals.md)。純 feedback plan 不等於正式作答保存；第二批 writer 補齊已呈現項、完整快照、actionID 和窗口回答權校驗，並原子保存事件/卡片/會話。
+
+B04 第二批作答交易邊界：
+
+- writer 只接受 active 會話的當前 presented 項；不在評分時補做呈現、補抽新卡或自行消耗新卡配額。窗口回答權由同一容器共享，綁定恢復寫入屏障的 generation；釋放、重啟或恢復後必須重新取得，舊回調不能寫入。
+- 已呈現的 new 卡必須持有 introducedAt。此約束同時用於完整快照、導入、啟動完整性及交易前校驗；缺失時阻止，不由作答服務臨時補時間，以免隱藏已丟失的新卡配額事實。
+- 揭示以畫面讀到的完整詞條/卡片/會話/當前項快照校驗，不只看 revision。揭示後把已啟用 sibling 埋藏至次日本地日開始；本組相關未終態項標 siblingDeferred，不寫 ReviewEvent。揭示能力只留在當前租約的內存，重開或換窗口不直接恢復「已看答案」。
+- 預覽是唯讀值，顯示相對間隔（10 分鐘/明天/N 天）。提交用同一 scheduler 與未變的輸入快照，按實際點擊時間重新計算絕對 due，不能沿用十分鐘前的 due。若跨日、時鐘倒退、反饋後語義/延期分類或依賴快照有變，要求刷新預覽；不默默保存不同規則。原始事件 reviewedAt 使用提交觀察時間，card.updatedAt 維持不倒退高水位。
+- 同一 actionID、同一會話/卡片/反饋及 beforeSchedule 重送只返回既有事件收據，不要求重新揭示、不重扣次數或刷新游標；同 actionID 不同內容明確衝突。重送可以在會話已完成或卡片已刪除後只讀返回原事件；事件已作廢則不當成功，Term 級聯刪事件後也不能重新補造。
+- 正式交易一次保存 version=2 ReviewEvent、卡片新排程、item 作答次數/結果和 session 游標/revision。Again 的 waiting、上限 postponed 與 reviewed 分開；游標只在固定集合內移至下一個未終態的已呈現/待呈現項，沒有這類項但仍有重學則 waiting，全部終態才 completed。移動游標不等於下一張已正式呈現。
+- Term 兼容排程/能力/三計數及 legacy 歷史不雙寫。預覽失效、計數溢出、屏障/草稿阻擋或保存故障不留下半個事件；保存失敗仍可用原 actionID 和揭示狀態重試。
+
+這些核心入口不取代 B05 會話建立/新卡配額、呈現冪等或 UI 生命周期，也不代表 B06 的卡片內容/填空/輸入交互已完成。正式 V3 App 仍須整套切換及實機驗收；核心證據見 [B04 作答交易](qa/2026-10-08-b04-answer-transactions.md)。
 
 ### 查詢信號，不是答錯（B04）
 

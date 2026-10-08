@@ -503,6 +503,20 @@ V3 `capture` 復用既有不可變 request/result 契約，但本地命中交易
 
 這批沒有接入正式反饋 writer、按鈕預覽或 V3 runtime。後續必須將 snapshot/revision/lease/actionID 校驗和 card/event/item/cursor 寫入放在單一交易；不能由 UI 直接把純 plan 寫進卡片，也不能把 presentation 重跑當會話恢復。證據見 [B04 排程與信號](qa/2026-10-08-b04-scheduler-signals.md)。
 
+### 正式作答交易（B04 第二批）
+
+`WordNoteV3ReviewService` 是隔離 V3 的唯一正式作答入口，復用 ContentService 的單 MainActor context、寫入屏障、草稿保護、前後完整校驗及一次 save/rollback。服務只對當前 active/presented 項操作，不兼作會話建立或呈現入口。完整 V3 校驗拒絕 presented 的 new 卡缺 introducedAt，導入/啟動/寫入一致阻擋，不在評分時補造配額事實。
+
+回答權按 ModelContainer 共享而不是每頁各自持有，綁 sessionID、窗口 ownerID、隨機 lease ID 和 WriteGate ticket。容器弱引用避免永久保留已關閉 store；同 owner 重取不換權，其他 owner 被拒。新可恢復會話或恢復後 ticket 變更才換代；遲到 release 不釋放新 owner。這是單進程、同一 runtime 容器內的窗口協調，沒有宣稱能協調兩個獨立進程/容器同寫 SQLite；App 仍須維持唯一 runtime writer。
+
+`currentAnswerSnapshot` 返回不可變的完整 Term/TermState/Card/Session/Item；read 本身不取得回答權。`revealAnswer` 先比對畫面快照，再原子保存 sibling burial 和本組 siblingDeferred，touch 當前卡 revision/交互高水位，成功後才標记該 lease 的內存已揭示快照。同 lease/同快照重揭示不重存；失敗不授予評分能力；釋放、重啟或換窗口要重新揭示。所有非當前同詞啟用卡均為 sibling，不改其能力/原始 due，不縮短較晚的 burial，已結束會話項不重寫。
+
+`previewFeedback` 不寫庫；`recordFeedback` 重新核對完整依賴快照與揭示能力，重算並核對原 preview 防止任意排程注入。實際提交時間重新計算絕對 due，但相對間隔、處理分類及其他 after 狀態須與顯示一致；跨日、倒退或語義變更要求刷新。依賴包括內容本身，漏加 revision 也能發現；其他詞的正常編輯不使預覽失效。
+
+正式保存同時新增 semantics=2/scheduler=simple-v2 事件、寫 Card 排程、Item 的 attempt/lastAction/結果、Session 的固定組游標及 revision。Term/legacy 快照不寫。唯一 actionID 由交易前完整校驗及串行 writer 保護；同操作重送只讀返回持久收據，已完成/刪卡仍可返回原 originalCardID，不再推進游標，也不清除下一張卡的揭示狀態。不同輸入的 actionID 衝突、已作廢事件或已刪 Term 不補記。保存成功後只執行不拋錯的內存清理，避免已提交卻向 UI 報失敗。
+
+正式 UI 尚未接入此服務。B05 仍需會話建立/排序、全局新卡配額、呈現冪等、暫停/繼續/Skip/Later 及窗口生命週期接入；B06 尚須可用的題型內容與原句範圍處理。證據見 [B04 作答交易](qa/2026-10-08-b04-answer-transactions.md)。
+
 ### 備份、恢復與啟動
 
 備份取得一致、不可變的 DTO 後才序列化及原子寫文件，不跨 executor 共用可變 ModelContext/model。A01 大庫測量發現 MainActor 全量捕獲會阻塞，因此日常/手動備份改用樂觀一致性讀取：V1 先保存當前已修改 context；V2 若存在直接模型的未提交修改則拒絕捕獲，不代替 revision 交易提交或丟棄表單。后台 worker 建自己的唯讀 context，讀取前後同步比較同容器的 willSave/didSave 計數；有任何保存或主 context 待保存修改就丟棄整次讀取並重試，最多三次，仍不穩定則保留舊備份並明確報錯。V2 重試時仍檢查未提交修改。不能把混合版本或只截取部分實體的結果當成成功快照。

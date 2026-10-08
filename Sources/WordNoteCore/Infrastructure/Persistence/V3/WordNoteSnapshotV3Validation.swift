@@ -94,6 +94,9 @@ extension WordNoteSnapshotV3Payload {
             if let id = item.cardID {
                 guard let card = cardByID[id], id == item.originalCardID, card.mode == session.scope.mode else { throw WordNoteSnapshotError.missingReference }
                 guard item.status.isTerminal || card.schedule.phase != .suspended else { throw WordNoteSnapshotError.invalidValue }
+                if item.status == .presented, card.schedule.phase == .new, card.schedule.introducedAt == nil {
+                    throw WordNoteSnapshotError.invalidValue
+                }
             } else if item.status != .unavailable { throw WordNoteSnapshotError.missingReference }
             try counter(item.position)
             try counter(item.attemptCount)
