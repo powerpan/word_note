@@ -11,6 +11,7 @@ struct V2CandidateReviewView: View {
     let onConfirm: (Set<UUID>) -> Void
     let onIgnore: (Set<UUID>) -> Void
     let onManualSave: () -> Void
+    var advancesAfterConfirmation = true
     @State private var selection = InboxCandidateSelection()
     @State private var editingIDs: Set<UUID> = []
     @State private var editedIDs: Set<UUID> = []
@@ -49,7 +50,7 @@ struct V2CandidateReviewView: View {
             }
             if !pending.isEmpty {
                 HStack {
-                    Button(selected.count == pending.count ? "Confirm & Next" : "Confirm Selected", systemImage: "checkmark.circle") { onConfirm(selected) }
+                    Button(selected.count == pending.count ? (advancesAfterConfirmation ? "Confirm & Next" : "Confirm All") : "Confirm Selected", systemImage: "checkmark.circle") { onConfirm(selected) }
                         .disabled(selected.isEmpty || manualPresented)
                     Button("Ignore Selected", systemImage: "archivebox") { onIgnore(selected) }
                         .labelStyle(.iconOnly).help("Ignore selected candidates").disabled(selected.isEmpty || manualPresented)

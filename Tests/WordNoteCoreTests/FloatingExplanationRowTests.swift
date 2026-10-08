@@ -66,6 +66,27 @@ final class FloatingExplanationRowTests: XCTestCase {
         XCTAssertEqual(Set(rows.map(\.id)).count, 2)
     }
 
+    func testFrozenChineseDirectionOverridesEnglishLookingInput() {
+        let result = preview(rawText: "ML", terms: ["machine learning"])
+        let rows = result.floatingRows(direction: .chineseToEnglish)
+        XCTAssertEqual(rows.first?.source, "machine learning")
+        XCTAssertEqual(rows.first?.englishText, "machine learning")
+    }
+
+    func testExplicitEnglishDirectionNeverUsesChineseInputAsEnglishHeadword() {
+        let rows = preview(rawText: "精度", terms: ["precision"]).floatingRows(direction: .englishToChinese)
+        XCTAssertEqual(rows.first?.source, "precision")
+        XCTAssertEqual(rows.first?.englishText, "precision")
+    }
+
+    func testEnglishCopyValueIsAbsentForNonEnglishPlaceholderAndUsesFullSentence() {
+        XCTAssertNil(preview(rawText: "過擬合", terms: []).floatingRows.first?.englishText)
+        XCTAssertNil(preview(rawText: "123", terms: []).floatingRows.first?.englishText)
+        let sentence = "She gave a quick response."
+        let rows = preview(rawText: "她很快回應。", sentenceMeaning: sentence, terms: ["quick"]).floatingRows
+        XCTAssertEqual(rows.map(\.englishText), [sentence, "quick"])
+    }
+
     private func preview(
         rawText: String, sentenceMeaning: String? = nil,
         terms: [String], meaning: String = "中文釋義"

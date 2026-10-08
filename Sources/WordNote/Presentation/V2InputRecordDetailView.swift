@@ -12,6 +12,7 @@ struct V2InputRecordDetailView: View {
     let onConfirm: (Set<UUID>) -> Void
     let onIgnoreCandidates: (Set<UUID>) -> Void
     let onManualSave: () -> Void
+    var advancesAfterConfirmation = true
     @State private var sourceExpanded = false
     @State private var deletePresented = false
 
@@ -62,7 +63,8 @@ struct V2InputRecordDetailView: View {
                 if record.analysisFailed, let error = record.aiErrorSummary { StatusBanner(message: error, kind: .warning) }
                 Divider()
                 V2CandidateReviewView(record: record, candidates: candidates, onConfirm: onConfirm,
-                                      onIgnore: onIgnoreCandidates, onManualSave: onManualSave)
+                                      onIgnore: onIgnoreCandidates, onManualSave: onManualSave,
+                                      advancesAfterConfirmation: advancesAfterConfirmation)
                     .disabled(record.analysisPending)
             }.padding(22).frame(maxWidth: .infinity, alignment: .leading)
         }

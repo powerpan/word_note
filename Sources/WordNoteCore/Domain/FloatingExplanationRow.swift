@@ -5,11 +5,18 @@ public struct FloatingExplanationRow: Identifiable, Equatable, Sendable {
     public let source: String
     public let meaning: String
     public let isMuted: Bool
+
+    public var englishText: String? {
+        LookupDirectionDetector.isEnglishVocabularyTerm(source) ? source : nil
+    }
 }
 
 public extension AIExplanationPreview {
     var floatingRows: [FloatingExplanationRow] {
-        let direction = LookupDirectionDetector.detect(rawText)
+        floatingRows(direction: LookupDirectionDetector.detect(rawText))
+    }
+
+    func floatingRows(direction: LookupDirection) -> [FloatingExplanationRow] {
         var rows: [FloatingExplanationRow] = []
 
         if let sentenceMeaning {
@@ -20,7 +27,7 @@ public extension AIExplanationPreview {
                         id: "sentence", source: sentenceMeaning, meaning: rawText, isMuted: false
                     ))
                 }
-            } else {
+            } else if LookupDirectionDetector.isEnglishVocabularyTerm(rawText) {
                 rows.append(FloatingExplanationRow(
                     id: "sentence", source: rawText, meaning: sentenceMeaning, isMuted: false
                 ))
@@ -29,6 +36,7 @@ public extension AIExplanationPreview {
 
         for (index, candidate) in candidates.enumerated() {
             let source = direction == .englishToChinese && sentenceMeaning == nil && candidates.count == 1
+                && LookupDirectionDetector.isEnglishVocabularyTerm(rawText)
                 ? rawText : candidate.term
             rows.append(FloatingExplanationRow(
                 id: "candidate-\(index)-\(candidate.id)", source: source,

@@ -24,6 +24,7 @@ public final class WordNoteV2AnalysisQueue {
     public private(set) var statusMessage: String?
     public private(set) var errorMessage: String?
     public var latestAIExplanation: AIExplanationPreview?
+    public let feedback = CaptureFeedbackHub()
 
     public convenience init(
         session: WordNoteStoreSession, store: WordNoteRestoreStore,
@@ -80,12 +81,19 @@ public final class WordNoteV2AnalysisQueue {
         switch result.destination {
         case .vocabulary(let id, _, _, _):
             let term = try content.term(id)
-            latestAIExplanation = AIExplanationPreview(
+            let preview = AIExplanationPreview(
                 rawText: request.rawText.trimmingCharacters(in: .whitespacesAndNewlines), sentenceMeaning: nil,
                 candidates: [.init(id: id.uuidString, term: term.term, importance: term.importance,
                                    chineseMeaning: term.chineseMeaning, englishDefinition: term.englishDefinition,
                                    aiContextExplanation: term.aiContextExplanation)]
             )
+            latestAIExplanation = preview
+            if !result.isReplay {
+                feedback.publish(.init(
+                    preview: preview, direction: request.intent.resolvedDirection(for: request.rawText),
+                    target: .vocabulary(id), captureID: request.captureID, capturedVia: request.capturedVia
+                ))
+            }
             statusMessage = "Found in vocabulary. Added to today's review."
         case .inputRecord(_, let state):
             statusMessage = state == .queued ? "Saved to the analysis queue." : "Saved."
@@ -139,6 +147,7 @@ public final class WordNoteV2AnalysisQueue {
         isSuspended = true
         invalidateWorker()
         latestAIExplanation = nil
+        feedback.clear()
     }
 
     @discardableResult
@@ -219,7 +228,12 @@ public final class WordNoteV2AnalysisQueue {
                 guard epoch == runID, !Task.isCancelled else { return }
                 try validateSelection()
                 do {
-                    latestAIExplanation = try content.completeAnalysis(attempt, result: result, at: now())
+                    let preview = try content.completeAnalysis(attempt, result: result, at: now())
+                    latestAIExplanation = preview
+                    feedback.publish(.init(
+                        preview: preview, direction: attempt.request.lookupDirection, target: .inputRecord(attempt.recordID),
+                        captureID: attempt.captureID, capturedVia: attempt.capturedVia
+                    ))
                     statusMessage = "Analysis is ready in Inbox."
                     errorMessage = nil
                 } catch let error as AIAnalysisError {

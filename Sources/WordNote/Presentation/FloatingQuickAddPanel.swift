@@ -7,14 +7,19 @@ struct FloatingQuickAddPanelView: View {
     let analysisQueue: QuickAddAnalysisQueue
     let onHeightChange: (CGFloat) -> Void
     let onClose: () -> Void
+    var resultPresentation: CaptureResultPresentation? = nil
+    var layout: FloatingQuickAddLayout? = nil
+    var resultActions: CaptureResultActions? = nil
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.captureContext) private var captureContext
+    @Environment(\.captureNavigator) private var captureNavigator
     @AppStorage(AppAppearancePreference.storageKey) private var appearanceRawValue = AppAppearancePreference.system.rawValue
     @AppStorage("defaultSourceType") private var defaultSourceType = SourceType.other.rawValue
     @Query private var storedTerms: [TermModel]
     @State private var rawText = ""
     @State private var inputFocusRequestID = UUID()
+    #if !WORDNOTE_V2_VALIDATION
     @State private var displayedExplanation: AIExplanationPreview?
     @State private var explanationHideToken = UUID()
     @State private var explanationHideTask: Task<Void, Never>?
@@ -22,6 +27,10 @@ struct FloatingQuickAddPanelView: View {
     @State private var explanationRemainingHideTime = FloatingQuickAddMetrics.explanationDisplayDurationSeconds
     @State private var explanationContentHeight: CGFloat = 0
     @State private var panelIsFocused = false
+    #else
+    @State private var explanationContentHeight: CGFloat = 0
+    @State private var showsTasks = false
+    #endif
     @State private var showsContext = false
     @State private var submissionError: String?
     @State private var errorContentHeight: CGFloat = 0
@@ -38,6 +47,7 @@ struct FloatingQuickAddPanelView: View {
         AppAppearancePreference.resolved(from: appearanceRawValue)
     }
 
+    #if !WORDNOTE_V2_VALIDATION
     private var latestExplanationKey: String {
         guard let latestAIExplanation = analysisQueue.latestAIExplanation else { return "none" }
         let candidateKey = latestAIExplanation.candidates
@@ -50,11 +60,20 @@ struct FloatingQuickAddPanelView: View {
             candidateKey
         ].joined(separator: "|")
     }
+    #endif
+
+    private var visibleExplanation: AIExplanationPreview? {
+        #if WORDNOTE_V2_VALIDATION
+        resultPresentation?.event?.preview
+        #else
+        displayedExplanation
+        #endif
+    }
 
     private var preferredPanelHeight: CGFloat {
-        let base = displayedExplanation == nil ? FloatingQuickAddMetrics.collapsedHeight
-            : FloatingQuickAddMetrics.expandedHeight(for: explanationContentHeight)
-        return base + (submissionError == nil ? 0 : errorHeight + 11)
+        let base = visibleExplanation == nil ? FloatingQuickAddMetrics.collapsedHeight
+            : FloatingQuickAddMetrics.expandedHeight(for: explanationContentHeight, maximumHeight: layout?.maximumHeight)
+        return min(base + (submissionError == nil ? 0 : errorHeight + 11), layout?.maximumHeight ?? .greatestFiniteMagnitude)
     }
 
     private var errorHeight: CGFloat { min(max(errorContentHeight, 24), 100) }
@@ -77,11 +96,14 @@ struct FloatingQuickAddPanelView: View {
                 .frame(height: errorHeight)
             }
 
-            if let displayedExplanation {
+            if let visibleExplanation {
                 Divider()
                 FloatingExplanationResultsView(
-                    explanation: displayedExplanation,
-                    contentHeight: $explanationContentHeight
+                    explanation: visibleExplanation,
+                    direction: resultPresentation?.event?.direction,
+                    contentHeight: $explanationContentHeight,
+                    actions: resultActions,
+                    onOpen: openResultAction
                 )
             }
         }
@@ -97,15 +119,24 @@ struct FloatingQuickAddPanelView: View {
                 .stroke(WordNoteTheme.strongLine, lineWidth: 1)
         }
         .preferredColorScheme(selectedAppearance.preferredColorScheme)
+        .background {
+            if let resultPresentation { CaptureResultWindowBridge(presentation: resultPresentation) }
+        }
         .onAppear {
+            #if WORDNOTE_V2_VALIDATION
+            if let resultPresentation { analysisQueue.feedback.subscribe(resultPresentation) }
+            #endif
             focusInput()
             onHeightChange(preferredPanelHeight)
         }
         .onReceive(NotificationCenter.default.publisher(for: .quickAddPanelDidShow)) { _ in
+            #if !WORDNOTE_V2_VALIDATION
             updatePanelFocus(true)
+            #endif
             focusInput()
             onHeightChange(preferredPanelHeight)
         }
+        #if !WORDNOTE_V2_VALIDATION
         .onReceive(NotificationCenter.default.publisher(for: .quickAddPanelFocusDidChange)) { notification in
             let isFocused = notification.userInfo?[QuickAddPanelFocusUserInfoKey.isFocused] as? Bool ?? false
             updatePanelFocus(isFocused)
@@ -113,13 +144,35 @@ struct FloatingQuickAddPanelView: View {
         .onChange(of: latestExplanationKey) {
             showLatestExplanation()
         }
+        #else
+        .onChange(of: resultPresentation?.event?.preview.id) {
+            explanationContentHeight = 0
+        }
+        #endif
         .onChange(of: preferredPanelHeight) {
             onHeightChange(preferredPanelHeight)
         }
         .onDisappear {
+            #if WORDNOTE_V2_VALIDATION
+            if let resultPresentation { analysisQueue.feedback.unsubscribe(resultPresentation) }
+            resultActions?.reset()
+            #else
             cancelExplanationHideTimer()
+            #endif
         }
         .onExitCommand(perform: onClose)
+    }
+
+    private var openResultAction: (() -> Void)? {
+        #if WORDNOTE_V2_VALIDATION
+        guard let target = resultPresentation?.event?.target, let captureNavigator else { return nil }
+        return {
+            do { try captureNavigator.open(target) }
+            catch { resultActions?.showError(error) }
+        }
+        #else
+        nil
+        #endif
     }
 
     private var inputRow: some View {
@@ -150,8 +203,15 @@ struct FloatingQuickAddPanelView: View {
                     .popover(isPresented: $showsContext, arrowEdge: .bottom) {
                         CaptureContextFields(controller: captureContext)
                             .padding(16).frame(width: 300)
+                            .background {
+                                if let resultPresentation { CaptureResultWindowBridge(presentation: resultPresentation, ownsVisibility: false) }
+                            }
                     }
             }
+
+            #if WORDNOTE_V2_VALIDATION
+            if !analysisQueue.jobs.isEmpty || analysisQueue.isSuspended { tasksButton }
+            #endif
 
             Button(action: submit) {
                 Image(systemName: "arrow.up.circle.fill")
@@ -163,6 +223,33 @@ struct FloatingQuickAddPanelView: View {
             .help("Add term or analyze input")
         }
     }
+
+    #if WORDNOTE_V2_VALIDATION
+    private var tasksButton: some View {
+        let pending = analysisQueue.jobs.filter { $0.state == .queued || $0.state == .running }.count
+        let failed = analysisQueue.failedCount
+        return Button { showsTasks.toggle() } label: {
+            HStack(spacing: 3) {
+                Image(systemName: analysisQueue.isSuspended ? "pause.circle" : "clock")
+                if pending > 0 { Text(pending > 99 ? "99+" : "\(pending)").monospacedDigit() }
+                if failed > 0 {
+                    Image(systemName: "exclamationmark.circle").foregroundStyle(WordNoteTheme.amber)
+                    Text(failed > 99 ? "99+" : "\(failed)").monospacedDigit()
+                }
+            }.font(.caption).frame(height: 32)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Analysis tasks: \(pending) pending, \(failed) failed\(analysisQueue.isSuspended ? ", paused" : "")")
+        .help("\(pending) pending, \(failed) failed\(analysisQueue.isSuspended ? "; analysis paused" : "")")
+        .popover(isPresented: $showsTasks, arrowEdge: .bottom) {
+            V2AnalysisTasksView(queue: analysisQueue, startsExpanded: true)
+                .frame(width: 320)
+                .background {
+                    if let resultPresentation { CaptureResultWindowBridge(presentation: resultPresentation, ownsVisibility: false) }
+                }
+        }
+    }
+    #endif
 
     private func submit() {
         guard canSubmit else { return }
@@ -194,6 +281,7 @@ struct FloatingQuickAddPanelView: View {
         }
     }
 
+    #if !WORDNOTE_V2_VALIDATION
     private func showLatestExplanation() {
         guard let latestAIExplanation = analysisQueue.latestAIExplanation else {
             hideExplanation()
@@ -265,28 +353,30 @@ struct FloatingQuickAddPanelView: View {
         explanationRemainingHideTime = FloatingQuickAddMetrics.explanationDisplayDurationSeconds
         explanationHideToken = UUID()
     }
+    #endif
 
     private func focusInput() {
-        Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 60_000_000)
-            inputFocusRequestID = UUID()
-        }
+        inputFocusRequestID = UUID()
     }
 }
 
 private struct FloatingExplanationResultsView: View {
     let explanation: AIExplanationPreview
+    let direction: LookupDirection?
     @Binding var contentHeight: CGFloat
+    var actions: CaptureResultActions?
+    var onOpen: (() -> Void)?
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 9) {
-                ForEach(explanation.floatingRows) { row in
-                    explanationRow(
-                        source: row.source,
-                        meaning: row.meaning,
-                        isMuted: row.isMuted
-                    )
+                ForEach(explanation.floatingRows(direction: direction ?? LookupDirectionDetector.detect(explanation.rawText))) { row in
+                    explanationRow(row)
+                }
+                if let message = actions?.message {
+                    Label(message, systemImage: "exclamationmark.circle")
+                        .font(.caption).foregroundStyle(WordNoteTheme.amber)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -297,13 +387,37 @@ private struct FloatingExplanationResultsView: View {
         .tint(WordNoteTheme.brand)
     }
 
-    private func explanationRow(source: String, meaning: String, isMuted: Bool = false) -> some View {
-        (Text(source).fontWeight(.semibold) + Text("：\(meaning)"))
-            .font(.callout)
-            .lineSpacing(4)
-            .foregroundStyle(isMuted ? WordNoteTheme.mutedInk : Color.primary)
-            .textSelection(.enabled)
-            .fixedSize(horizontal: false, vertical: true)
+    private func explanationRow(_ row: FloatingExplanationRow) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            (Text(row.source).fontWeight(.semibold) + Text("：\(row.meaning)"))
+                .font(.callout)
+                .lineSpacing(4)
+                .foregroundStyle(row.isMuted ? WordNoteTheme.mutedInk : Color.primary)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+            if let actions {
+                HStack(spacing: 6) {
+                    if row.englishText != nil {
+                        Button { actions.copy(row) } label: {
+                            Image(systemName: actions.copiedRowID == row.id ? "checkmark" : "doc.on.doc").frame(width: 26, height: 24)
+                        }
+                        .help(actions.copiedRowID == row.id ? "English copied" : "Copy English")
+                        .accessibilityLabel(actions.copiedRowID == row.id ? "English copied" : "Copy English")
+                        Button { actions.toggleSpeech(row) } label: {
+                            Image(systemName: actions.speakingRowID == row.id ? "stop.fill" : "speaker.wave.2").frame(width: 26, height: 24)
+                        }
+                        .help(actions.speakingRowID == row.id ? "Stop speaking" : "Speak English")
+                        .accessibilityLabel(actions.speakingRowID == row.id ? "Stop speaking" : "Speak English")
+                    }
+                    Spacer(minLength: 0)
+                    if let onOpen {
+                        Button(action: onOpen) { Image(systemName: "arrow.up.forward.app").frame(width: 26, height: 24) }
+                            .help("Open record in main window").accessibilityLabel("Open record in main window")
+                    }
+                }
+                .buttonStyle(.plain).foregroundStyle(WordNoteTheme.mutedInk)
+            }
+        }
             .padding(.horizontal, 10)
             .padding(.vertical, 12)
             .frame(maxWidth: .infinity, alignment: .leading)

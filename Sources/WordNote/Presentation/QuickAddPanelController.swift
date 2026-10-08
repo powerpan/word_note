@@ -1,25 +1,46 @@
 import AppKit
+import Observation
 import SwiftData
 import SwiftUI
 import WordNoteCore
 
 @MainActor
-final class QuickAddPanelController {
+final class QuickAddPanelController: NSObject {
     private let modelContainer: ModelContainer
     private let analysisQueue: QuickAddAnalysisQueue
     private let dataProtection: WordNoteDataProtection?
     private let captureContext: CaptureContextController?
+    private let captureNavigator: CaptureResultNavigator?
+    #if WORDNOTE_V2_VALIDATION
+    private let resultPresentation: CaptureResultPresentation
+    private let resultActions: CaptureResultActions
+    private let layout = FloatingQuickAddLayout()
+    #endif
     private var panel: QuickAddFloatingPanel?
 
     init(
         modelContainer: ModelContainer, analysisQueue: QuickAddAnalysisQueue,
-        dataProtection: WordNoteDataProtection? = nil, captureContext: CaptureContextController? = nil
+        dataProtection: WordNoteDataProtection? = nil, captureContext: CaptureContextController? = nil,
+        captureNavigator: CaptureResultNavigator? = nil
     ) {
         self.modelContainer = modelContainer
         self.analysisQueue = analysisQueue
         self.dataProtection = dataProtection
         self.captureContext = captureContext
+        self.captureNavigator = captureNavigator
+        #if WORDNOTE_V2_VALIDATION
+        let actions = CaptureResultActions()
+        resultActions = actions
+        resultPresentation = CaptureResultPresentation(mode: .floating, onResultChange: { [weak actions] in actions?.reset() })
+        #endif
+        super.init()
+        #if WORDNOTE_V2_VALIDATION
+        NotificationCenter.default.addObserver(self, selector: #selector(screenChanged), name: NSWindow.didChangeScreenNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(screenChanged), name: NSApplication.didChangeScreenParametersNotification, object: nil)
+        #endif
     }
+
+    deinit { NotificationCenter.default.removeObserver(self) }
 
     func show() {
         guard !WordNoteWriteGate.isBlocked(modelContainer.mainContext) else { return }
@@ -30,6 +51,10 @@ final class QuickAddPanelController {
         panel.orderFrontRegardless()
         NSApp.activate(ignoringOtherApps: true)
         panel.makeKeyAndOrderFront(nil)
+        CompletionEditorContainerView.focusCaptureInput(in: panel)
+        #if WORDNOTE_V2_VALIDATION
+        resultPresentation.setVisible(true)
+        #endif
         NotificationCenter.default.post(name: .quickAddPanelDidShow, object: nil)
     }
 
@@ -42,6 +67,9 @@ final class QuickAddPanelController {
     }
 
     func close() {
+        #if WORDNOTE_V2_VALIDATION
+        resultPresentation.setVisible(false)
+        #endif
         panel?.orderOut(nil)
         NotificationCenter.default.post(
             name: .quickAddPanelFocusDidChange,
@@ -73,10 +101,14 @@ final class QuickAddPanelController {
             onHeightChange: { [weak panel, weak self] height in
                 self?.resizePanel(panel, height: height)
             },
-            onClose: { [weak self] in self?.close() }
+            onClose: { [weak self] in self?.close() },
+            resultPresentation: captureResultPresentation,
+            layout: captureLayout,
+            resultActions: captureResultActions
         )
         .modelContainer(modelContainer)
         .environment(\.captureContext, captureContext)
+        .environment(\.captureNavigator, captureNavigator)
         .modifier(CaptureProtectionModifier(protection: dataProtection))
 
         let hostingView = NSHostingView(rootView: rootView)
@@ -85,10 +117,37 @@ final class QuickAddPanelController {
         return panel
     }
 
+    private var captureResultPresentation: CaptureResultPresentation? {
+        #if WORDNOTE_V2_VALIDATION
+        resultPresentation
+        #else
+        nil
+        #endif
+    }
+
+    private var captureLayout: FloatingQuickAddLayout? {
+        #if WORDNOTE_V2_VALIDATION
+        layout
+        #else
+        nil
+        #endif
+    }
+
+    private var captureResultActions: CaptureResultActions? {
+        #if WORDNOTE_V2_VALIDATION
+        resultActions
+        #else
+        nil
+        #endif
+    }
+
     private func position(_ panel: NSPanel) {
         let visibleFrame = (NSScreen.main ?? NSScreen.screens.first)?.visibleFrame
             ?? NSRect(x: 0, y: 0, width: 1280, height: 800)
         let margin: CGFloat = 18
+        #if WORDNOTE_V2_VALIDATION
+        layout.maximumHeight = FloatingQuickAddMetrics.maximumHeight(in: visibleFrame)
+        #endif
         panel.setFrameOrigin(
             NSPoint(
                 x: visibleFrame.maxX - panel.frame.width - margin,
@@ -100,8 +159,14 @@ final class QuickAddPanelController {
     private func resizePanel(_ panel: NSPanel?, height: CGFloat) {
         guard let panel else { return }
 
-        let size = NSSize(width: FloatingQuickAddMetrics.width, height: height)
         let topRight = NSPoint(x: panel.frame.maxX, y: panel.frame.maxY)
+        #if WORDNOTE_V2_VALIDATION
+        let visibleFrame = panel.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? panel.frame
+        layout.maximumHeight = FloatingQuickAddMetrics.maximumHeight(in: visibleFrame)
+        let frame = FloatingQuickAddMetrics.fittedFrame(topRight: topRight, height: height, visibleFrame: visibleFrame)
+        if panel.frame != frame { panel.setFrame(frame, display: true, animate: true) }
+        #else
+        let size = NSSize(width: FloatingQuickAddMetrics.width, height: height)
         panel.setFrame(
             NSRect(
                 x: topRight.x - size.width,
@@ -112,7 +177,22 @@ final class QuickAddPanelController {
             display: true,
             animate: true
         )
+        #endif
     }
+
+    #if WORDNOTE_V2_VALIDATION
+    @objc private func screenChanged(_ notification: Notification) {
+        guard let panel else { return }
+        if notification.name == NSWindow.didChangeScreenNotification, notification.object as? NSWindow !== panel { return }
+        resizePanel(panel, height: panel.frame.height)
+    }
+    #endif
+}
+
+@MainActor
+@Observable
+final class FloatingQuickAddLayout {
+    var maximumHeight = FloatingQuickAddMetrics.maxExpandedHeight
 }
 
 private final class QuickAddFloatingPanel: NSPanel {
@@ -150,10 +230,24 @@ enum FloatingQuickAddMetrics {
         NSSize(width: width, height: collapsedHeight)
     }
 
-    static func expandedHeight(for explanationContentHeight: CGFloat) -> CGFloat {
+    static func expandedHeight(for explanationContentHeight: CGFloat, maximumHeight: CGFloat? = nil) -> CGFloat {
         min(
             max(explanationBaseHeight + explanationContentHeight, minExpandedHeight),
-            maxExpandedHeight
+            maximumHeight ?? maxExpandedHeight
+        )
+    }
+
+    static func maximumHeight(in visibleFrame: NSRect) -> CGFloat {
+        max(collapsedHeight, visibleFrame.height - 36)
+    }
+
+    static func fittedFrame(topRight: NSPoint, height: CGFloat, visibleFrame: NSRect) -> NSRect {
+        let bounds = visibleFrame.insetBy(dx: 18, dy: 18)
+        let fittedHeight = min(max(height, collapsedHeight), maximumHeight(in: visibleFrame))
+        return NSRect(
+            x: max(bounds.minX, min(topRight.x - width, bounds.maxX - width)),
+            y: max(bounds.minY, min(topRight.y - fittedHeight, bounds.maxY - fittedHeight)),
+            width: width, height: fittedHeight
         )
     }
 }

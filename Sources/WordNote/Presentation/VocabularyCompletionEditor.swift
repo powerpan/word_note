@@ -63,16 +63,7 @@ struct VocabularyCompletionEditor: NSViewRepresentable {
         container.updateDocumentFrame()
         textView.refreshCompletion()
 
-        guard let focusRequestID,
-              context.coordinator.lastFocusRequestID != focusRequestID else {
-            return
-        }
-
-        context.coordinator.lastFocusRequestID = focusRequestID
-        DispatchQueue.main.async { [weak textView] in
-            guard let textView else { return }
-            textView.window?.makeFirstResponder(textView)
-        }
+        if let focusRequestID { container.requestFocus(focusRequestID) }
     }
 
     static func dismantleNSView(_ container: CompletionEditorContainerView, coordinator: Coordinator) {
@@ -96,7 +87,6 @@ struct VocabularyCompletionEditor: NSViewRepresentable {
     @MainActor
     final class Coordinator: NSObject, NSTextViewDelegate {
         var parent: VocabularyCompletionEditor
-        var lastFocusRequestID: UUID?
 
         init(parent: VocabularyCompletionEditor) {
             self.parent = parent
@@ -137,6 +127,8 @@ final class CompletionEditorContainerView: NSView {
     let textView = CompletionTextView()
     private let scrollView = NSScrollView()
     private let style: VocabularyCompletionEditor.Style
+    private var pendingFocusRequestID: UUID?
+    private var lastFocusRequestID: UUID?
 
     init(style: VocabularyCompletionEditor.Style) {
         self.style = style
@@ -186,6 +178,39 @@ final class CompletionEditorContainerView: NSView {
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         nil
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        applyPendingFocus()
+    }
+
+    func requestFocus(_ id: UUID) {
+        guard id != lastFocusRequestID else { return }
+        pendingFocusRequestID = id
+        applyPendingFocus()
+    }
+
+    private func applyPendingFocus() {
+        guard let id = pendingFocusRequestID, let window, window.makeFirstResponder(textView) else { return }
+        lastFocusRequestID = id
+        pendingFocusRequestID = nil
+    }
+
+    static func focusCaptureInput(in window: NSWindow) {
+        guard let content = window.contentView else { return }
+        content.layoutSubtreeIfNeeded()
+        guard let editor = captureEditor(in: content) else { return }
+        window.initialFirstResponder = editor.textView
+        window.makeFirstResponder(editor.textView)
+    }
+
+    private static func captureEditor(in view: NSView) -> CompletionEditorContainerView? {
+        if let editor = view as? CompletionEditorContainerView, !editor.style.isMultiline { return editor }
+        for child in view.subviews {
+            if let editor = captureEditor(in: child) { return editor }
+        }
+        return nil
     }
 
     override func layout() {

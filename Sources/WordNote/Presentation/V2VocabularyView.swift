@@ -5,6 +5,7 @@ import WordNoteCore
 
 struct V2VocabularyView: View {
     @Environment(\.editProtection) private var editProtection
+    @Environment(\.captureNavigation) private var captureNavigation
     @Environment(WordNoteDataProtection.self) private var dataProtection
     @Query private var terms: [TermModel]
     @Query private var courses: [CourseModel]
@@ -19,6 +20,7 @@ struct V2VocabularyView: View {
     @State private var exportMessage: String?
     @State private var now = Date()
     @State private var isLoaded = false
+    @State private var openedTermID: UUID?
 
     private struct OrganizationSelection: Identifiable {
         let id = UUID()
@@ -29,7 +31,7 @@ struct V2VocabularyView: View {
         let revision: Int
     }
 
-    private var selectedTerm: TermModel? { terms.first { $0.id == selection.focusedID } }
+    private var selectedTerm: TermModel? { terms.first { $0.id == (openedTermID ?? selection.focusedID) } }
     private var effectiveBatch: Set<UUID> { selection.batchIDs.intersection(Set(visible.map(\.id))) }
 
     var body: some View {
@@ -41,13 +43,14 @@ struct V2VocabularyView: View {
                     V2TermDetailSurface(term: term, courses: courses, onOrganize: { organize([term.id]) })
                         .id(term.id).frame(minWidth: 400, maxWidth: .infinity, maxHeight: .infinity)
                 } else {
-                    EmptyStateView(systemImage: "book", title: "No Term Selected", message: "") { EmptyView() }
+                    EmptyStateView(systemImage: "book", title: openedTermID == nil ? "No Term Selected" : "Term No Longer Available", message: "") { EmptyView() }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
         }
         .frame(minWidth: 800, minHeight: 600)
-        .onAppear(perform: rebuildIndex)
+        .onAppear { rebuildIndex(); openCapturedTerm() }
+        .onChange(of: captureNavigation?.pending) { openCapturedTerm() }
         .onChange(of: terms.map { TermVersion(id: $0.id, revision: $0.revision) }) { rebuildIndex() }
         .onChange(of: links.map(WordNoteSnapshotV2Payload.CourseLink.init)) { rebuildIndex() }
         .onChange(of: lookups.map(WordNoteSnapshotV2Payload.LookupEvent.init)) { rebuildIndex() }
@@ -75,6 +78,9 @@ struct V2VocabularyView: View {
                                 onSelectAll: { selection.reconcile(visible.map(\.id)); selection.toggleAll() },
                                 onOrganize: { organize(effectiveBatch) }, onExport: export)
                 .disabled(dataProtection.isRestoring)
+            if openedTermID != nil {
+                CaptureNavigationBanner { protectingEdits(editProtection) { openedTermID = nil } }
+            }
             if let message {
                 HStack(alignment: .top) {
                     Text(message).font(.caption).foregroundStyle(.secondary)
@@ -82,9 +88,13 @@ struct V2VocabularyView: View {
                     Button("Dismiss", systemImage: "xmark") { self.message = nil }.labelStyle(.iconOnly).help("Dismiss status")
                 }.padding(.horizontal, 16).padding(.bottom, 8)
             }
-            List(selection: Binding(get: { selection.focusedID }, set: { id in
-                guard id != selection.focusedID else { return }
-                protectingEdits(editProtection) { selection.focusedID = id }
+            List(selection: Binding(get: {
+                if let openedTermID { return visible.contains { $0.id == openedTermID } ? openedTermID : nil }
+                return selection.focusedID
+            }, set: { id in
+                guard id != nil || openedTermID == nil else { return }
+                guard id != selection.focusedID || openedTermID != nil else { return }
+                protectingEdits(editProtection) { openedTermID = nil; selection.focusedID = id }
             })) {
                 ForEach(visible) { item in
                     HStack(alignment: .top, spacing: 10) {
@@ -110,10 +120,18 @@ struct V2VocabularyView: View {
     private func changeQuery(_ value: VocabularyBrowseQuery) {
         guard value != query else { return }
         protectingEdits(editProtection) {
+            openedTermID = nil
             let scopeChanged = !query.hasSameScope(as: value)
             query = value
             refreshVisible(scopeChanged: scopeChanged)
         }
+    }
+
+    private func openCapturedTerm() {
+        guard let id = captureNavigation?.takeVocabulary() else { return }
+        openedTermID = id
+        selection.clearBatch()
+        message = nil
     }
 
     private func rebuildIndex() {
@@ -135,7 +153,7 @@ struct V2VocabularyView: View {
     }
 
     private func export(_ selectedOnly: Bool) {
-        let ids = selectedOnly ? (effectiveBatch.isEmpty ? Set([selection.focusedID].compactMap { $0 }) : effectiveBatch) : Set(visible.map(\.id))
+        let ids = selectedOnly ? (effectiveBatch.isEmpty ? Set([selectedTerm?.id].compactMap { $0 }) : effectiveBatch) : Set(visible.map(\.id))
         let values = terms.filter { ids.contains($0.id) }.map(WordNoteSnapshotPayload.Term.init)
         let courseValues = courses.map(WordNoteSnapshotPayload.Course.init)
         let memberships = Dictionary(uniqueKeysWithValues: values.map { term in

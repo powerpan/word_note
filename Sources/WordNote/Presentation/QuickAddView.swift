@@ -16,6 +16,9 @@ struct QuickAddView: View {
     @State private var note = ""
     @State private var statusMessage: String?
     @State private var errorMessage: String?
+    #if WORDNOTE_V2_VALIDATION
+    @State private var resultPresentation = CaptureResultPresentation(mode: .main)
+    #endif
 
     private var courses: [CourseModel] {
         storedCourses.sorted { $0.courseName.localizedStandardCompare($1.courseName) == .orderedAscending }
@@ -154,6 +157,11 @@ struct QuickAddView: View {
         .onChange(of: defaultSourceType) {
             applyDefaultSourceType()
         }
+        #if WORDNOTE_V2_VALIDATION
+        .background(CaptureResultWindowBridge(presentation: resultPresentation))
+        .onAppear { analysisQueue.feedback.subscribe(resultPresentation) }
+        .onDisappear { analysisQueue.feedback.unsubscribe(resultPresentation) }
+        #endif
     }
 
     private func saveDraft(statusOverride: String? = nil) {
@@ -232,13 +240,21 @@ struct QuickAddView: View {
         selectedSourceType = SourceType(rawValue: defaultSourceType) ?? .other
     }
 
+    private var displayedAIExplanation: AIExplanationPreview? {
+        #if WORDNOTE_V2_VALIDATION
+        resultPresentation.event?.preview
+        #else
+        analysisQueue.latestAIExplanation
+        #endif
+    }
+
     @ViewBuilder
     private var aiExplanationPanel: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("AI 釋義產出後展示")
                 .font(.headline)
 
-            if let latestAIExplanation = analysisQueue.latestAIExplanation {
+            if let latestAIExplanation = displayedAIExplanation {
                 VStack(alignment: .leading, spacing: 10) {
                     Text(latestAIExplanation.rawText)
                         .font(.subheadline.weight(.semibold))

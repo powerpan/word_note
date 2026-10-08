@@ -543,4 +543,16 @@ version 2 日誌的 pending.operation 區分 restore/migration，缺值兼容既
 
 這批不修改 V1/V2 快照 bytes/checksum 契約。新增 defaultCourse/intent 尚不隨邏輯備份恢復，current 永不備份；B08 要用顯式版本化 adapter 擴充偏好白名單並驗證舊快照，未完成前禁止宣称最終偏好恢復驗收。細節和測試見 [B02 共享上下文證據](qa/2026-10-08-b02-capture-context.md)。
 
+### 捕獲結果與窗口路由（B02 第三批）
+
+V2 queue 在本地命中或完成分析的交易保存成功後，發出不可變 `CaptureFeedbackEvent`，包括 preview、保存時方向、captureID、入口及 `inputRecord(UUID)`/`vocabulary(UUID)` 目標。冪等提交重送、失敗保存、過期/取消的分析不發新成功事件。`latestAIExplanation` 僅為兼容保留，V2 畫面不再直接讀它。
+
+`CaptureFeedbackHub` 弱持有每個窗口的 `CaptureResultPresentation`，沒有事件快取。主窗口按視圖生命週期訂閱，panel 由 controller 持有 presentation；兩者都用窄 AppKit bridge 觀察可見、最小化、關閉和鍵盤焦點，popover 只貢獻焦點、不擁有父面板可見性。隱藏時清結果及焦點，恢復/暫停清理在 queue 層執行，不依賴主窗口是否存在。浮窗以 systemUptime 和可注入 sleep 實作剩餘時計，token 拒絕遲到回調；取消 Task 之外仍檢查可見性/焦點及單調期限。
+
+`CaptureResultActions` 每個浮窗一份，由 QuickAddPanelController 持有，英文投影來自實際結果行。Pasteboard 只在点击時寫入；`SystemCaptureSpeech` 使用 AVSpeechSynthesizer 和可用 Apple 英文 voice，排除 Personal Voice 與第三方 provider。每次朗讀有獨立 request UUID 及 delegate，不將非 Sendable AVSpeechUtterance 傳過 executor；遲到完成不能停止新一筆。presentation 的 onResultChange 在替換/隱藏/到期清理時同步 reset，立即停止舊音頻，不依賴 SwiftUI 是否重繪。聲音列表與合成只在點擊後使用，沒有下載或錄音入口。
+
+`CaptureResultNavigator` 弱持有主窗口 endpoint，按最近活動順序選一個；沒有 endpoint 才透過已註冊的 SwiftUI openWindow action 建立主窗口。待開請求不能被第二次点击取代，恢復開始時取消。每個 ContentView 自持 `CaptureNavigationState`，進入前先走原有 WordNoteEditProtection；Inbox/Vocabulary 只消費一次對應 ID，固定詳情與原列表選擇分開，因此當前已打開目標頁的搜尋及 Handled 篩選不會把目標替換成鄰居。不新增已銷毀頁面的歷史篩選持久化。缺失 ID 顯式呈現不可用。此橋接不接管 NSWindowDelegate，避免覆蓋 A04 關窗保護。
+
+浮窗最大高度取目前 NSScreen.visibleFrame 減 36 pt 邊距；測量內容仍完整，超限使用內部滾動。跨螢幕/螢幕可用區變更重新限制 frame，保留右上錨點並避免底部越界。原生 completion 容器保留未挂載時的焦點請求，控制器在顯示時同步設置 initialFirstResponder/firstResponder；不以固定 sleep 修補焦點競態。詳見 [第三批驗證](qa/2026-10-08-b02-capture-feedback.md)。
+
 搜索 matcher、補全與精確去重仍分開；列表按穩定 ID 更新，不因篩選改變錯配選中項。性能先測現有查詢與生成資料，再決定索引/分頁/搜索快取；不能為預估大資料量先引入向量庫。時計、Calendar、網絡、store 路徑和偏好可注入，測試不用 sleep 等待真實 10 分鐘。

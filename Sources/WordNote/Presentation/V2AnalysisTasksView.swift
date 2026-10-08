@@ -8,13 +8,18 @@ struct V2AnalysisTasksView: View {
     @State private var errorMessage: String?
     @State private var pendingCancellation: WordNoteV2AnalysisJob?
 
+    init(queue: WordNoteV2AnalysisQueue, startsExpanded: Bool = false) {
+        self.queue = queue
+        _expanded = State(initialValue: startsExpanded)
+    }
+
     var body: some View {
         if !queue.jobs.isEmpty || queue.isSuspended {
             DisclosureGroup(isExpanded: $expanded) {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {
                         if queue.isSuspended {
-                            Label("Paused. Resume in Settings.", systemImage: "pause.circle")
+                            Button("Resume Analysis", systemImage: "play.fill") { perform { _ = try queue.resumePendingAnalyses() } }
                         } else {
                             Button("Pause Analysis", systemImage: "pause.fill") { perform { try queue.pause() } }
                         }
@@ -42,6 +47,7 @@ struct V2AnalysisTasksView: View {
                             }
                         }
                         if let errorMessage { StatusBanner(message: errorMessage, kind: .warning) }
+                        else if let error = queue.errorMessage { StatusBanner(message: error, kind: .warning) }
                     }
                     .padding(.top, 8)
                 }

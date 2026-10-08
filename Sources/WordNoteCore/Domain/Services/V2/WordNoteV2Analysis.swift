@@ -26,6 +26,8 @@ public struct WordNoteV2AnalysisJob: Identifiable, Equatable, Sendable {
 /// Only immutable values cross the network suspension point.
 public struct WordNoteV2AnalysisAttempt: Sendable {
     public let recordID: UUID
+    public let captureID: UUID
+    public let capturedVia: CaptureSurface
     public let revision: Int
     public let generation: Int
     public let attemptID: UUID
@@ -82,6 +84,7 @@ extension WordNoteV2ContentService {
             }
             if let next = record.nextAttemptAt, next > date { throw WordNoteV2AnalysisError.retryDeferred(until: next) }
             let request = try analysisRequest(record)
+            guard let surface = CaptureSurface(rawValue: record.capturedViaRaw) else { throw WordNoteV2ContentError.invalidState }
             let ticket = try WordNoteWriteGate.ticket(for: context)
             let attemptID = UUID()
             record.attemptID = attemptID
@@ -89,7 +92,8 @@ extension WordNoteV2ContentService {
             record.nextAttemptAt = nil
             try touchAnalysis(record, at: date)
             return WordNoteV2AnalysisAttempt(
-                recordID: id, revision: record.revision, generation: record.analysisGeneration,
+                recordID: id, captureID: record.captureID, capturedVia: surface,
+                revision: record.revision, generation: record.analysisGeneration,
                 attemptID: attemptID, request: request, autoRetryCount: record.autoRetryCount, ticket: ticket
             )
         }

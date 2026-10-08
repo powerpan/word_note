@@ -7,6 +7,7 @@ struct V2InboxView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.savedChangeHistory) private var undoHistory
     @Environment(\.editProtection) private var editProtection
+    @Environment(\.captureNavigation) private var captureNavigation
     @Environment(QuickAddAnalysisQueue.self) private var queue
     @Environment(WordNoteDataProtection.self) private var dataProtection
     @Query private var records: [InputRecordModel]
@@ -19,6 +20,7 @@ struct V2InboxView: View {
     @State private var confirmationPlan: WordNoteV2ConfirmationPlan?
     @State private var errorMessage: String?
     @State private var statusMessage: String?
+    @State private var openedRecordID: UUID?
     @SceneStorage("v2InboxHandledExpanded") private var handledExpanded = false
 
     private struct Version: Equatable {
@@ -26,7 +28,7 @@ struct V2InboxView: View {
         let revision: Int
     }
 
-    private var selectedRecord: InputRecordModel? { records.first { $0.id == selection.focusedID } }
+    private var selectedRecord: InputRecordModel? { records.first { $0.id == (openedRecordID ?? selection.focusedID) } }
 
     var body: some View {
         GeometryReader { proxy in
@@ -38,16 +40,17 @@ struct V2InboxView: View {
                         candidates: candidates.filter { $0.inputRecordID == record.id },
                         onAnalyze: { analyze(record.id) }, onIgnore: { ignoreRecord(record.id) }, onDelete: { deleteRecord(record.id) },
                         onConfirm: confirmCandidates, onIgnoreCandidates: ignoreCandidates,
-                        onManualSave: { showSuccess("Saved to Vocabulary.") })
+                        onManualSave: { showSuccess("Saved to Vocabulary.") }, advancesAfterConfirmation: openedRecordID == nil)
                         .id(record.id).frame(minWidth: 440, maxWidth: .infinity, maxHeight: .infinity)
                 } else {
-                    EmptyStateView(systemImage: "tray", title: visible.active.isEmpty ? "No Active Records" : "No Record Selected", message: "") { EmptyView() }
+                    EmptyStateView(systemImage: "tray", title: openedRecordID != nil ? "Record No Longer Available" : (visible.active.isEmpty ? "No Active Records" : "No Record Selected"), message: "") { EmptyView() }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
         }
         .frame(minWidth: 800, minHeight: 600)
-        .onAppear(perform: rebuildIndex)
+        .onAppear { rebuildIndex(); openCapturedRecord() }
+        .onChange(of: captureNavigation?.pending) { openCapturedRecord() }
         .onChange(of: records.map { Version(id: $0.id, revision: $0.revision) }) {
             rebuildIndex()
             guard !WordNoteWriteGate.isBlocked(context) else { return }
@@ -71,6 +74,9 @@ struct V2InboxView: View {
                 allSelected: !selection.confirmableIDs.isEmpty && selection.confirmableIDs.isSubset(of: selection.batchIDs),
                 canSelect: !selection.confirmableIDs.isEmpty, onSelectAll: { selection.toggleAll() }, onConfirm: confirmSelectedRecords)
                 .disabled(dataProtection.isRestoring)
+            if openedRecordID != nil {
+                CaptureNavigationBanner { protectingEdits(editProtection) { openedRecordID = nil } }
+            }
             if let errorMessage { StatusBanner(message: errorMessage, kind: .warning).padding(.horizontal, 16).padding(.bottom, 8) }
             if let statusMessage {
                 HStack(alignment: .top) {
@@ -80,9 +86,13 @@ struct V2InboxView: View {
                 }.padding(.horizontal, 16).padding(.bottom, 8)
             }
             V2AnalysisTasksView(queue: queue).disabled(dataProtection.isRestoring)
-            List(selection: Binding(get: { selection.focusedID }, set: { id in
-                guard id != selection.focusedID else { return }
-                protectingEdits(editProtection) { selection.focusedID = id }
+            List(selection: Binding(get: {
+                if let openedRecordID { return selection.visibleIDs.contains(openedRecordID) ? openedRecordID : nil }
+                return selection.focusedID
+            }, set: { id in
+                guard id != nil || openedRecordID == nil else { return }
+                guard id != selection.focusedID || openedRecordID != nil else { return }
+                protectingEdits(editProtection) { openedRecordID = nil; selection.focusedID = id }
             })) {
                 ForEach(visible.active) { item in
                     row(item, selection: item.canConfirm ? Binding(
@@ -138,7 +148,15 @@ struct V2InboxView: View {
 
     private func changeQuery(_ value: InboxBrowseQuery) {
         guard value != query else { return }
-        protectingEdits(editProtection) { query = value; refreshVisible(scopeChanged: true) }
+        protectingEdits(editProtection) { openedRecordID = nil; query = value; refreshVisible(scopeChanged: true) }
+    }
+
+    private func openCapturedRecord() {
+        guard let id = captureNavigation?.takeInputRecord() else { return }
+        openedRecordID = id
+        selection.clearBatch()
+        errorMessage = nil
+        statusMessage = nil
     }
 
     private func confirmSelectedRecords() {
@@ -163,7 +181,12 @@ struct V2InboxView: View {
 
     private func currentSelections(_ ids: Set<UUID>) throws -> [WordNoteV2CandidateSelection] {
         rebuildIndex()
-        let values = visible.active.flatMap(\.selections).filter { ids.contains($0.id) }
+        let items: [InboxBrowseItem]
+        if let openedRecordID {
+            guard let record = records.first(where: { $0.id == openedRecordID }) else { throw WordNoteV2ContentError.missingEntity }
+            items = [InboxBrowseItem(record: record, candidates: candidates.filter { $0.inputRecordID == openedRecordID })]
+        } else { items = visible.active }
+        let values = items.flatMap(\.selections).filter { ids.contains($0.id) }
         guard !ids.isEmpty, values.count == ids.count else { throw WordNoteV2ConfirmationPlanError.stalePlan }
         return values
     }

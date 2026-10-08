@@ -16,6 +16,7 @@ final class V2ValidationRuntime {
         let panel: QuickAddPanelController
         let shortcut: CaptureShortcutController
         let captureContext: CaptureContextController
+        let captureNavigator: CaptureResultNavigator
     }
 
     private(set) var ready: Ready?
@@ -41,6 +42,8 @@ final class V2ValidationRuntime {
                 let fresh = !FileManager.default.fileExists(atPath: directory.appending(path: "store-generations.json").path)
                     && !FileManager.default.fileExists(atPath: directory.appending(path: "WordNote.store").path)
                 if fresh {
+                    // Migration snapshots must start with this QA session's requested appearance.
+                    UserDefaults.standard.set(AppRuntime.fixtureAppearance.rawValue, forKey: AppAppearancePreference.storageKey)
                     let original = try WordNoteRestoreStore(directoryURL: directory).open()
                     try fixture.populate(original.container.mainContext)
                 }
@@ -87,19 +90,23 @@ final class V2ValidationRuntime {
             preferences: .standard,
             availableCourseIDs: Set(try session.container.mainContext.fetch(FetchDescriptor<WordNoteSchemaV2.CourseModel>()).map(\.id))
         )
+        let captureNavigator = CaptureResultNavigator { [weak protection] in protection?.isRestoring == false }
         let panel = QuickAddPanelController(
             modelContainer: session.container, analysisQueue: queue,
-            dataProtection: protection, captureContext: captureContext
+            dataProtection: protection, captureContext: captureContext, captureNavigator: captureNavigator
         )
         let shortcut = CaptureShortcutController(backend: CarbonCaptureShortcutBackend(), defaults: .standard) { [weak panel] in panel?.toggle() }
-        protection.restoreStateDidChange = { [weak shortcut] restoring in shortcut?.setAvailable(!restoring) }
+        protection.restoreStateDidChange = { [weak shortcut, weak captureNavigator] restoring in
+            shortcut?.setAvailable(!restoring)
+            if restoring { captureNavigator?.cancelPending() }
+        }
         ready?.protection.restoreStateDidChange = nil
         ready?.shortcut.stop()
         ready?.panel.close()
         ready = Ready(
             session: session, queue: queue, protection: protection,
             undoHistory: try WordNoteV2UndoHistory(container: session.container),
-            panel: panel, shortcut: shortcut, captureContext: captureContext
+            panel: panel, shortcut: shortcut, captureContext: captureContext, captureNavigator: captureNavigator
         )
         shortcut.start()
         errorMessage = nil

@@ -131,6 +131,49 @@ final class CompletionTextViewTests: XCTestCase {
         XCTAssertEqual(view.string, "quick")
     }
 
+    func testFocusRequestedBeforeWindowAttachmentIsNotLost() {
+        let editor = CompletionEditorContainerView(style: .singleLine)
+        editor.requestFocus(UUID())
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 360, height: 60),
+                              styleMask: .borderless, backing: .buffered, defer: true)
+        window.contentView = editor
+        XCTAssertTrue(window.firstResponder === editor.textView)
+    }
+
+    func testRepeatedFocusRequestDoesNotStealFocusFromAnotherControl() {
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 360, height: 60),
+                              styleMask: .borderless, backing: .buffered, defer: true)
+        let root = NSView(), editor = CompletionEditorContainerView(style: .singleLine), other = NSTextView()
+        root.addSubview(editor)
+        root.addSubview(other)
+        window.contentView = root
+        let id = UUID()
+        editor.requestFocus(id)
+        XCTAssertTrue(window.firstResponder === editor.textView)
+        XCTAssertTrue(window.makeFirstResponder(other))
+        editor.requestFocus(id)
+        XCTAssertTrue(window.firstResponder === other)
+        editor.requestFocus(UUID())
+        XCTAssertTrue(window.firstResponder === editor.textView)
+    }
+
+    func testPanelInputIsReadySynchronouslyWithoutWaitingForSwiftUIFocusUpdate() {
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 360, height: 60),
+                              styleMask: .borderless, backing: .buffered, defer: true)
+        let root = NSView(), wrapper = NSView()
+        let multiline = CompletionEditorContainerView(style: .multiline)
+        let input = CompletionEditorContainerView(style: .singleLine)
+        root.addSubview(multiline)
+        wrapper.addSubview(input)
+        root.addSubview(wrapper)
+        window.contentView = root
+        CompletionEditorContainerView.focusCaptureInput(in: window)
+        XCTAssertTrue(window.firstResponder === input.textView)
+        XCTAssertTrue(window.initialFirstResponder === input.textView)
+        input.textView.insertText("quick", replacementRange: NSRange(location: NSNotFound, length: 0))
+        XCTAssertEqual(input.textView.string, "quick")
+    }
+
     private func event(code: UInt16, flags: NSEvent.ModifierFlags = [.command]) throws -> NSEvent {
         try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags, timestamp: 0,
                                       windowNumber: 0, context: nil, characters: "\r", charactersIgnoringModifiers: "\r",

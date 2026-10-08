@@ -20,6 +20,7 @@ struct WordNoteV2ValidationApp: App {
                         .environment(\.savedChangeHistory, ready.undoHistory)
                         .environment(\.captureShortcut, ready.shortcut)
                         .environment(\.captureContext, ready.captureContext)
+                        .environment(\.captureNavigator, ready.captureNavigator)
                         .modifier(DataProtectionOverlay(protection: ready.protection))
                         .task {
                             ready.protection.startAutomaticBackups()
