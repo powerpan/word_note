@@ -47,7 +47,8 @@ struct QuickAddView: View {
                             text: $rawText,
                             vocabulary: storedTerms.map(\.term),
                             placeholder: "Enter English text or a Chinese meaning to look up",
-                            style: .multiline
+                            style: .multiline,
+                            onCommandSubmit: commandSubmit
                         )
                             .frame(minHeight: 300)
                             .background(WordNoteTheme.field)
@@ -100,6 +101,9 @@ struct QuickAddView: View {
                         }
                         .controlSize(.large)
                         .buttonStyle(.borderedProminent)
+                        #if WORDNOTE_V2_VALIDATION
+                        .keyboardShortcut(.return, modifiers: [.command])
+                        #endif
                         .disabled(!canSave)
 
                         Button {
@@ -108,7 +112,9 @@ struct QuickAddView: View {
                             Label("Save Draft", systemImage: "tray.and.arrow.down")
                                 .frame(maxWidth: .infinity)
                         }
+                        #if !WORDNOTE_V2_VALIDATION
                         .keyboardShortcut(.return, modifiers: [.command])
+                        #endif
                         .disabled(!canSave)
 
                         if analysisQueue.isBusy {
@@ -180,6 +186,7 @@ struct QuickAddView: View {
     }
 
     private func saveAndAnalyze() {
+        guard canSave else { return }
         statusMessage = nil
         errorMessage = nil
 
@@ -199,6 +206,14 @@ struct QuickAddView: View {
             statusMessage = nil
             errorMessage = error.localizedDescription
         }
+    }
+
+    private var commandSubmit: (() -> Void)? {
+        #if WORDNOTE_V2_VALIDATION
+        saveAndAnalyze
+        #else
+        nil
+        #endif
     }
 
     private func applyDefaultSourceType() {

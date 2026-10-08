@@ -34,12 +34,21 @@ public final class WordNoteDataProtection {
     public private(set) var unreadableBackupCount = 0
     public private(set) var catalogNeedsRepair = false
     public private(set) var isWorking = false
-    public private(set) var restorePhase = RestorePhase.idle
+    public private(set) var restorePhase = RestorePhase.idle {
+        didSet {
+            if (oldValue == .idle) != (restorePhase == .idle) { restoreStateDidChange?(isRestoring) }
+        }
+    }
     public private(set) var statusMessage: String?
     public private(set) var errorMessage: String?
     public var isRestoring: Bool { restorePhase != .idle }
     public var analysisRequiresResume: Bool { queue.isSuspended }
     public let backupDirectoryURL: URL
+
+    // The runtime owns this hook so process-wide capture does not depend on an open SwiftUI window.
+    @ObservationIgnored public var restoreStateDidChange: (@MainActor (Bool) -> Void)? {
+        didSet { restoreStateDidChange?(isRestoring) }
+    }
 
     @ObservationIgnored private let container: ModelContainer
     @ObservationIgnored private let store: WordNoteRestoreStore

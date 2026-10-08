@@ -112,6 +112,51 @@ final class WordNoteDataProtectionTests: XCTestCase {
         XCTAssertTrue(h.queue.isSuspended)
     }
 
+    func testRestoreObserverWorksWithoutAnyWindowAndEmitsOnlyAvailabilityTransitions() async throws {
+        let h = try harness()
+        var states: [Bool] = []
+        h.controller.restoreStateDidChange = { states.append($0) }
+        XCTAssertEqual(states, [false])
+        try await h.controller.prepareRestore(replacement(snapshot(h)))
+        XCTAssertEqual(states, [false, true])
+        XCTAssertEqual(h.controller.restorePhase, .readyToQuit)
+        try h.controller.cancelRestore()
+        XCTAssertEqual(states, [false, true, false])
+        h.controller.restoreStateDidChange = nil
+        XCTAssertEqual(states, [false, true, false])
+    }
+
+    func testRestoreObserverResumesCaptureAfterRecoverablePreparationFailure() async throws {
+        let h = try harness(vaultFault: { checkpoint in
+            if checkpoint == .snapshotWrite { throw POSIXError(.ENOSPC) }
+        })
+        var states: [Bool] = []
+        h.controller.restoreStateDidChange = { states.append($0) }
+        do { try await h.controller.prepareRestore(replacement(snapshot(h))); XCTFail("Expected backup failure.") }
+        catch { XCTAssertEqual(error as? POSIXError, POSIXError(.ENOSPC)) }
+        XCTAssertEqual(states, [false, true, false])
+        XCTAssertTrue(h.queue.isSuspended)
+    }
+
+    func testRestoreObserverKeepsCaptureSuspendedWhenRecoveryIsRequired() async throws {
+        let journal = root.appending(path: "Data/store-generations.json")
+        let h = try harness(vaultFault: { checkpoint in
+            if checkpoint == .snapshotWrite {
+                try PrivateFileIO.write(Data("damaged journal".utf8), to: journal)
+                throw POSIXError(.ENOSPC)
+            }
+        })
+        var states: [Bool] = []
+        h.controller.restoreStateDidChange = { states.append($0) }
+        do { try await h.controller.prepareRestore(replacement(snapshot(h))); XCTFail("Expected backup failure.") }
+        catch { XCTAssertEqual(error as? POSIXError, POSIXError(.ENOSPC)) }
+        XCTAssertEqual(h.controller.restorePhase, .recoveryRequired)
+        XCTAssertEqual(states, [false, true])
+        var attachedState: Bool?
+        h.controller.restoreStateDidChange = { attachedState = $0 }
+        XCTAssertEqual(attachedState, true)
+    }
+
     func testStagingFailureReleasesGateButRetainsProtectedSnapshot() async throws {
         let h = try harness(storeFault: { checkpoint in
             if checkpoint == .stagingSaved { throw POSIXError(.ENOSPC) }

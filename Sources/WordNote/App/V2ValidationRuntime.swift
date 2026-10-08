@@ -14,6 +14,7 @@ final class V2ValidationRuntime {
         let protection: WordNoteDataProtection
         let undoHistory: WordNoteV2UndoHistory
         let panel: QuickAddPanelController
+        let shortcut: CaptureShortcutController
     }
 
     private(set) var ready: Ready?
@@ -81,11 +82,18 @@ final class V2ValidationRuntime {
         let queue = try WordNoteV2AnalysisQueue(session: session, store: store, analysisHandler: AppRuntime.analyze)
         _ = try queue.recoverPendingAnalyses()
         let protection = WordNoteDataProtection(session: session, store: store, vault: vault, queue: queue, preferences: Self.preferences)
+        let panel = QuickAddPanelController(modelContainer: session.container, analysisQueue: queue, dataProtection: protection)
+        let shortcut = CaptureShortcutController(backend: CarbonCaptureShortcutBackend(), defaults: .standard) { [weak panel] in panel?.toggle() }
+        protection.restoreStateDidChange = { [weak shortcut] restoring in shortcut?.setAvailable(!restoring) }
+        ready?.protection.restoreStateDidChange = nil
+        ready?.shortcut.stop()
+        ready?.panel.close()
         ready = Ready(
             session: session, queue: queue, protection: protection,
             undoHistory: try WordNoteV2UndoHistory(container: session.container),
-            panel: QuickAddPanelController(modelContainer: session.container, analysisQueue: queue, dataProtection: protection)
+            panel: panel, shortcut: shortcut
         )
+        shortcut.start()
         errorMessage = nil
     }
 

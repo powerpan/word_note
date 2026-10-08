@@ -18,8 +18,13 @@ struct WordNoteV2ValidationApp: App {
                         .environment(ready.queue)
                         .environment(ready.protection)
                         .environment(\.savedChangeHistory, ready.undoHistory)
+                        .environment(\.captureShortcut, ready.shortcut)
                         .modifier(DataProtectionOverlay(protection: ready.protection))
-                        .task { ready.protection.startAutomaticBackups(); appDelegate.dataProtection = ready.protection }
+                        .task {
+                            ready.protection.startAutomaticBackups()
+                            appDelegate.dataProtection = ready.protection
+                            appDelegate.captureShortcut = ready.shortcut
+                        }
                 } else {
                     V2ValidationStartupView(runtime: runtime)
                 }
@@ -33,7 +38,7 @@ struct WordNoteV2ValidationApp: App {
         .commands {
             CommandGroup(after: .undoRedo) { SavedChangeUndoCommand() }
             CommandMenu("Capture") {
-                Button("Quick Add", systemImage: "plus.circle") { runtime.ready?.panel.show() }
+                Button("Quick Add", systemImage: "plus.circle") { runtime.ready?.panel.toggle() }
                     .keyboardShortcut("n", modifiers: [.command, .shift])
                     .disabled(runtime.ready == nil || runtime.ready?.protection.isRestoring == true)
             }
@@ -55,6 +60,7 @@ struct WordNoteV2ValidationApp: App {
                     SettingsView()
                         .modelContainer(ready.session.container)
                         .environment(ready.protection)
+                        .environment(\.captureShortcut, ready.shortcut)
                         .modifier(DataProtectionOverlay(protection: ready.protection))
                 } else { V2ValidationStartupView(runtime: runtime) }
             }

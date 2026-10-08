@@ -35,6 +35,7 @@ struct VocabularyCompletionEditor: NSViewRepresentable {
     var focusRequestID: UUID?
     var onSubmit: (() -> Void)?
     var onEscape: (() -> Void)?
+    var onCommandSubmit: (() -> Void)?
 
     func makeCoordinator() -> Coordinator {
         Coordinator(parent: self)
@@ -85,6 +86,7 @@ struct VocabularyCompletionEditor: NSViewRepresentable {
         textView.isMultiline = style.isMultiline
         textView.submitHandler = onSubmit
         textView.escapeHandler = onEscape
+        textView.commandSubmitHandler = onCommandSubmit
         textView.bindingUpdateHandler = { [weak coordinator] updatedText in
             coordinator?.updateBinding(with: updatedText)
         }
@@ -236,6 +238,7 @@ final class CompletionTextView: NSTextView {
     var isMultiline = true
     var submitHandler: (() -> Void)?
     var escapeHandler: (() -> Void)?
+    var commandSubmitHandler: (() -> Void)?
     var bindingUpdateHandler: ((String) -> Void)?
 
     private var completion: VocabularyCompletion?
@@ -260,6 +263,10 @@ final class CompletionTextView: NSTextView {
 
     override func keyDown(with event: NSEvent) {
         let startedWithMarkedText = hasMarkedText()
+        if !startedWithMarkedText, isCommandReturn(event), commandSubmitHandler != nil {
+            submitCommandReturn()
+            return
+        }
         if startedWithMarkedText {
             isHandlingMarkedTextKeyEvent = true
         }
@@ -271,6 +278,28 @@ final class CompletionTextView: NSTextView {
         }
 
         super.keyDown(with: event)
+    }
+
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        guard (window == nil || window?.firstResponder === self),
+              isCommandReturn(event), commandSubmitHandler != nil else {
+            return super.performKeyEquivalent(with: event)
+        }
+        if hasMarkedText() {
+            // Let the IME commit first; consuming this event prevents the window button from submitting.
+            keyDown(with: event)
+        } else { submitCommandReturn() }
+        return true
+    }
+
+    private func isCommandReturn(_ event: NSEvent) -> Bool {
+        event.type == .keyDown && [36, 76].contains(event.keyCode)
+            && event.modifierFlags.intersection([.command, .control, .option, .shift]) == .command
+    }
+
+    private func submitCommandReturn() {
+        bindingUpdateHandler?(string)
+        commandSubmitHandler?()
     }
 
     override func doCommand(by commandSelector: Selector) {

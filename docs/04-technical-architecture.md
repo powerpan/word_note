@@ -383,7 +383,7 @@ API Key 存在本機 env 文件或進程環境變量，不進入 SwiftData、日
 
 ### Global Hotkey
 
-目前只有 App 內 `Command-Shift-N`；真正的系統全局快捷鍵仍需單獨處理權限和衝突。
+普通 V1 入口仍只有 App 內 `Command-Shift-N`。2026-10-08 的隔離 V2 已接入可配置系統註冊，正式啟用及完整實機驗收仍待完成，見文末 B02 契約。
 
 ### Export
 
@@ -522,5 +522,13 @@ version 2 日誌的 pending.operation 區分 restore/migration，缺值兼容既
 ### 窗口與性能
 
 全局快捷鍵封裝在單一 AppKit 適配器，只接受已註冊組合鍵；先验证 macOS 14 的可用機制，不預先要求輔助功能或全鍵盤監聽。保持 SwiftUI 命令、菜單欄和浮窗路由一致。
+
+2026-10-08 B02 第一批：`CaptureShortcutController` 管理值配置、持久化、活動註冊 ID、按下/釋放去重與暫停；可注入 backend 和 UserDefaults。`CarbonCaptureShortcutBackend` 在 MainActor 使用 `CopySymbolicHotKeys` 檢查已啟用系統鍵，再以 `RegisterEventHotKey` 的 exclusive 選項註冊。不安裝全鍵盤監聽，也不要求 Input Monitoring 或 Accessibility 權限；不能據此聲稱能識別所有 App 內部快捷鍵。
+
+改綁先註冊新鍵，再釋放舊鍵；衝突保留舊設定，釋放失敗則回滾新註冊。回滾清理失敗的 ID 留待下一次重試，永不觸發捕獲。每個原生 backend 只有一個 Application event handler，native ID 在本進程唯一；C 回調上下文持有獨立狀態直到 handler 成功移除，已釋放鍵的遲到事件無法找到活動映射。退出、runtime 替換和停用顯式清理，backend 析構的兜底也回 MainActor，不依賴 `isolated deinit` 或假設析構必在主線程。
+
+快捷鍵配置以 `captureShortcut.v1` 保存在本機 UserDefaults，不進 SwiftData/邏輯快照，恢復詞庫不改本機組合鍵。損壞或未知配置 fail closed，保留原值供重新設定。`WordNoteDataProtection.restoreStateDidChange` 由 runtime 單一持有，立即同步當前恢復狀態，之後只在是否可捕獲改變時通知；不依賴主窗口的 SwiftUI `.onChange`。恢復取消或可恢復失敗後重新註冊，recoveryRequired 保持暫停；分析是否恢復仍遵循 A01/A02 的顯式授權，不因恢復快捷鍵而自動發送請求。
+
+`VocabularyCompletionEditor` 新增可選 Command-Return 回調。僅活動編輯框攔截，先把已提交文字同步 binding，再保存並分析；marked text 交回原生 text system，同次事件不執行應用提交。普通 Return 的多行換行/單行提交、Tab 本地補全及未配置回調的 V1 路徑保留。`WordNoteAppTests` 對 AppKit 控件及原生註冊作組件測試，不能當成跨 App 焦點/中文 IME 的完整 UI 驗收。見 [B02 測試記錄](qa/2026-10-08-b02-capture-shortcut.md)。
 
 搜索 matcher、補全與精確去重仍分開；列表按穩定 ID 更新，不因篩選改變錯配選中項。性能先測現有查詢與生成資料，再決定索引/分頁/搜索快取；不能為預估大資料量先引入向量庫。時計、Calendar、網絡、store 路徑和偏好可注入，測試不用 sleep 等待真實 10 分鐘。

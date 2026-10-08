@@ -28,6 +28,11 @@ let package = Package(
             dependencies: ["WordNoteCore"],
             path: "Tests/WordNoteCoreTests",
             resources: [.copy("Fixtures")]
+        ),
+        .testTarget(
+            name: "WordNoteAppTests",
+            dependencies: ["WordNote", "WordNoteCore"],
+            path: "Tests/WordNoteAppTests"
         )
     ],
     swiftLanguageVersions: [.v5]

@@ -3,6 +3,7 @@ import WordNoteCore
 
 struct SettingsView: View {
     @Environment(WordNoteDataProtection.self) private var dataProtection
+    @Environment(\.captureShortcut) private var captureShortcut
     @AppStorage(AppAppearancePreference.storageKey) private var appearanceRawValue = AppAppearancePreference.system.rawValue
     @AppStorage("defaultSourceType") private var defaultSourceType = "other"
     @State private var apiKey = ""
@@ -42,6 +43,8 @@ struct SettingsView: View {
                     .padding(.vertical, 4)
                 }
                 .groupBoxStyle(WordNoteGroupBoxStyle())
+
+                if let captureShortcut { CaptureShortcutSettings(controller: captureShortcut) }
 
                 GroupBox("Defaults") {
                     Picker("Default source", selection: $defaultSourceType) {

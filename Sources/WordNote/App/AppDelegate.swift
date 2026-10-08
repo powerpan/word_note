@@ -4,6 +4,7 @@ import WordNoteCore
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     var dataProtection: WordNoteDataProtection?
+    var captureShortcut: CaptureShortcutController?
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         if dataProtection?.restorePhase == .preparing { return .terminateCancel }
@@ -16,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        captureShortcut?.stop()
         dataProtection?.stopAutomaticBackups()
     }
     func applicationDidFinishLaunching(_ notification: Notification) {
