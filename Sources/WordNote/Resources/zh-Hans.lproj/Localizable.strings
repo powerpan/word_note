@@ -724,3 +724,9 @@
 "The backup catalog is damaged. Verified backup files remain available." = "备份目录索引已损坏，通过验证的备份文件仍可使用。";
 "This input has already been handled. Your unsaved term has been kept." = "此输入已被处理，未保存的词条草稿已保留。";
 "Analysis is pending. The manual term draft cannot be rebased yet." = "分析尚未完成，暂时无法更新手动词条草稿的来源。";
+"Automatic backup failed: %@" = "自动备份失败：%@";
+"Resumed %lld pending analysis requests." = "已恢复 %lld 个待分析请求。";
+"The shortcut could not be registered (macOS error %d). It may be in use by another app." = "无法注册快捷键（macOS 错误 %d），可能已被其他应用占用。";
+"The previous shortcut could not be released (macOS error %d). Retry or restart Word Note." = "无法释放原快捷键（macOS 错误 %d），请重试或重新启动 Word Note。";
+"AI / CS Context" = "AI / 计算机语境";
+"Revision" = "修订版本";

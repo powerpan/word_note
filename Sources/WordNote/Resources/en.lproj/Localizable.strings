@@ -724,3 +724,9 @@
 "The backup catalog is damaged. Verified backup files remain available." = "The backup catalog is damaged. Verified backup files remain available.";
 "This input has already been handled. Your unsaved term has been kept." = "This input has already been handled. Your unsaved term has been kept.";
 "Analysis is pending. The manual term draft cannot be rebased yet." = "Analysis is pending. The manual term draft cannot be rebased yet.";
+"Automatic backup failed: %@" = "Automatic backup failed: %@";
+"Resumed %lld pending analysis requests." = "Resumed %lld pending analysis requests.";
+"The shortcut could not be registered (macOS error %d). It may be in use by another app." = "The shortcut could not be registered (macOS error %d). It may be in use by another app.";
+"The previous shortcut could not be released (macOS error %d). Retry or restart Word Note." = "The previous shortcut could not be released (macOS error %d). Retry or restart Word Note.";
+"AI / CS Context" = "AI / CS Context";
+"Revision" = "Revision";

@@ -37,16 +37,15 @@ extension WordNoteV2CandidateEdit {
         }, display: { values in values.map { "\($0.term) [\($0.id.uuidString.prefix(8))]" }.joined(separator: "\n") })
         return [list] + originals.flatMap { original in
             let id = original.id
-            let prefix = "\(original.term) / "
             return [
-                field(id, "term", prefix + "Term", \.term, display: { $0 }),
-                field(id, "importance", prefix + "Importance", \.importance, display: { $0.displayTitle }),
-                field(id, "category", prefix + "Category", \.category, display: { $0.displayTitle }),
-                field(id, "chinese", prefix + "Chinese", \.chineseMeaning, display: { $0 }),
-                field(id, "english", prefix + "English", \.englishDefinition, display: { $0 }),
-                field(id, "technical", prefix + "AI / CS Context", \.aiContextExplanation, display: { $0 }),
-                field(id, "example", prefix + "Example", \.exampleSentence, display: { $0 }),
-                WordNoteEditField("\(id).revision", title: prefix + "Revision",
+                field(id, "term", "Term", original.term, \.term, display: { $0 }),
+                field(id, "importance", "Importance", original.term, \.importance, localizesValues: true, display: { $0.displayTitle }),
+                field(id, "category", "Category", original.term, \.category, localizesValues: true, display: { $0.displayTitle }),
+                field(id, "chinese", "Chinese", original.term, \.chineseMeaning, display: { $0 }),
+                field(id, "english", "English", original.term, \.englishDefinition, display: { $0 }),
+                field(id, "technical", "AI / CS Context", original.term, \.aiContextExplanation, display: { $0 }),
+                field(id, "example", "Example", original.term, \.exampleSentence, display: { $0 }),
+                WordNoteEditField("\(id).revision", title: "Revision", titleContext: original.term, localizesValues: true,
                                   value: { $0.first(where: { $0.id == id })?.revision }, display: { $0.map(String.init) ?? "Unavailable" })
             ]
         }
@@ -60,9 +59,10 @@ extension WordNoteV2CandidateEdit {
     }
 
     private static func field<Field: Equatable>(
-        _ id: UUID, _ name: String, _ title: String, _ keyPath: WritableKeyPath<Self, Field>, display: @escaping (Field) -> String
+        _ id: UUID, _ name: String, _ title: String, _ titleContext: String, _ keyPath: WritableKeyPath<Self, Field>,
+        localizesValues: Bool = false, display: @escaping (Field) -> String
     ) -> WordNoteEditField<[Self]> {
-        WordNoteEditField("\(id).\(name)", title: title,
+        WordNoteEditField("\(id).\(name)", title: title, titleContext: titleContext, localizesValues: localizesValues,
                           value: { values in values.first(where: { $0.id == id }).map { $0[keyPath: keyPath] } },
                           update: { field, values in
                               guard let field, let index = values.firstIndex(where: { $0.id == id }) else { return }

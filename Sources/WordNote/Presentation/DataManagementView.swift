@@ -20,8 +20,8 @@ struct DataManagementView: View {
                 .disabled(protection.isWorking || protection.isRestoring)
 
                 if protection.isWorking { ProgressView().controlSize(.small) }
-                if let message = protection.statusMessage { StatusBanner(message: message, kind: .success) }
-                if let message = protection.errorMessage { StatusBanner(message: message, kind: .warning) }
+                if let notice = protection.statusNotice { StatusBanner(message: AppLocalization.dataNotice(notice), kind: .success) }
+                if let notice = protection.errorNotice { StatusBanner(message: AppLocalization.dataNotice(notice), kind: .warning) }
                 if let localError { StatusBanner(message: localError, kind: .warning) }
                 if protection.unreadableBackupCount > 0 {
                     StatusBanner(message: AppLocalization.format("%lld backup files could not be verified and were left untouched.", protection.unreadableBackupCount), kind: .warning)

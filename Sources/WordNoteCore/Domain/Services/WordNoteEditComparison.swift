@@ -28,6 +28,8 @@ public enum WordNoteEditChoice: String, CaseIterable, Sendable {
 public struct WordNoteEditDifference: Identifiable, Equatable, Sendable {
     public let id: String
     public let title: String
+    public let titleContext: String?
+    public let localizesValues: Bool
     public let baseline: String
     public let mine: String
     public let stored: String
@@ -45,20 +47,22 @@ public struct WordNoteEditField<Value> {
     private let copy: ((Value, inout Value) -> Void)?
 
     public init<Field: Equatable>(
-        _ id: String, title: String, keyPath: WritableKeyPath<Value, Field>, display: @escaping (Field) -> String
+        _ id: String, title: String, titleContext: String? = nil, localizesValues: Bool = false,
+        keyPath: WritableKeyPath<Value, Field>, display: @escaping (Field) -> String
     ) {
-        self.init(id, title: title, value: { $0[keyPath: keyPath] },
+        self.init(id, title: title, titleContext: titleContext, localizesValues: localizesValues, value: { $0[keyPath: keyPath] },
                   update: { field, value in value[keyPath: keyPath] = field }, display: display)
     }
 
     public init<Field: Equatable>(
-        _ id: String, title: String, value: @escaping (Value) -> Field,
+        _ id: String, title: String, titleContext: String? = nil, localizesValues: Bool = false, value: @escaping (Value) -> Field,
         update: ((Field, inout Value) -> Void)? = nil, display: @escaping (Field) -> String
     ) {
         self.id = id
         difference = { baseline, local, current in
             let old = value(baseline), mine = value(local), stored = value(current)
-            return WordNoteEditDifference(id: id, title: title, baseline: display(old), mine: display(mine), stored: display(stored),
+            return WordNoteEditDifference(id: id, title: title, titleContext: titleContext, localizesValues: localizesValues,
+                                          baseline: display(old), mine: display(mine), stored: display(stored),
                                           localChanged: mine != old, storedChanged: stored != old,
                                           isConflict: mine != old && stored != old && mine != stored, isEditable: update != nil)
         }

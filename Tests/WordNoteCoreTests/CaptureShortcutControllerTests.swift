@@ -57,10 +57,12 @@ final class CaptureShortcutControllerTests: XCTestCase {
         XCTAssertEqual(defaults.data(forKey: CaptureShortcutController.storageKey), saved)
         XCTAssertNotNil(controller.errorMessage)
         XCTAssertFalse(backend.events.contains("unregister:1"))
+        XCTAssertEqual(controller.error as? CaptureShortcutError, .registrationFailed(-9878))
         backend.registrationError = nil
         controller.apply(.init(shortcut: .init(key: .f1)))
         XCTAssertEqual(controller.activeShortcut?.key, .f1)
         XCTAssertNil(controller.errorMessage)
+        XCTAssertNil(controller.error)
     }
 
     func testStartupConflictCanRetryWithoutChangingPreference() {
@@ -158,6 +160,7 @@ final class CaptureShortcutControllerTests: XCTestCase {
         XCTAssertEqual(controller.activeShortcut, .init())
         XCTAssertNotNil(controller.errorMessage)
         XCTAssertNil(defaults.data(forKey: CaptureShortcutController.storageKey))
+        XCTAssertEqual(controller.error as? CaptureShortcutError, .removalFailed(-50))
     }
 
     func testFailedCleanupIsRetriedAndInactiveRegistrationNeverFires() {

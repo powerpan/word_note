@@ -76,7 +76,7 @@ private struct DraftDifferenceRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text(AppLocalization.text(row.title)).font(.subheadline.bold())
+                Text(AppLocalization.comparisonTitle(row)).font(.subheadline.bold())
                 Spacer()
                 if row.requiresChoice {
                     Picker("Use value", selection: $choice) {
@@ -108,7 +108,7 @@ private struct DraftDifferenceRow: View {
     private func column(_ title: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(AppLocalization.text(title)).font(.caption).foregroundStyle(.secondary)
-            Text(value.isEmpty ? AppLocalization.text("(Empty)") : value).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+            Text(AppLocalization.comparisonValue(value, in: row)).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
         }.frame(maxWidth: .infinity, alignment: .leading)
     }
 }

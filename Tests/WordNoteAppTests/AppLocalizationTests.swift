@@ -82,6 +82,58 @@ final class AppLocalizationTests: XCTestCase {
         #endif
     }
 
+    func testDataNoticesLocalizeCountsWithoutTranslatingDiagnostics() {
+        XCTAssertEqual(AppLocalization.dataNotice(.vocabularyExported(count: 18), language: .simplifiedChinese), "已导出 18 个词条。")
+        XCTAssertEqual(AppLocalization.dataNotice(.analysisResumed(count: 2), language: .traditionalChinese), "已恢復 2 個待分析請求。")
+        XCTAssertEqual(AppLocalization.dataNotice(.message("Backup saved."), language: .english), "Backup saved.")
+        for language in AppLanguage.allCases {
+            let diagnostic = "Settings / 100% / %@ / 中文"
+            let rendered = AppLocalization.dataNotice(.automaticBackupFailed(diagnostic: diagnostic), language: language)
+            XCTAssertTrue(rendered.hasSuffix(diagnostic))
+        }
+    }
+
+    func testShortcutErrorsTranslateActionsAndKeepNativeCodes() {
+        XCTAssertEqual(AppLocalization.shortcutError(CaptureShortcutError.registrationFailed(-9878), language: .simplifiedChinese),
+                       "无法注册快捷键（macOS 错误 -9878），可能已被其他应用占用。")
+        XCTAssertEqual(AppLocalization.shortcutError(CaptureShortcutError.removalFailed(-50), language: .traditionalChinese),
+                       "無法釋放原快捷鍵（macOS 錯誤 -50），請重試或重新啟動 Word Note。")
+        let unknown = NSError(domain: "Test", code: 1, userInfo: [NSLocalizedDescriptionKey: "Settings"])
+        XCTAssertEqual(AppLocalization.shortcutError(unknown, language: .simplifiedChinese), "Settings")
+    }
+
+    @MainActor
+    func testComparisonLocalizesOnlyLabelsNotIdenticalUserContent() throws {
+        let original = WordNoteTermEditValues(termText: "Original")
+        let draft = WordNoteEditDraft(original, revision: 0)
+        draft.value.termText = "High"
+        draft.value.chineseMeaning = "Settings"
+        draft.value.importance = .high
+        let comparison = try WordNoteEditComparison(draft: draft, current: .init(original, revision: 0),
+                                                    fields: WordNoteTermEditValues.comparisonFields(courseNames: [:]))
+        let term = try XCTUnwrap(comparison.differences.first { $0.id == "term" })
+        let chinese = try XCTUnwrap(comparison.differences.first { $0.id == "chinese" })
+        let importance = try XCTUnwrap(comparison.differences.first { $0.id == "importance" })
+        XCTAssertEqual(AppLocalization.comparisonValue(term.mine, in: term, language: .simplifiedChinese), "High")
+        XCTAssertEqual(AppLocalization.comparisonValue(chinese.mine, in: chinese, language: .traditionalChinese), "Settings")
+        XCTAssertEqual(AppLocalization.comparisonValue(importance.mine, in: importance, language: .simplifiedChinese),
+                       AppLocalization.text("High", language: .simplifiedChinese))
+        XCTAssertNotEqual(AppLocalization.comparisonValue(importance.mine, in: importance, language: .simplifiedChinese), "High")
+    }
+
+    @MainActor
+    func testComparisonContextIsNotTreatedAsAResourceKey() throws {
+        let original = WordNoteTermEditValues(termText: "old")
+        let draft = WordNoteEditDraft(original, revision: 0)
+        draft.value.termText = "new"
+        let field = WordNoteEditField<WordNoteTermEditValues>("term", title: "Term", titleContext: "Settings / %@",
+                                                            keyPath: \.termText, display: { $0 })
+        let comparison = try WordNoteEditComparison(draft: draft, current: .init(original, revision: 0), fields: [field])
+        let row = try XCTUnwrap(comparison.differences.first)
+        XCTAssertEqual(AppLocalization.comparisonTitle(row, language: .traditionalChinese),
+                       "Settings / %@ / " + AppLocalization.text("Term", language: .traditionalChinese))
+    }
+
     private func catalog(_ language: AppLanguage) throws -> [String: String] {
         let url = try XCTUnwrap(AppLocalization.bundle(for: language).url(forResource: "Localizable", withExtension: "strings"))
         return try XCTUnwrap(PropertyListSerialization.propertyList(from: Data(contentsOf: url), format: nil) as? [String: String])

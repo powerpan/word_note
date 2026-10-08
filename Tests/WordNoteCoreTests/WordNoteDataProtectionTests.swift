@@ -54,6 +54,8 @@ final class WordNoteDataProtectionTests: XCTestCase {
         try await h.controller.exportVocabulary(terms: selected, courses: before.courses, to: url)
         XCTAssertEqual(try Data(contentsOf: url), VocabularyCSVExporter.export(terms: selected, courses: before.courses))
         XCTAssertEqual(try snapshot(h), before)
+        XCTAssertEqual(h.controller.statusNotice, .vocabularyExported(count: 1))
+        XCTAssertEqual(h.controller.statusMessage, "Exported 1 vocabulary entries.")
     }
 
     func testPreviewFailureDoesNotCreateBackupOrPauseCurrentData() async throws {
@@ -218,6 +220,9 @@ final class WordNoteDataProtectionTests: XCTestCase {
         XCTAssertEqual(calls, 0)
         XCTAssertEqual(try WordNoteSnapshotPayload.capture(from: reopened.container.mainContext, preferences: preview.snapshot.payload.preferences), preview.snapshot.payload.canonicalized)
         try controller.resumeAnalysis()
+        XCTAssertEqual(controller.statusNotice, .analysisResumed(count: 1))
+        XCTAssertEqual(controller.statusMessage, "Resumed 1 pending analysis requests.")
+        XCTAssertNil(controller.errorNotice)
         try await queue.waitUntilIdle()
         XCTAssertEqual(calls, 1)
         XCTAssertFalse(try h.store.open().analysisRequiresResume)
@@ -238,6 +243,18 @@ final class WordNoteDataProtectionTests: XCTestCase {
         XCTAssertEqual(h.controller.snapshots.count, 2)
         await h.controller.checkAutomaticBackup(now: start.addingTimeInterval(172_800))
         XCTAssertEqual(h.controller.snapshots.count, 2)
+    }
+
+    func testAutomaticBackupFailureRetainsDiagnosticSeparatelyFromPresentation() async throws {
+        let h = try harness(vaultFault: { checkpoint in
+            if checkpoint == .snapshotWrite { throw POSIXError(.ENOSPC) }
+        })
+        await h.controller.checkAutomaticBackup()
+        let diagnostic = POSIXError(.ENOSPC).localizedDescription
+        XCTAssertEqual(h.controller.errorNotice, .automaticBackupFailed(diagnostic: diagnostic))
+        XCTAssertEqual(h.controller.errorMessage, "Automatic backup failed: \(diagnostic)")
+        XCTAssertFalse(h.controller.isWorking)
+        XCTAssertTrue(h.controller.snapshots.isEmpty)
     }
 
     func testAutomaticBackupSaveObservationWorksWithoutAnyView() async throws {

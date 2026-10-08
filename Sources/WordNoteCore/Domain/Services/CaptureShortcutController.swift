@@ -7,7 +7,8 @@ public final class CaptureShortcutController {
     public static let storageKey = "captureShortcut.v1"
     public private(set) var configuration: CaptureShortcutConfiguration
     public private(set) var activeShortcut: CaptureShortcut?
-    public private(set) var errorMessage: String?
+    public private(set) var error: (any Error)?
+    public var errorMessage: String? { error?.localizedDescription }
     public private(set) var isAvailable = true
     @ObservationIgnored private let backend: any CaptureShortcutBackend
     @ObservationIgnored private let defaults: UserDefaults
@@ -27,7 +28,7 @@ public final class CaptureShortcutController {
                 configuration = saved
             } else {
                 configuration = .init(enabled: false)
-                errorMessage = CaptureShortcutError.invalidSavedConfiguration.localizedDescription
+                error = CaptureShortcutError.invalidSavedConfiguration
             }
         } else { configuration = .init() }
     }
@@ -83,8 +84,8 @@ public final class CaptureShortcutController {
             }
             configuration = proposed
             if persist { defaults.set(data, forKey: Self.storageKey) }
-            errorMessage = nil
-        } catch { errorMessage = error.localizedDescription }
+            error = nil
+        } catch { self.error = error }
     }
 
     private func handleKey(_ pressed: Bool, registrationID: UInt32) {
@@ -108,6 +109,6 @@ public final class CaptureShortcutController {
             if let activeID { try backend.unregister(activeID) }
             activeID = nil
             activeShortcut = nil
-        } catch { errorMessage = error.localizedDescription }
+        } catch { self.error = error }
     }
 }

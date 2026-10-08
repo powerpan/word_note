@@ -47,7 +47,7 @@ struct CaptureShortcutSettings: View {
                             .labelStyle(.iconOnly).help("Retry saved shortcut").disabled(!controller.isAvailable)
                     }
                 }
-                if !draft.isValid { Text(CaptureShortcutError.invalidCombination.localizedDescription).foregroundStyle(.secondary) }
+                if !draft.isValid { Text(AppLocalization.shortcutError(CaptureShortcutError.invalidCombination)).foregroundStyle(.secondary) }
                 if !controller.isAvailable {
                     Label("Unavailable during data maintenance", systemImage: "pause.circle")
                 } else if let active = controller.activeShortcut {
@@ -55,7 +55,7 @@ struct CaptureShortcutSettings: View {
                 } else {
                     Label(controller.configuration.enabled ? "Not registered" : "Disabled", systemImage: "keyboard")
                 }
-                if let error = controller.errorMessage { StatusBanner(message: error, kind: .warning) }
+                if let error = controller.error { StatusBanner(message: AppLocalization.shortcutError(error), kind: .warning) }
             }.padding(.vertical, 4)
         }
         .groupBoxStyle(WordNoteGroupBoxStyle())
@@ -63,7 +63,7 @@ struct CaptureShortcutSettings: View {
     }
 
     private func modifier(_ title: String, _ value: CaptureShortcut.Modifiers) -> some View {
-        Toggle(title, isOn: Binding(get: { draft.shortcut.modifiers.contains(value) }, set: { enabled in
+        Toggle(AppLocalization.text(title), isOn: Binding(get: { draft.shortcut.modifiers.contains(value) }, set: { enabled in
             if enabled { draft.shortcut.modifiers.insert(value) } else { draft.shortcut.modifiers.remove(value) }
         })).toggleStyle(.checkbox)
     }

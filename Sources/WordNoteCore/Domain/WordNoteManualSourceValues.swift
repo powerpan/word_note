@@ -25,10 +25,10 @@ public struct WordNoteManualSourceValues: Equatable, Sendable {
             .init("course", title: "Source Course", value: { $0.courseID }, display: { id in
                 id.map { courseNames[$0] ?? "Missing course [\($0.uuidString.prefix(8))]" } ?? "No Course"
             }),
-            .init("source", title: "Source Type", value: { $0.source }, display: { SourceType(rawValue: $0)?.displayTitle ?? $0 }),
-            .init("direction", title: "Lookup Direction", value: { $0.direction }, display: { LookupDirection(rawValue: $0)?.displayTitle ?? $0 }),
-            .init("status", title: "Record Status", value: { $0.status }, display: { InputRecordStatus(rawValue: $0)?.displayTitle ?? $0 }),
-            .init("queue", title: "Analysis Status", value: { $0.queueState }, display: queueTitle),
+            .init("source", title: "Source Type", localizesValues: true, value: { $0.source }, display: { SourceType(rawValue: $0)?.displayTitle ?? $0 }),
+            .init("direction", title: "Lookup Direction", localizesValues: true, value: { $0.direction }, display: { LookupDirection(rawValue: $0)?.displayTitle ?? $0 }),
+            .init("status", title: "Record Status", localizesValues: true, value: { $0.status }, display: { InputRecordStatus(rawValue: $0)?.displayTitle ?? $0 }),
+            .init("queue", title: "Analysis Status", localizesValues: true, value: { $0.queueState }, display: queueTitle),
             .init("generation", title: "Analysis Generation", value: { $0.generation }, display: String.init)
         ]
     }

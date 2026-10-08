@@ -723,3 +723,9 @@
 "Your existing data has not been deleted. Restore from the backup directory or repair the store before continuing." = "現有數據未被刪除。繼續前，請從備份目錄恢復或修複數據庫。";
 "保存並加入 AI 分析隊列後，最新一次分析完成的釋義會臨時顯示在這裡。切換欄目或退出 App 後不保留。" = "最新分析結果";
 "：%@" = "：%@";
+"Automatic backup failed: %@" = "自動備份失敗：%@";
+"Resumed %lld pending analysis requests." = "已恢復 %lld 個待分析請求。";
+"The shortcut could not be registered (macOS error %d). It may be in use by another app." = "無法註冊快捷鍵（macOS 錯誤 %d），可能已被其他應用佔用。";
+"The previous shortcut could not be released (macOS error %d). Retry or restart Word Note." = "無法釋放原快捷鍵（macOS 錯誤 %d），請重試或重新啟動 Word Note。";
+"AI / CS Context" = "AI / 計算機語境";
+"Revision" = "修訂版本";

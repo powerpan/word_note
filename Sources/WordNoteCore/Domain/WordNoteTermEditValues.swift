@@ -36,7 +36,7 @@ public struct WordNoteTermEditValues: Equatable, Sendable {
     public static func comparisonFields(courseNames: [UUID: String]) -> [WordNoteEditField<Self>] {
         [
             .init("term", title: "Term", keyPath: \.termText, display: { $0 }),
-            .init("type", title: "Type", keyPath: \.termType, display: { $0.displayTitle }),
+            .init("type", title: "Type", localizesValues: true, keyPath: \.termType, display: { $0.displayTitle }),
             .init("chinese", title: "Chinese", keyPath: \.chineseMeaning, display: { $0 }),
             .init("english", title: "English", keyPath: \.englishDefinition, display: { $0 }),
             .init("technical", title: "AI / CS Context", keyPath: \.aiContextExplanation, display: { $0 }),
@@ -45,10 +45,10 @@ public struct WordNoteTermEditValues: Equatable, Sendable {
             .init("courses", title: "Courses", keyPath: \.courseIDs, display: { ids in
                 ids.map { courseNames[$0] ?? "Missing course [\($0.uuidString.prefix(8))]" }.sorted().joined(separator: "\n")
             }),
-            .init("source", title: "Source", keyPath: \.sourceType, display: { $0.displayTitle }),
-            .init("category", title: "Category", keyPath: \.category, display: { $0.displayTitle }),
-            .init("importance", title: "Importance", keyPath: \.importance, display: { $0.displayTitle }),
-            .init("mastery", title: "Mastery", keyPath: \.masteryLevel, display: { $0.displayTitle })
+            .init("source", title: "Source", localizesValues: true, keyPath: \.sourceType, display: { $0.displayTitle }),
+            .init("category", title: "Category", localizesValues: true, keyPath: \.category, display: { $0.displayTitle }),
+            .init("importance", title: "Importance", localizesValues: true, keyPath: \.importance, display: { $0.displayTitle }),
+            .init("mastery", title: "Mastery", localizesValues: true, keyPath: \.masteryLevel, display: { $0.displayTitle })
         ]
     }
 }

@@ -25,6 +25,22 @@ public enum WordNoteDataOperationError: LocalizedError {
     }
 }
 
+public enum WordNoteDataNotice: Equatable, Sendable {
+    case message(String)
+    case automaticBackupFailed(diagnostic: String)
+    case vocabularyExported(count: Int)
+    case analysisResumed(count: Int)
+
+    public var message: String {
+        switch self {
+        case .message(let text): text
+        case .automaticBackupFailed(let diagnostic): "Automatic backup failed: \(diagnostic)"
+        case .vocabularyExported(let count): "Exported \(count) vocabulary entries."
+        case .analysisResumed(let count): "Resumed \(count) pending analysis requests."
+        }
+    }
+}
+
 @MainActor
 @Observable
 public final class WordNoteDataProtection {
@@ -39,8 +55,10 @@ public final class WordNoteDataProtection {
             if (oldValue == .idle) != (restorePhase == .idle) { restoreStateDidChange?(isRestoring) }
         }
     }
-    public private(set) var statusMessage: String?
-    public private(set) var errorMessage: String?
+    public private(set) var statusNotice: WordNoteDataNotice?
+    public private(set) var errorNotice: WordNoteDataNotice?
+    public var statusMessage: String? { statusNotice?.message }
+    public var errorMessage: String? { errorNotice?.message }
     public var isRestoring: Bool { restorePhase != .idle }
     public var analysisRequiresResume: Bool { queue.isSuspended }
     public let backupDirectoryURL: URL
@@ -110,13 +128,13 @@ public final class WordNoteDataProtection {
         self.learningPreferences = learningPreferences
         if session.analysisRequiresResume { queue.suspendForRestore() }
         switch session.restoreOutcome {
-        case .restored: statusMessage = "Backup restored. The previous data store was retained."
-        case .migrated: statusMessage = "Data upgrade completed. The previous data store and backup were retained."
-        case .repaired: statusMessage = "Data repair completed. The original data store and repair evidence were retained."
-        case .rolledBack: errorMessage = "Restore did not complete. The previous data store is still active."
+        case .restored: statusNotice = .message("Backup restored. The previous data store was retained.")
+        case .migrated: statusNotice = .message("Data upgrade completed. The previous data store and backup were retained.")
+        case .repaired: statusNotice = .message("Data repair completed. The original data store and repair evidence were retained.")
+        case .rolledBack: errorNotice = .message("Restore did not complete. The previous data store is still active.")
         case .none: break
         }
-        if session.recoveryRequired != nil { errorMessage = "A data switch did not complete. The previous data store is still active." }
+        if session.recoveryRequired != nil { errorNotice = .message("A data switch did not complete. The previous data store is still active.") }
     }
 
     public func startAutomaticBackups() {
@@ -156,7 +174,7 @@ public final class WordNoteDataProtection {
     public func refresh() async {
         guard !isWorking else { return }
         do { try await updateInventory() }
-        catch { errorMessage = error.localizedDescription }
+        catch { errorNotice = .message(error.localizedDescription) }
     }
 
     public func checkAutomaticBackup(now: Date = Date()) async {
@@ -184,12 +202,12 @@ public final class WordNoteDataProtection {
             automaticNeedsCheck = changeRevision != revision || result?.retentionNeedsAttention == true
             automaticCheckNotBefore = now
             if let result {
-                statusMessage = "Automatic backup saved."
-                if result.retentionNeedsAttention { errorMessage = "Backup saved, but automatic backup cleanup needs attention." }
+                statusNotice = .message("Automatic backup saved.")
+                if result.retentionNeedsAttention { errorNotice = .message("Backup saved, but automatic backup cleanup needs attention.") }
             }
             try await updateInventory()
         } catch {
-            errorMessage = "Automatic backup failed: \(error.localizedDescription)"
+            errorNotice = .automaticBackupFailed(diagnostic: error.localizedDescription)
         }
     }
 
@@ -197,8 +215,8 @@ public final class WordNoteDataProtection {
         try await perform {
             let payload = try await self.currentSnapshot()
             let result = try await self.vault.create(payload, kind: .manual)
-            self.statusMessage = "Backup saved."
-            if result.retentionNeedsAttention { self.errorMessage = "Backup saved, but automatic backup cleanup needs attention." }
+            self.statusNotice = .message("Backup saved.")
+            if result.retentionNeedsAttention { self.errorNotice = .message("Backup saved, but automatic backup cleanup needs attention.") }
             try await self.updateInventory()
         }
     }
@@ -208,7 +226,7 @@ public final class WordNoteDataProtection {
             try self.validateExportDestination(url)
             if let id { try await self.vault.exportSnapshot(id: id, to: url) }
             else { try await self.vault.exportSnapshot(self.currentSnapshot(), to: url) }
-            self.statusMessage = "Complete JSON backup exported."
+            self.statusNotice = .message("Complete JSON backup exported.")
         }
     }
 
@@ -220,7 +238,7 @@ public final class WordNoteDataProtection {
             try self.validateExportDestination(url)
             if self.schemaVersion != .v1, courseMemberships == nil { throw WordNoteV2ContentError.invalidValue }
             try await self.vault.exportCSV(terms: terms, courses: courses, courseMemberships: courseMemberships, to: url)
-            self.statusMessage = "Exported \(terms.count) vocabulary entries."
+            self.statusNotice = .vocabularyExported(count: terms.count)
         }
     }
 
@@ -255,7 +273,7 @@ public final class WordNoteDataProtection {
         try await perform {
             try await self.vault.delete(id: id)
             try await self.updateInventory()
-            self.statusMessage = "Backup deleted. Active vocabulary was not changed."
+            self.statusNotice = .message("Backup deleted. Active vocabulary was not changed.")
         }
     }
 
@@ -269,12 +287,12 @@ public final class WordNoteDataProtection {
             _ = try validatedPreview(preview.snapshot)
             if schemaVersion != .v1, container.mainContext.hasChanges { throw WordNoteV2ContentError.unsavedChanges }
         } catch {
-            errorMessage = error.localizedDescription
+            errorNotice = .message(error.localizedDescription)
             throw error
         }
         isWorking = true
         restorePhase = .preparing
-        errorMessage = nil
+        errorNotice = nil
         defer { isWorking = false }
         do {
             // Persist the pause before awaiting any IO, so a crash cannot replay interrupted paid requests.
@@ -289,10 +307,10 @@ public final class WordNoteDataProtection {
             _ = try await vault.readVersionedSnapshot(id: protection.snapshot.id)
             try await store.prepareRestore(preview.snapshot, replacing: generation, protectedBy: protection.snapshot)
             restorePhase = .readyToQuit
-            statusMessage = "Restore prepared. Quit Word Note to complete the switch on next launch."
+            statusNotice = .message("Restore prepared. Quit Word Note to complete the switch on next launch.")
             try await updateInventory()
         } catch {
-            errorMessage = error.localizedDescription
+            errorNotice = .message(error.localizedDescription)
             do {
                 if try store.hasPreparedRestore(for: generation) { restorePhase = .readyToQuit }
                 else { try releaseRestoreGate() }
@@ -309,9 +327,9 @@ public final class WordNoteDataProtection {
         do {
             try store.cancelPreparedRestore(replacing: generation)
             try releaseRestoreGate()
-            statusMessage = "Restore cancelled. Pending analysis remains paused."
+            statusNotice = .message("Restore cancelled. Pending analysis remains paused.")
         } catch {
-            errorMessage = error.localizedDescription
+            errorNotice = .message(error.localizedDescription)
             throw error
         }
     }
@@ -322,12 +340,12 @@ public final class WordNoteDataProtection {
             // Versioned queues normalize interrupted attempts before clearing their durable pause.
             if schemaVersion == .v1 { try store.authorizeAnalysisResume(for: generation) }
             let count = try queue.resumePendingAnalyses()
-            statusMessage = "Resumed \(count) pending analysis requests."
-            errorMessage = nil
+            statusNotice = .analysisResumed(count: count)
+            errorNotice = nil
         } catch {
             try? store.requireAnalysisPause(for: generation)
             queue.suspendForRestore()
-            errorMessage = error.localizedDescription
+            errorNotice = .message(error.localizedDescription)
             throw error
         }
     }
@@ -384,11 +402,11 @@ public final class WordNoteDataProtection {
     private func perform<T>(_ operation: () async throws -> T) async throws -> T {
         guard !isWorking, !isRestoring else { throw WordNoteDataOperationError.busy }
         isWorking = true
-        errorMessage = nil
+        errorNotice = nil
         defer { isWorking = false }
         do { return try await operation() }
         catch {
-            errorMessage = error.localizedDescription
+            errorNotice = .message(error.localizedDescription)
             throw error
         }
     }
