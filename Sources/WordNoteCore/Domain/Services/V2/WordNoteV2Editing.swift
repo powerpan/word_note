@@ -133,7 +133,10 @@ extension WordNoteV2ContentService {
     }
 
     public func ignoreInputRecord(_ id: UUID, expectedRevision: Int, at date: Date = Date()) throws {
-        try transaction {
+        try undoableTransaction("Ignore Input Record", scope: {
+            let ids = Set(try fetch(Candidate.self).filter { $0.inputRecordID == id && $0.status == .pending }.map(\.id))
+            return .init(records: [id], candidates: ids)
+        }) {
             try validateDate(date)
             let source = try record(id)
             try requireRevision(source.revision, expectedRevision)

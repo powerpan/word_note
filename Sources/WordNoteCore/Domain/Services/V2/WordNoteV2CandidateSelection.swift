@@ -34,7 +34,7 @@ extension WordNoteV2ContentService {
     }
 
     public func ignoreCandidates(_ selections: [WordNoteV2CandidateSelection], at date: Date = Date()) throws {
-        try transaction {
+        try undoableTransaction("Ignore Candidates", scope: { try undoScope(candidateIDs: Set(selections.map(\.id))) }) {
             try validateDate(date)
             try validateSelections(selections)
             let selectedIDs = Set(selections.map(\.id))

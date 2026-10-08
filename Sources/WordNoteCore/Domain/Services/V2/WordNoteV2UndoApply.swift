@@ -71,9 +71,14 @@ extension WordNoteV2ContentService {
         }
         for value in before.content.inputRecords {
             let model = try record(value.id)
-            // Editing/confirmation only changes curation status and revision on the source.
+            guard let state = before.recordStates.first(where: { $0.id == value.id }) else {
+                throw WordNoteV2UndoError.changedSinceSave
+            }
+            let revision = try increment(model.revision)
+            // Ignoring an input also clears its inactive task state and provider retry deadline.
             model.statusRaw = value.statusRaw
-            model.revision = try increment(model.revision)
+            state.apply(to: model)
+            model.revision = revision
             model.updatedAt = date
         }
 

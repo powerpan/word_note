@@ -475,6 +475,14 @@ A04 編輯保護：每個主窗口持有 `WordNoteEditProtection`，表單使用
 
 工具列和 Edit 菜單使用相同 `operationID` 校驗；若離開確認中的 Save 或另一窗口保存替換了 receipt，舊 Undo 動作會拒絕，不誤撤新保存。無 redo、跨重啟歷史、永久刪除或復習撤銷，也不取代輸入框的 Command-Z。新增可撤銷操作時必須同時擴充 scope、還原字段和依賴測試，不能直接套用到關係字段編輯。詳見 [安全撤銷記錄](qa/2026-10-08-a04-safe-undo.md)。
 
+### Inbox 閱讀與連續整理
+
+B01 的 `InboxBrowseIndex` 在 MainActor 將記錄與按 inputRecordID 分組的候選轉為不可變 DTO，預計算簡繁中文/英文搜索鍵。記錄/候選 ID 或 revision 變更重建；搜索/課程/來源/狀態變化只重算可見結果。篩選課程是捕獲記錄的 courseID，與詞庫 membership 不混用。queued/running 與 ignored 不进入主列表，completed 進 Handled；同一項可同時有 pending 候選與 failed 任務。
+
+`InboxSelection` 管理當前焦點與可見、可處理的批選 ID；以舊列表鄰項決定下一條，切範圍清批選。`InboxCandidateSelection` 只在首次出現 pending 時初始化推薦勾選，此後只刪除已處理 ID、不自動選新項。A04 保護完成後重新獲取當前 revision/generation，完整範圍仍有效才生成 A05 預覽；預覽由 Inbox 根視圖持有，與可替換的記錄詳情分離。不得把勾選當作提前寫庫。
+
+候選/整條输入的 ignore 經 `undoableTransaction`，scope 包含來源與受影響 pending 候選；既有 saved 候選是引用校驗依賴，不因撤銷重新覆寫。`applyUndo` 還原來源 curation 和 RecordState，同時從當前 revision 遞增，修補原先僅還原 status 會丟失失敗/取消任務及 provider deadline 的缺口。queued/running 來源本來就禁止整理，撤銷不啟動分析、不清除計費或憑空重發請求。取消 running 的對話框凍結 job revision，實際取消仍走隊列校驗。見 [B01 證據](qa/2026-10-08-b01-inbox-workflow.md)。
+
 ### 詞庫閱讀與批量整理
 
 A06 的 `VocabularyBrowseIndex` 僅持有不可變 DTO 和預計算的中英文搜索鍵、標籤鍵及真實再次查詢日期，不捕獲 SwiftData 模型。V2 頁面在詞 ID/revision、membership 或 LookupEvent 改動時重建索引；查詢/篩選/排序變化時集中計算可見結果，不在每個行或按鈕重繪時重複整庫排序。60 秒時計刷新活動篩選；ID 選擇由純值 `VocabularySelection` 管理。全文仍交給閱讀投影，列表摘要只影響展示，不寫回資料。索引建構和讀取仍在 MainActor；10,000 詞的核心數值測量不是包含 SwiftData/渲染的 200 ms UI 驗收。

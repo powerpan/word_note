@@ -2,6 +2,11 @@ import SwiftData
 import SwiftUI
 import WordNoteCore
 
+#if WORDNOTE_V2_VALIDATION
+struct InboxView: View {
+    var body: some View { V2InboxView() }
+}
+#else
 struct InboxView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.savedChangeHistory) private var undoHistory
@@ -447,3 +452,4 @@ private enum InboxLayoutMetrics {
         min(max(contentWidth * 0.36, minListWidth), maxListWidth)
     }
 }
+#endif

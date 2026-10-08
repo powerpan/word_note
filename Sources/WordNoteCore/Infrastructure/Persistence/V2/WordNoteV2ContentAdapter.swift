@@ -50,7 +50,7 @@ extension WordNoteSnapshotPayload.InputRecord {
 }
 
 extension WordNoteSnapshotPayload.Candidate {
-    init(_ model: WordNoteSchemaV2.CandidateTermModel) {
+    public init(_ model: WordNoteSchemaV2.CandidateTermModel) {
         id = model.id
         inputRecordID = model.inputRecordID
         term = model.term

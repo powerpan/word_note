@@ -6,6 +6,7 @@ struct V2AnalysisTasksView: View {
     let queue: WordNoteV2AnalysisQueue
     @State private var expanded = false
     @State private var errorMessage: String?
+    @State private var pendingCancellation: WordNoteV2AnalysisJob?
 
     var body: some View {
         if !queue.jobs.isEmpty || queue.isSuspended {
@@ -23,7 +24,10 @@ struct V2AnalysisTasksView: View {
                                     Text(job.rawText).lineLimit(1)
                                     Spacer()
                                     if job.state == .queued || job.state == .running {
-                                        Button { perform { try queue.cancel(job.id, expectedRevision: job.revision) } } label: { Image(systemName: "xmark.circle") }
+                                        Button {
+                                            if job.state == .running { pendingCancellation = job }
+                                            else { perform { try queue.cancel(job.id, expectedRevision: job.revision) } }
+                                        } label: { Image(systemName: "xmark.circle") }
                                             .help("Cancel analysis").accessibilityLabel("Cancel analysis")
                                     } else {
                                         Button { perform { try queue.retry(job.id, expectedRevision: job.revision) } } label: { Image(systemName: "arrow.clockwise") }
@@ -48,6 +52,11 @@ struct V2AnalysisTasksView: View {
             }
             .padding(14)
             .background(WordNoteTheme.surface)
+            .confirmationDialog("Stop waiting for this analysis?", isPresented: Binding(
+                get: { pendingCancellation != nil }, set: { if !$0 { pendingCancellation = nil } }
+            ), presenting: pendingCancellation) { job in
+                Button("Stop Local Analysis") { perform { try queue.cancel(job.id, expectedRevision: job.revision) } }
+            } message: { _ in Text("A request already sent to DeepSeek may still be billed. Its result will not be applied after cancellation.") }
         }
     }
 

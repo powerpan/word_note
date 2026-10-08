@@ -10,17 +10,29 @@ struct V2CandidateDraftEditor: View {
     let record: InputRecordModel
     @Binding var selectedIDs: Set<UUID>
     @Binding var editedIDs: Set<UUID>
+    let editingIDs: Set<UUID>?
+    let existingTerms: Set<String>
+    let onToggleEditing: (UUID) -> Void
+    let onConfirm: (UUID) -> Void
+    let onIgnore: (UUID) -> Void
     @State private var draftID = UUID()
     @State private var values: WordNoteEditDraft<[WordNoteV2CandidateEdit]>
     private var drafts: [WordNoteV2CandidateEdit] { get { values.value } nonmutating set { values.value = newValue } }
     private var original: [WordNoteV2CandidateEdit] { get { values.baseline } nonmutating set { values.baseline = newValue } }
     @State private var errorMessage: String?
 
-    init(candidates: [CandidateTermModel], record: InputRecordModel, selectedIDs: Binding<Set<UUID>>, editedIDs: Binding<Set<UUID>>) {
+    init(candidates: [CandidateTermModel], record: InputRecordModel, selectedIDs: Binding<Set<UUID>>, editedIDs: Binding<Set<UUID>>,
+         editingIDs: Set<UUID>? = nil, existingTerms: Set<String> = [], onToggleEditing: @escaping (UUID) -> Void = { _ in },
+         onConfirm: @escaping (UUID) -> Void = { _ in }, onIgnore: @escaping (UUID) -> Void = { _ in }) {
         self.candidates = candidates
         self.record = record
         _selectedIDs = selectedIDs
         _editedIDs = editedIDs
+        self.editingIDs = editingIDs
+        self.existingTerms = existingTerms
+        self.onToggleEditing = onToggleEditing
+        self.onConfirm = onConfirm
+        self.onIgnore = onIgnore
         let values = candidates.map { WordNoteV2CandidateEdit($0, recordRevision: record.revision) }
         _values = State(initialValue: WordNoteEditDraft(values, revision: record.revision))
     }
@@ -35,10 +47,26 @@ struct V2CandidateDraftEditor: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             ForEach($values.value, id: \.id) { $draft in
-                V2CandidateEditorRow(draft: $draft, isSelected: Binding(
+                let selected = Binding(
                     get: { selectedIDs.contains(draft.id) },
                     set: { if $0 { selectedIDs.insert(draft.id) } else { selectedIDs.remove(draft.id) } }
-                ))
+                )
+                if (editingIDs?.contains(draft.id) ?? true) || changed.contains(where: { $0.id == draft.id }) {
+                    if editingIDs != nil {
+                        HStack {
+                            Text("Edit Candidate").font(.subheadline.weight(.semibold))
+                            Spacer()
+                            Button("Return to Reading", systemImage: "arrow.left") { onToggleEditing(draft.id) }
+                                .labelStyle(.iconOnly).help("Return to reading")
+                        }
+                    }
+                    V2CandidateEditorRow(draft: $draft, isSelected: selected)
+                } else {
+                    V2CandidateReadingRow(value: draft, isSelected: selected,
+                        hasExistingTerm: existingTerms.contains(TextNormalizer.normalized(draft.term)),
+                        onEdit: { onToggleEditing(draft.id) }, onConfirm: { onConfirm(draft.id) }, onIgnore: { onIgnore(draft.id) })
+                }
+                Divider()
             }
             if isDirty {
                 HStack {
