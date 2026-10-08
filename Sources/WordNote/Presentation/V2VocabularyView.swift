@@ -22,6 +22,7 @@ struct V2VocabularyView: View {
     @State private var now = Date()
     @State private var isLoaded = false
     #if WORDNOTE_V3_VALIDATION
+    @SceneStorage("workspace.vocabulary.width") private var listWidth = WorkspaceColumnRules.vocabulary.preferred
     @Query private var cards: [AppSchema.ReviewCardModel]
     @State private var cardIndex: ReviewCardLearningIndex?
     #endif
@@ -46,19 +47,7 @@ struct V2VocabularyView: View {
     private var effectiveBatch: Set<UUID> { selection.batchIDs.intersection(Set(visible.map(\.id))) }
 
     var body: some View {
-        GeometryReader { proxy in
-            HStack(spacing: 0) {
-                listPane.frame(width: min(max(proxy.size.width * 0.37, 310), 410))
-                Divider()
-                if let term = selectedTerm {
-                    V2TermDetailSurface(term: term, courses: courses, requestedCardID: viewState.openedCardID, onOrganize: { organize([term.id]) })
-                        .id(term.id).frame(minWidth: 400, maxWidth: .infinity, maxHeight: .infinity)
-                } else {
-                    EmptyStateView(systemImage: "book", title: openedTermID == nil ? "No Term Selected" : "Term No Longer Available", message: "") { EmptyView() }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
-            }
-        }
+        columns
         .frame(minWidth: 800, minHeight: 600)
         .onAppear { rebuildIndex(); openCapturedTerm() }
         .onChange(of: captureNavigation?.pending) { openCapturedTerm() }
@@ -87,6 +76,34 @@ struct V2VocabularyView: View {
         .alert("Vocabulary Export", isPresented: Binding(get: { exportMessage != nil }, set: { if !$0 { exportMessage = nil } })) {
             Button("OK", role: .cancel) {}
         } message: { Text(exportMessage ?? "") }
+    }
+
+    @ViewBuilder private var columns: some View {
+        #if WORDNOTE_V3_VALIDATION
+        WorkspaceSplitView(preferredWidth: $listWidth, rules: .vocabulary, label: "Vocabulary list width") {
+            listPane
+        } detail: {
+            detailPane
+        }
+        #else
+        GeometryReader { proxy in
+            HStack(spacing: 0) {
+                listPane.frame(width: min(max(proxy.size.width * 0.37, 310), 410))
+                Divider()
+                detailPane.frame(minWidth: selectedTerm == nil ? 0 : 400)
+            }
+        }
+        #endif
+    }
+
+    @ViewBuilder private var detailPane: some View {
+        if let term = selectedTerm {
+            V2TermDetailSurface(term: term, courses: courses, requestedCardID: viewState.openedCardID, onOrganize: { organize([term.id]) })
+                .id(term.id).frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            EmptyStateView(systemImage: "book", title: openedTermID == nil ? "No Term Selected" : "Term No Longer Available", message: "") { EmptyView() }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
     }
 
     private var listPane: some View {

@@ -13,6 +13,8 @@ struct ContentView: View {
     @Environment(\.openSettings) private var openSettings
     @State private var workspace = LearningWorkspace()
     @State private var initializedWorkspace = false
+    @SceneStorage("workspace.sidebar.width") private var sidebarWidth = WorkspaceColumnRules.sidebar.preferred
+    @SceneStorage("workspace.sidebar.hidden") private var sidebarHidden = false
     #endif
     @SceneStorage("sidebarSelection") private var selection: SidebarDestination = .dashboard
 
@@ -33,6 +35,14 @@ struct ContentView: View {
         GeometryReader { proxy in
             let sidebarPresentation = SidebarPresentation.presentation(for: proxy.size.width)
 
+            #if WORDNOTE_V3_VALIDATION
+            WorkspaceSplitView(preferredWidth: $sidebarWidth, rules: .sidebar, label: "Sidebar width",
+                fixedLeadingWidth: WorkspaceColumnRules.fixedSidebarWidth(hidden: sidebarHidden, available: proxy.size.width)) {
+                SidebarView(selection: protectedSelection, presentation: sidebarPresentation)
+            } detail: {
+                workspaceDetail
+            }
+            #else
             HStack(spacing: 0) {
                 SidebarView(selection: protectedSelection, presentation: sidebarPresentation)
                     .frame(
@@ -43,19 +53,6 @@ struct ContentView: View {
                     .layoutPriority(3)
 
                 VStack(spacing: 0) {
-                    #if WORDNOTE_V3_VALIDATION
-                    if workspace.canGoBack || workspace.errorMessage != nil {
-                        HStack {
-                            if workspace.canGoBack {
-                                Button("Back", systemImage: "chevron.left") { workspace.back(protection: editProtection) }
-                                    .labelStyle(.iconOnly).help("Back to previous view")
-                            }
-                            if let message = workspace.errorMessage { Text(message).font(.caption).foregroundStyle(.secondary) }
-                            Spacer()
-                        }.padding(.horizontal, 20).padding(.vertical, 8)
-                        Divider()
-                    }
-                    #endif
                     DetailRouter(selection: protectedSelection)
                 }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -63,12 +60,20 @@ struct ContentView: View {
                     .layoutPriority(1)
             }
             .animation(.smooth(duration: 0.18), value: sidebarPresentation)
+            #endif
         }
         .frame(minWidth: AppLayoutMetrics.minWindowWidth, minHeight: AppLayoutMetrics.minWindowHeight)
         .background(WordNoteTheme.canvas)
         .tint(WordNoteTheme.brand)
         #if WORDNOTE_V3_VALIDATION
         .environment(\.learningWorkspace, workspace)
+        .focusedSceneValue(\.workspaceSidebar, WorkspaceSidebarAction(isHidden: sidebarHidden, toggle: { sidebarHidden.toggle() }))
+        .toolbar {
+            ToolbarItem(placement: .navigation) {
+                Button(sidebarHidden ? "Show Sidebar" : "Hide Sidebar", systemImage: "sidebar.left") { sidebarHidden.toggle() }
+                    .labelStyle(.iconOnly).help(sidebarHidden ? "Show sidebar" : "Hide sidebar")
+            }
+        }
         .onAppear {
             if !initializedWorkspace { workspace.restoreDestination(selection); initializedWorkspace = true }
         }
@@ -85,6 +90,25 @@ struct ContentView: View {
         }
         #endif
     }
+
+    #if WORDNOTE_V3_VALIDATION
+    private var workspaceDetail: some View {
+        VStack(spacing: 0) {
+            if workspace.canGoBack || workspace.errorMessage != nil {
+                HStack {
+                    if workspace.canGoBack {
+                        Button("Back", systemImage: "chevron.left") { workspace.back(protection: editProtection) }
+                            .labelStyle(.iconOnly).help("Back to previous view")
+                    }
+                    if let message = workspace.errorMessage { Text(message).font(.caption).foregroundStyle(.secondary) }
+                    Spacer()
+                }.padding(.horizontal, 20).padding(.vertical, 8)
+                Divider()
+            }
+            DetailRouter(selection: protectedSelection)
+        }.background(WordNoteTheme.canvas)
+    }
+    #endif
 
     #if WORDNOTE_V2_VALIDATION || WORDNOTE_V3_VALIDATION
     private func openCapturedResult(_ target: CaptureResultTarget) -> Bool {
@@ -108,7 +132,7 @@ struct ContentView: View {
 private enum AppLayoutMetrics {
     static let minWindowWidth: CGFloat = 980
     static let minWindowHeight: CGFloat = 680
-    static let sidebarCompactBreakpoint: CGFloat = 1180
+    static let sidebarCompactBreakpoint: CGFloat = WorkspaceColumnRules.sidebarCompactBreakpoint
     static let expandedSidebarWidth: CGFloat = 232
     static let compactSidebarWidth: CGFloat = 72
 }

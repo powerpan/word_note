@@ -12,6 +12,7 @@ struct V3CoursesView: View {
     @State private var editing = false
     @State private var creating = false
     @State private var errorMessage: String?
+    @SceneStorage("workspace.courses.width") private var listWidth = WorkspaceColumnRules.courses.preferred
     private var selected: CourseModel? { courses.first { $0.id == workspace?.courseID } }
     private var termCount: Int { Set(links.filter { $0.courseID == selected?.id }.map(\.termID)).count }
     private var pendingCount: Int {
@@ -19,7 +20,7 @@ struct V3CoursesView: View {
     }
 
     var body: some View {
-        HStack(spacing: 0) {
+        WorkspaceSplitView(preferredWidth: $listWidth, rules: .courses, label: "Course list width") {
             VStack(spacing: 0) {
                 PageHeader(title: "Courses", subtitle: "\(courses.count) courses") {
                     Button("Add", systemImage: "plus") {
@@ -39,8 +40,8 @@ struct V3CoursesView: View {
                         }.padding(.vertical, 6).tag(course.id)
                     }
                 }.scrollContentBackground(.hidden)
-            }.frame(width: 240).background(WordNoteTheme.surface)
-            Divider()
+            }.background(WordNoteTheme.surface)
+        } detail: {
             if creating || (editing && selected != nil) {
                 VStack(spacing: 0) {
                     HStack {

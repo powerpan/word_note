@@ -38,6 +38,9 @@ struct WordNoteValidationApp: App {
         .windowResizability(.contentMinSize)
         .windowStyle(.titleBar)
         .commands {
+            #if WORDNOTE_V3_VALIDATION
+            WorkspaceSidebarCommands()
+            #endif
             CommandGroup(after: .undoRedo) { SavedChangeUndoCommand() }
             CommandMenu("Capture") {
                 Button("Quick Add", systemImage: "plus.circle") { runtime.ready?.panel.toggle() }

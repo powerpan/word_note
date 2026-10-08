@@ -28,6 +28,9 @@ struct V2InboxView: View {
     private var selection: InboxSelection { get { viewState.selection } nonmutating set { viewState.selection = newValue } }
     private var openedRecordID: UUID? { get { viewState.openedRecordID } nonmutating set { viewState.openedRecordID = newValue } }
     @SceneStorage("v2InboxHandledExpanded") private var handledExpanded = false
+    #if WORDNOTE_V3_VALIDATION
+    @SceneStorage("workspace.inbox.width") private var listWidth = WorkspaceColumnRules.inbox.preferred
+    #endif
 
     private struct Version: Equatable {
         let id: UUID
@@ -37,23 +40,7 @@ struct V2InboxView: View {
     private var selectedRecord: InputRecordModel? { records.first { $0.id == (openedRecordID ?? selection.focusedID) } }
 
     var body: some View {
-        GeometryReader { proxy in
-            HStack(spacing: 0) {
-                listPane.frame(width: min(max(proxy.size.width * 0.37, 310), 410))
-                Divider()
-                if let record = selectedRecord {
-                    V2InputRecordDetailView(record: record, course: courses.first { $0.id == record.courseID },
-                        candidates: candidates.filter { $0.inputRecordID == record.id },
-                        onAnalyze: { analyze(record.id) }, onIgnore: { ignoreRecord(record.id) }, onDelete: { deleteRecord(record.id) },
-                        onConfirm: confirmCandidates, onIgnoreCandidates: ignoreCandidates,
-                        onManualSave: { showSuccess("Saved to Vocabulary.") }, advancesAfterConfirmation: openedRecordID == nil)
-                        .id(record.id).frame(minWidth: 440, maxWidth: .infinity, maxHeight: .infinity)
-                } else {
-                    EmptyStateView(systemImage: "tray", title: openedRecordID != nil ? "Record No Longer Available" : (visible.active.isEmpty ? "No Active Records" : "No Record Selected"), message: "") { EmptyView() }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
-            }
-        }
+        columns
         .frame(minWidth: 800, minHeight: 600)
         .onAppear { rebuildIndex(); openCapturedRecord() }
         .onChange(of: captureNavigation?.pending) { openCapturedRecord() }
@@ -70,6 +57,38 @@ struct V2InboxView: View {
                 selection.clearBatch()
                 showSuccess("Saved or linked \(result.counts.candidates - result.counts.ignoredCandidates) candidates; ignored \(result.counts.ignoredCandidates).")
             }
+        }
+    }
+
+    @ViewBuilder private var columns: some View {
+        #if WORDNOTE_V3_VALIDATION
+        WorkspaceSplitView(preferredWidth: $listWidth, rules: .inbox, label: "Inbox list width") {
+            listPane
+        } detail: {
+            detailPane
+        }
+        #else
+        GeometryReader { proxy in
+            HStack(spacing: 0) {
+                listPane.frame(width: min(max(proxy.size.width * 0.37, 310), 410))
+                Divider()
+                detailPane.frame(minWidth: selectedRecord == nil ? 0 : 440)
+            }
+        }
+        #endif
+    }
+
+    @ViewBuilder private var detailPane: some View {
+        if let record = selectedRecord {
+            V2InputRecordDetailView(record: record, course: courses.first { $0.id == record.courseID },
+                candidates: candidates.filter { $0.inputRecordID == record.id },
+                onAnalyze: { analyze(record.id) }, onIgnore: { ignoreRecord(record.id) }, onDelete: { deleteRecord(record.id) },
+                onConfirm: confirmCandidates, onIgnoreCandidates: ignoreCandidates,
+                onManualSave: { showSuccess("Saved to Vocabulary.") }, advancesAfterConfirmation: openedRecordID == nil)
+                .id(record.id).frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            EmptyStateView(systemImage: "tray", title: openedRecordID != nil ? "Record No Longer Available" : (visible.active.isEmpty ? "No Active Records" : "No Record Selected"), message: "") { EmptyView() }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
