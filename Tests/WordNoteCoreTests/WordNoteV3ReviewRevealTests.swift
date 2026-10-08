@@ -41,7 +41,10 @@ final class WordNoteV3ReviewRevealTests: XCTestCase {
         XCTAssertEqual(after.content.termStates, original.content.termStates)
         XCTAssertEqual(after.content.content.reviewEvents, original.content.content.reviewEvents)
         XCTAssertEqual(after.eventStates, original.eventStates)
-        XCTAssertEqual(after.termHistories, original.termHistories)
+        var histories = original.termHistories
+        let index = try XCTUnwrap(histories.firstIndex { $0.id == source.card.termID })
+        histories[index].reviewExposedUntil = until
+        XCTAssertEqual(after.termHistories, histories)
         XCTAssertNoThrow(try service.previewFeedback(.good, lease: lease, at: Support.now))
     }
 

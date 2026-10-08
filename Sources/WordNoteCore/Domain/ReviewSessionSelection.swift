@@ -15,6 +15,7 @@ struct ReviewSessionSelection {
         }
         let quota = try ReviewNewCardQuota(payload: payload, limit: newCardLimit, at: date, timeZoneID: scope.studyTimeZoneID)
         let terms = Dictionary(uniqueKeysWithValues: payload.content.content.terms.map { ($0.id, $0) })
+        let occurrences = Dictionary(uniqueKeysWithValues: payload.content.occurrences.map { ($0.id, $0) })
         let courseTerms = Set(payload.content.courseLinks.filter { $0.courseID == scope.courseID }.map(\.termID))
         let events = Dictionary(uniqueKeysWithValues: payload.content.content.reviewEvents.map { ($0.id, $0) })
         let failures = Dictionary(grouping: payload.eventStates.filter {
@@ -25,7 +26,8 @@ struct ReviewSessionSelection {
             guard let term = terms[card.termID] else { throw WordNoteSnapshotError.missingReference }
             let failureCount = failures[card.id, default: 0]
             if scope.queue == .weakTerms, failureCount == 0, card.schedule.priorityRequestedAt == nil { continue }
-            if card.mode == .chineseToEnglish, term.chineseMeaning?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false { continue }
+            guard (try? ReviewQuestionContent.front(card: card, term: term,
+                occurrence: card.clozeTarget.flatMap { occurrences[$0.occurrenceID] })) != nil else { continue }
             let available = try ReviewCardQueuePolicy().availability(of: card.schedule, at: date,
                 studyTimeZoneID: scope.studyTimeZoneID, lastInteractionAt: card.updatedAt)
             let rank: Int

@@ -7,6 +7,7 @@ public extension WordNoteSnapshotV3Payload {
         public var legacyReviewCount: Int?
         public var legacyDuplicateHitCount: Int?
         public var legacySnapshotAt: Date?
+        public var reviewExposedUntil: Date? = nil
     }
 
     struct Card: Codable, Equatable, Sendable {

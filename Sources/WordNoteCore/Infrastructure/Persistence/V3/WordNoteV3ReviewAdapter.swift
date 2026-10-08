@@ -41,6 +41,7 @@ extension WordNoteSnapshotV3Payload.TermHistory {
         legacyReviewCount = model.legacyReviewCount
         legacyDuplicateHitCount = model.legacyDuplicateHitCount
         legacySnapshotAt = model.legacySnapshotAt
+        reviewExposedUntil = model.reviewExposedUntil
     }
 
     func apply(to model: WordNoteSchemaV3.TermModel) {
@@ -48,6 +49,7 @@ extension WordNoteSnapshotV3Payload.TermHistory {
         model.legacyReviewCount = legacyReviewCount
         model.legacyDuplicateHitCount = legacyDuplicateHitCount
         model.legacySnapshotAt = legacySnapshotAt
+        model.reviewExposedUntil = reviewExposedUntil
     }
 }
 

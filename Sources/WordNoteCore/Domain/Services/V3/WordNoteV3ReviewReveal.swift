@@ -8,12 +8,15 @@ extension WordNoteV3ReviewService {
             try content.validateDate(date)
             let source = try currentSnapshot(sessionID: lease.sessionID)
             guard source == expected else { throw WordNoteV3ReviewError.stalePreview }
+            _ = try questionFront(card: source.card, term: source.term)
             if owner.revealed == source { return source }
             let clock = try source.card.schedule.studyClock(at: date, timeZoneID: source.session.scope.studyTimeZoneID,
                 lastInteractionAt: source.card.updatedAt)
             guard source.card.schedule.phase != .suspended else { throw ReviewCardSchedulingError.suspended }
             if let until = source.card.schedule.buriedUntil, until > date { throw ReviewCardSchedulingError.buried }
             let until = try clock.nextDayStart
+            let term = try content.term(source.card.termID)
+            term.reviewExposedUntil = max(term.reviewExposedUntil ?? until, until)
             var siblingIDs = Set<UUID>()
             for sibling in try content.fetch(Card.self) where sibling.termID == source.card.termID
                 && sibling.id != source.card.id && sibling.phaseRaw != ReviewCardPhase.suspended.rawValue {

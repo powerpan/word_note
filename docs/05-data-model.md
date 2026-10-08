@@ -406,6 +406,8 @@ B05 第二批新增 controlsJSON，保存 Skip/Later 收據與 skippedItemIDs，
 
 第二批新寫出的 V3 普通備份/修復證據統一使用 format=3，以保護控制狀態及 recordedOrder。新 reader 仍讀缺少相應新字段的 format=1/2；低於字段所需格式的降標拒絕。V3 繼續作為未發布原型完善，V1/V2 模型和格式不變。每組最多 10,000 筆控制收據，達限明確拒絕新控制並要求結束本組，不靜默丟棄冪等憑據。略過輪次只能引用本組已有 Skip 收據的 presented 或終態項。
 
+B06 新增 V3 Term 可選 `reviewExposedUntil`，由 V3 TermHistory DTO 保存，不修改嵌套的凍結 V1/V2 payload。正式揭示時持久化最晚答案曝光日界；即使最後一張卡被刪除，新方向仍受當日保護。缺省 nil 不補造歷史，單獨刪卡保留、刪詞移除。clozeTarget JSON 新增可選 `sourceChangedAt`，與 `sourceDeletedAt` 互斥。這兩種新字段由普通備份和修復證據 format=4 保護，含任一字段而降標 1/2/3 必須拒絕；舊無字段資料仍可讀。此為未發布 V3 原型變更，不保證舊原型 SQLite 直接跨模型開啟。
+
 揭示答案時將已啟用 sibling 的 buriedUntil 保存為次日本地日開始，並把本組相應項標為 siblingDeferred；此為防洩題狀態，不寫作答事件。重學中的同一卡不視為自己的 sibling。暫時埋藏不改原間隔，次日自動恢復資格。
 
 V1/V2 -> V3：每個 Term 的舊排程只複製至一張主卡，方向取最後有效事件，無事件則 englishToChinese。nextReviewAt 為 nil 的主卡保持 suspended；不要自動激活。其他方向歷史事件保留原 mode/ID，cardID 可為 nil 並標 legacy；不為補齊外鍵建立一批到期卡。未見過的方向按新卡啟用，不借用另一方向 streak 或掌握程度。
@@ -426,7 +428,7 @@ V3 的 `WordNoteBackupCounts` 包含 cards/sessions/sessionItems；舊版摘要�
 - 每個舊 Term 恰好一張主卡，原排程非 nil 為 review，nil 為 suspended；舊排程/掌握/連續次數逐值複製，lapseCount=0，introducedAt/優先請求/重學日桶不補造。即使舊 mastery=new，有排程的歷史待辦也不重新分類為受新卡配額限制的新卡。
 - Term 的舊計數與排程仍是兼容快照，legacy 三計數與其原值一致；歷史 ReviewEvent ID/mode/時間/原有字段完全不改。同主卡方向的舊事件可綁 cardID，其他方向不造卡；全部 semantics=1、scheduler=legacy-v1，沒有新 action/session/dayKey 或完整前後排程快照。
 - 舊枚舉包含 contextCloze，但原版 UI 未提供此模式，也未存穩定填空範圍。若它是最後有效事件，回傳帶 termID/eventID 的 `legacyClozeNeedsTarget` 並阻止自動遷移；不偷偷改為識別方向。較早的 cloze 歷史仍原樣保存且不綁主卡。
-- clozeTarget 使用原文 UTF-8 hash 與 Swift Character 起點/長度，不是 UTF-16/byte 偏移；保存時必須精確匹配原文答案和所屬 occurrence。B06 的可用題目選擇及原文變更策略仍需實作。
+- clozeTarget 使用原文 UTF-8 hash 與 Swift Character 起點/長度，不是 UTF-16/byte 偏移；保存時必須精確匹配原文答案和所屬 occurrence。B06 已實作題目資格、預覽/建卡與原文變更停用，UI 仍待接入。
 - 卡片增加 relearningTimeZoneID，與 relearningDayKey 成對保存，為 B04 日桶判斷保留明確時區。新事件 originalCardID 必填；刪除卡片後可清 cardID，但事件/會話項保留原 ID，會話項轉 unavailable，不在恢復時補建卡。
 
 證據與剩餘啟用門檻見 [B03 隔離基礎](qa/2026-10-08-b03-isolated-foundation.md)、[B03 受保護恢復](qa/2026-10-08-b03-protected-recovery.md) 及 [B03 刪除與修復](qa/2026-10-08-b03-deletion-integrity.md)。
@@ -466,6 +468,8 @@ B04 第二批在既有十一實體上接入正式 writer，沒有新增 schema �
 - 下行回退使用舊版可讀的遷移前快照，不能让舊二進制直接讀新 schema；回退會丟失快照後改動，必須先導出目前庫並提示差異。
 
 V3 刪除補充契約：來源刪除使用 clozeTarget JSON 內的可選 `sourceDeletedAt` 作明確 tombstone，不新增 SwiftData 欄位。保留卡 ID、scope/target ID 和原 occurrence ID（此時只作歷史身份，不再是活動外鍵）；清空 hash、答案/變體和範圍，卡 phase=suspended、nextReviewAt/priorityRequestedAt=nil。沒有明確 tombstone 的缺來源仍屬損壞，不能自動當成使用者已刪除。舊 JSON 缺少此可選欄位仍按正常目標解碼。
+
+B06 來源修改使用 `sourceChangedAt` 作停用標記，此時 occurrence 必須仍存在且同屬該 Term；同樣清空 hash/答案/範圍、停止排程，會話項不可用，不修改既有事件。其後刪除來源時轉為 sourceDeletedAt 並清除 sourceChangedAt；兩者並存、停用目標仍帶答案/優先請求、修改標記缺來源均屬非法狀態。來源修訂不覆寫原始 InputRecord，不能把人工修訂或 AI 例句冒充原捕獲證據。詳見 [B06](qa/2026-10-08-b06-question-content.md)。
 
 刪卡或停用卡時，其會話項保留 originalCardID、順序、attemptCount 和 lastActionID，解除 cardID 並改為 unavailable，不寫新的作答事件或增加成功數。會話修正與刪除同一次保存：當前項失效且仍有其他待展示項時退回 paused，不自動抽一張；未暫停的會話只剩等待項時轉 waiting，原已 paused 則保持暫停；全部為終態時結束會話，但不可用項仍不算 reviewed。原已 ended/completed 的會話保留結束時間及範圍。刪 Term 級聯其作答事件；單獨刪卡/刪來源保留詞條及事件，只解除必要引用。歷史 Course 範圍快照不隨刪課程改寫。
 

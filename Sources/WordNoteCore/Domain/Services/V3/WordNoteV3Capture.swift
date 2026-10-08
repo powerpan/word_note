@@ -76,6 +76,7 @@ extension WordNoteV3ContentService {
         if cards.isEmpty {
             let card = Card(termID: term.id, createdAt: date)
             card.priorityRequestedAt = date
+            if let until = term.reviewExposedUntil, until > date { card.buriedUntil = until }
             context.insert(card)
             return
         }

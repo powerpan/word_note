@@ -11,6 +11,7 @@ extension WordNoteSchemaV3 {
         public var legacyReviewCount: Int? = nil
         public var legacyDuplicateHitCount: Int? = nil
         public var legacySnapshotAt: Date? = nil
+        public var reviewExposedUntil: Date? = nil
         public var term: String
         public var normalizedTerm: String
         public var termTypeRaw: String

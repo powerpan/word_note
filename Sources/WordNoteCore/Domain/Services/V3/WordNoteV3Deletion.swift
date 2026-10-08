@@ -30,6 +30,7 @@ extension WordNoteV3ContentService {
                 var target: ReviewClozeTarget = try ReviewPersistenceJSON.decode(json)
                 guard target.sourceDeletedAt == nil, target.occurrenceID == id else { continue }
                 target.sourceDeletedAt = date
+                target.sourceChangedAt = nil
                 target.sourceHash = ""
                 target.startCharacterOffset = 0
                 target.characterCount = 0
@@ -114,7 +115,7 @@ extension WordNoteV3ContentService {
         }
     }
 
-    private func suspend(_ card: Card, at date: Date) throws {
+    func suspend(_ card: Card, at date: Date) throws {
         card.phaseRaw = ReviewCardPhase.suspended.rawValue
         card.nextReviewAt = nil
         card.priorityRequestedAt = nil
@@ -122,7 +123,7 @@ extension WordNoteV3ContentService {
         card.updatedAt = date
     }
 
-    private func invalidateSessionItems(for cardIDs: Set<UUID>, at date: Date) throws {
+    func invalidateSessionItems(for cardIDs: Set<UUID>, at date: Date) throws {
         guard !cardIDs.isEmpty else { return }
         let items = try fetch(SessionItem.self)
         let affected = items.filter { $0.cardID.map(cardIDs.contains) == true }

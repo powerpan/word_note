@@ -515,7 +515,7 @@ V3 `capture` 復用既有不可變 request/result 契約，但本地命中交易
 
 正式保存同時新增 semantics=2/scheduler=simple-v2 事件、寫 Card 排程、Item 的 attempt/lastAction/結果、Session 的固定組游標及 revision。Term/legacy 快照不寫。唯一 actionID 由交易前完整校驗及串行 writer 保護；同操作重送只讀返回持久收據，已完成/刪卡仍可返回原 originalCardID，不再推進游標，也不清除下一張卡的揭示狀態。不同輸入的 actionID 衝突、已作廢事件或已刪 Term 不補記。保存成功後只執行不拋錯的內存清理，避免已提交卻向 UI 報失敗。
 
-正式 UI 尚未接入此服務。B05 會話及控制核心見下節，窗口生命週期仍待接入；B06 尚須可用的題型內容與原句範圍處理。證據見 [B04 作答交易](qa/2026-10-08-b04-answer-transactions.md)。
+正式 UI 尚未接入此服務。B05 會話及控制核心、B06 題型內容見下節，窗口生命週期仍待接入。證據見 [B04 作答交易](qa/2026-10-08-b04-answer-transactions.md)。
 
 ### 固定會話與首次呈現（B05 第一批）
 
@@ -540,6 +540,22 @@ Skip 輪轉固定項順序，保持 presented 和所有卡片排程/配額，保
 新正式事件在同一交易分配 recordedOrder，按當前所有事件（包括作廢事件）的最大值递增並做溢出檢查。`ReviewStatisticsBuilder` 僅讀不可變 V3 快照，全局先按 dayKey/cardID 找首次有效回答，再過濾會話/課程/方向。legacy 和 invalidated 事件排除；舊原型缺序號時採觀察時間/UUID 並明示估計順序。當日日桶不因換報表時區而重寫歷史。只讀服務不回寫任何 Term 計數。
 
 處理進度使用實際固定 item 數，成功完成、手動延期、上限延期、原因未知延期、sibling、不可用、未驗證完成分開。課程統計依當前 membership；卡片刪除後仍按 originalCardID 計真實事件，刪詞已級聯移除的歷史不補造。工作量復用 `ReviewCardQueuePolicy`，將可答、等待重學、未引入新卡、埋藏/停用和缺中文方向分開。新控制/序號由 format=3 保護，format=1/2 仍按字段能力向後讀取。證據見 [B05 控制與統計](qa/2026-10-08-b05-controls-statistics.md)。
+
+### 題型內容與明確建卡（B06）
+
+`ReviewQuestionFront` 只含 cardID/mode/prompt，View 不接收完整 Term 再靠 hidden 遮答案。背面由 `revealedQuestion` 校驗當前 lease/已揭示完整快照後返回；純 `ReviewQuestionContent.back` 是內容構造器，不具備寫入排程權。輸入比較保留原始文字，只標記空白、匹配或需自評，不產生 ReviewEvent。正式選組、呈現前與統計共用相同題面資格；失效題面在修改卡片、游標和新卡台帳之前拒絕。
+
+`ReviewClozeBuilder` 與 `ReviewTextMasking` 使用 ICU 邊界匹配、Unicode canonical normalization 及一次建立的 UTF-16/Character 邊界表。原文 hash 仍基於原始 UTF-8，不能把等價 Unicode 當成同一份未修改源 bytes。所有已知答案形式合併遮蔽，重複命中最多 1,000 個，超限停止並拒絕；撇號只在詞內構成邊界，包住詞頭的引號不洩露答案。這不等於形態學推斷，屈折形式須明確選定。
+
+`previewClozeCard` 只讀，記住 Term/TermState、Occurrence、InputRecord/RecordState 的完整依賴及不可變預覽。只接受已保存、凍結 englishToChinese、來源與捕獲 bytes 一致的英文原文。`createClozeCard` 再檢查依賴、重建預覽、拒絕相同來源範圍重複卡；同 cardID/target 重送只讀回原卡。新卡、Term revision 和可用日期同交易，失敗全回滾。
+
+`enableReviewDirection` 僅接受整詞識別/回憶，明確 opt-in；新方向為獨立 new 卡，不複製 sibling 的能力。重新啟用既有方向保留自身能力/桶/引入史：從未學過的 current 卡為 new，其他卡恢復 review 並到期，不復活舊會話項。填空必須另走預覽入口，失效目標不能藉此復用。
+
+揭示交易新增 Term.reviewExposedUntil，與卡片/會話一同保存；這是答案曝光邊界，不是 mastery、legacy 計數或正式作答。單獨刪卡/刪來源保留它，刪 Term 才級聯消失。新建/啟用方向繼承未到期邊界及更晚 sibling burial；舊原型沒有邊界時，當日已呈現項/有效事件作保守依據。這可能延後尚未實際揭示但已呈現的 sibling，避免崩潰丟失內存揭示狀態後照抄；未呈現 pending 不算曝光。
+
+`reviseOccurrenceText` 比對來源快照/Term revision，不改原 InputRecord；依賴目標保存 sourceChangedAt、清除舊 hash/答案/範圍、停用卡並標記 item unavailable。修改後 snapshot 不再是已驗證捕獲副本，不能直接重新建填空；需選擇或新增另一份有證據的原文。V3 備份與修復證據 format=4 保護曝光邊界及來源改動標記，1/2/3 僅在不含新字段時可讀。V1/V2 不變，未發布 V3 SQLite 跨模型直開仍未承諾。
+
+詳見 [B06 核心證據](qa/2026-10-08-b06-question-content.md)。完整 V3 content/analysis writer、唯一 queue、runtime、Review/Settings/建卡 UI 尚未整合，不把這一批視為 B 階段出口。
 
 ### 備份、恢復與啟動
 

@@ -94,10 +94,13 @@ public struct ReviewStatisticsBuilder: Sendable {
         let selected = answers.filter { (courseID == nil || courseTerms.contains($0.termID)) && (mode == nil || $0.mode == mode) }
         let cards = payload.cards.filter { (courseID == nil || courseTerms.contains($0.termID)) && (mode == nil || $0.mode == mode) }
         let terms = Dictionary(uniqueKeysWithValues: payload.content.content.terms.map { ($0.id, $0) })
+        let occurrences = Dictionary(uniqueKeysWithValues: payload.content.occurrences.map { ($0.id, $0) })
         var workload = ReviewWorkload()
         workload.pendingPriorityTerms = Set(cards.filter { $0.schedule.priorityRequestedAt != nil }.map(\.termID)).count
         for card in cards {
-            if card.mode == .chineseToEnglish, TextNormalizer.isBlank(terms[card.termID]?.chineseMeaning ?? "") {
+            if card.schedule.phase == .suspended { workload.suspendedCards += 1; continue }
+            guard let term = terms[card.termID], (try? ReviewQuestionContent.front(card: card, term: term,
+                occurrence: card.clozeTarget.flatMap { occurrences[$0.occurrenceID] })) != nil else {
                 workload.missingAnswerCards += 1
                 continue
             }

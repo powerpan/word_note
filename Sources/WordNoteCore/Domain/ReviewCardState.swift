@@ -47,6 +47,7 @@ public struct ReviewClozeTarget: Codable, Equatable, Sendable {
     public var answer: String
     public var acceptedAnswers: [String]
     public var sourceDeletedAt: Date?
+    public var sourceChangedAt: Date? = nil
 
     public init(id: UUID = UUID(), occurrenceID: UUID, sourceHash: String, startCharacterOffset: Int,
                 characterCount: Int, answer: String, acceptedAnswers: [String] = []) {

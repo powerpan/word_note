@@ -10,7 +10,7 @@ final class WordNoteV3ControlPersistenceTests: XCTestCase {
         let payload = try controlledPayload()
         let data = try WordNoteSnapshotV3Codec.encode(payload, kind: .manual)
         let decoded = try WordNoteSnapshotV3Codec.decode(data)
-        XCTAssertEqual(decoded.document.formatVersion, 3)
+        XCTAssertEqual(decoded.document.formatVersion, WordNoteSnapshotV3Codec.currentFormatVersion)
         XCTAssertEqual(decoded.payload, payload)
         let harness = V3RecoveryHarness(directory: try V3TestSupport.directory())
         defer { try? FileManager.default.removeItem(at: harness.directory) }
@@ -24,8 +24,11 @@ final class WordNoteV3ControlPersistenceTests: XCTestCase {
 
     func testFormatOneAndTwoRemainReadableOnlyWithoutTheirUnsupportedFields() throws {
         let original = try controlledPayload()
-        for version in 1...3 {
+        for version in 1...4 {
             var payload = original
+            if version < 4 {
+                for index in payload.termHistories.indices { payload.termHistories[index].reviewExposedUntil = nil }
+            }
             if version < 3 {
                 for index in payload.sessions.indices { payload.sessions[index].controls = nil }
                 for index in payload.eventStates.indices { payload.eventStates[index].recordedOrder = nil }
@@ -46,6 +49,7 @@ final class WordNoteV3ControlPersistenceTests: XCTestCase {
     func testControlsAndAnswerOrderIndependentlyPreventDownlabeling() throws {
         for controlsOnly in [true, false] {
             var payload = try controlledPayload()
+            for index in payload.termHistories.indices { payload.termHistories[index].reviewExposedUntil = nil }
             if controlsOnly {
                 for index in payload.eventStates.indices { payload.eventStates[index].recordedOrder = nil }
             } else {
@@ -138,6 +142,7 @@ final class WordNoteV3ControlPersistenceTests: XCTestCase {
         var payload = try controlledPayload()
         for index in payload.sessions.indices { payload.sessions[index].controls = nil }
         for index in payload.eventStates.indices { payload.eventStates[index].recordedOrder = nil }
+        for index in payload.termHistories.indices { payload.termHistories[index].reviewExposedUntil = nil }
         let directory = try V3TestSupport.directory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let vault = WordNoteV3RepairEvidenceVault(directoryURL: directory)

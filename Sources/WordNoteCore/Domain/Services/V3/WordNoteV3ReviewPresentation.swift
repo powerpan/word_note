@@ -14,13 +14,16 @@ extension WordNoteV3ReviewService {
             guard snapshot.session.status.isResumable else { throw WordNoteV3ReviewError.noActivePresentedItem }
             let skipped = Set(snapshot.session.controls?.skippedItemIDs ?? [])
             if snapshot.items.contains(where: { $0.id == session.currentItemID && $0.status == .presented && !skipped.contains($0.id) }) {
-                return try currentSnapshot(sessionID: session.id)
+                let source = try currentSnapshot(sessionID: session.id)
+                _ = try questionFront(card: source.card, term: source.term)
+                return source
             }
             let ready = try readyRelearningItems(in: snapshot, at: date)
             guard let selected = ready.first ?? snapshot.items.first(where: { ($0.status == .pending || $0.status == .presented) && !skipped.contains($0.id) }),
                   let cardID = selected.cardID else { return nil }
             let card = try card(cardID)
             let before = try Payload.Card(card)
+            _ = try questionFront(card: before, term: .init(content.term(before.termID)))
             if selected.status != .presented {
                 let availability = try ReviewCardQueuePolicy().availability(of: before.schedule, at: date,
                     studyTimeZoneID: snapshot.session.scope.studyTimeZoneID, lastInteractionAt: card.updatedAt)

@@ -33,6 +33,7 @@ extension WordNoteSnapshotV3Payload {
             }
             try values.compactMap { $0 }.forEach(counter)
             try date(history.legacySnapshotAt)
+            try date(history.reviewExposedUntil)
         }
         for card in cards {
             guard terms[card.termID] != nil else { throw WordNoteSnapshotError.missingReference }
@@ -47,9 +48,12 @@ extension WordNoteSnapshotV3Payload {
             }
             if card.mode == .contextCloze {
                 guard let target = card.clozeTarget, card.contentScopeKey == target.contentScopeKey else { throw WordNoteSnapshotError.invalidValue }
-                if let deletedAt = target.sourceDeletedAt {
-                    try date(deletedAt)
-                    guard sources[target.occurrenceID] == nil, card.schedule.phase == .suspended,
+                if target.sourceDeletedAt != nil || target.sourceChangedAt != nil {
+                    try date(target.sourceDeletedAt)
+                    try date(target.sourceChangedAt)
+                    guard (target.sourceDeletedAt != nil) != (target.sourceChangedAt != nil),
+                          (target.sourceDeletedAt != nil ? sources[target.occurrenceID] == nil : sources[target.occurrenceID]?.termID == card.termID),
+                          card.schedule.phase == .suspended,
                           card.schedule.nextReviewAt == nil, card.schedule.priorityRequestedAt == nil,
                           target.sourceHash.isEmpty, target.startCharacterOffset == 0, target.characterCount == 0,
                           target.answer.isEmpty, target.acceptedAnswers.isEmpty else { throw WordNoteSnapshotError.invalidValue }

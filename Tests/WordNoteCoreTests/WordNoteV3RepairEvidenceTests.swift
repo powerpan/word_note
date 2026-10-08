@@ -41,7 +41,7 @@ final class WordNoteV3RepairEvidenceTests: XCTestCase {
         let bytes = try Data(contentsOf: url)
         let changes: [(inout [String: Any]) -> Void] = [
             { $0["purpose"] = "wordnote-backup" },
-            { $0["evidenceFormatVersion"] = 4 },
+            { $0["evidenceFormatVersion"] = 5 },
             { $0["schemaVersion"] = "2.0.0" },
             { $0["id"] = UUID().uuidString },
             { $0["generation"] = [:] },
