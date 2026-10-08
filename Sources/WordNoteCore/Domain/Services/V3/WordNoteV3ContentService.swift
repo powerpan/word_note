@@ -11,6 +11,7 @@ public struct WordNoteV3CourseUsage: Equatable, Sendable {
 public enum WordNoteV3ContentError: LocalizedError, Equatable {
     case wrongSchema, unsavedChanges, missingEntity, invalidValue, counterLimit
     case captureConflict, ambiguousExactMatch, invalidState
+    case candidateAlreadyHandled, savedTargetDeleted, reviewStateReadOnly
     case revisionConflict(expected: Int, actual: Int)
     case courseInUse(WordNoteV3CourseUsage)
 
@@ -26,6 +27,9 @@ public enum WordNoteV3ContentError: LocalizedError, Equatable {
         case .invalidState: "The stored content has conflicting states or references. No changes were saved."
         case .revisionConflict: "This item changed after it was selected. Refresh before saving."
         case .courseInUse: "This course is still referenced by input records, vocabulary, or sources."
+        case .candidateAlreadyHandled: "This candidate has already been handled. Refresh the inbox."
+        case .savedTargetDeleted: "The term saved by this operation was deleted. It was not recreated."
+        case .reviewStateReadOnly: "Learning state is maintained by review cards and cannot be changed in the content editor."
         }
     }
 }
@@ -46,16 +50,20 @@ public final class WordNoteV3ContentService {
     typealias SessionItem = WordNoteSchemaV3.ReviewSessionItemModel
 
     let context: ModelContext
+    let undoHistory: WordNoteV3UndoHistory?
     private let container: ModelContainer
     private let beforeSave: @MainActor (ModelContext) throws -> Void
 
-    public convenience init(container: ModelContainer) throws {
-        try self.init(container: container, beforeSave: { _ in })
+    public convenience init(container: ModelContainer, undoHistory: WordNoteV3UndoHistory? = nil) throws {
+        try self.init(container: container, undoHistory: undoHistory, beforeSave: { _ in })
     }
 
-    init(container: ModelContainer, beforeSave: @escaping @MainActor (ModelContext) throws -> Void) throws {
+    init(container: ModelContainer, undoHistory: WordNoteV3UndoHistory? = nil,
+         beforeSave: @escaping @MainActor (ModelContext) throws -> Void) throws {
         guard container.schema.version == WordNoteSchemaV3.versionIdentifier else { throw WordNoteV3ContentError.wrongSchema }
         self.container = container
+        try undoHistory?.checkContainer(container)
+        self.undoHistory = undoHistory
         context = container.mainContext
         context.autosaveEnabled = false
         self.beforeSave = beforeSave
@@ -84,6 +92,11 @@ public final class WordNoteV3ContentService {
 
     func term(_ id: UUID) throws -> Term {
         guard let value = try fetch(Term.self).first(where: { $0.id == id }) else { throw WordNoteV3ContentError.missingEntity }
+        return value
+    }
+
+    func record(_ id: UUID) throws -> Record {
+        guard let value = try fetch(Record.self).first(where: { $0.id == id }) else { throw WordNoteV3ContentError.missingEntity }
         return value
     }
 

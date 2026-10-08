@@ -322,7 +322,13 @@ Expected:
 - 不保存或展示原始 HTTP 錯誤 body、URLSession 診斷內容；保存靜態分類摘要和 HTTP 狀態碼。資料保存/世代檢查失敗暫停隊列，保留原輸入及中斷狀態，需要明確恢復。
 - 重新分析不覆寫同名既有候選的內容，臨時預覽顯示實際保留/新增的候選值，而非展示未被接受的新字段。完整差異採納仍屬 C02。
 
-此隊列尚未接到三個正式 App 入口，不把這些核心行為描述成目前 UI 已完成。V2 付費 smoke 使用獨立 `RUN_LIVE_DEEPSEEK_V2_TESTS=1`，每輪上限兩次請求，固定公開輸入，內存庫驗證候選持久化、人工確認及重查本地命中；不觸碰真實詞庫。見 [執行證據](qa/2026-10-08-a02-analysis-queue.md)。
+此隊列已接到隔離 V2 QA 的三個入口，普通 App 仍是 V1，不把隔離結果描述成正式 UI 已完成。V2 付費 smoke 使用獨立 `RUN_LIVE_DEEPSEEK_V2_TESTS=1`，每輪上限兩次請求，固定公開輸入，內存庫驗證候選持久化、人工確認及重查本地命中；不觸碰真實詞庫。見 [隊列證據](qa/2026-10-08-a02-analysis-queue.md) 與 [QA App 接入](qa/2026-10-08-a02-app-integration.md)。
+
+### V3 分析與正式復習隔離
+
+V3 有獨立內容 writer/queue，沿用上面的持久預算和錯誤分類，不改 provider/prompt。attempt 額外核對完整 InputRecord/RecordState，防止來源被修改但 revision 未推進時仍保存舊回答。AI 分析只產生候選；人工確認才建立英文 Term 和一張 new 卡。精確重查只產生 lookup/priority，正式復習才產生 version=2 事件，不再增加 Term 混合 wrongCount。
+
+`RUN_LIVE_DEEPSEEK_V3_TESTS=1` 是獨立 opt-in；測試在隔離內存庫使用 `latent representation`、`過擬合`，handler 最多發兩次真實請求。2026-10-08 這一輪通過分析、雙向人工確認、重送/本地命中、正式復習和完整備份往返。請求配置仍為 `deepseek-v4-flash`，本次 provider 回報 `deepseek-flash`，兩次合計約 6.44 秒；不據此推斷其他模型品質/價格或 60 例語義評測通過。token usage 沒有在本測試暴露，費用不估算。詳見 [V3 流水線證據](qa/2026-10-08-b03-v3-content-pipeline.md)。
 
 ### 方向和輸入邊界（A03、B02）
 

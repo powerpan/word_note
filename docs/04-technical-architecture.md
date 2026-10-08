@@ -555,7 +555,21 @@ Skip 輪轉固定項順序，保持 presented 和所有卡片排程/配額，保
 
 `reviseOccurrenceText` 比對來源快照/Term revision，不改原 InputRecord；依賴目標保存 sourceChangedAt、清除舊 hash/答案/範圍、停用卡並標記 item unavailable。修改後 snapshot 不再是已驗證捕獲副本，不能直接重新建填空；需選擇或新增另一份有證據的原文。V3 備份與修復證據 format=4 保護曝光邊界及來源改動標記，1/2/3 僅在不含新字段時可讀。V1/V2 不變，未發布 V3 SQLite 跨模型直開仍未承諾。
 
-詳見 [B06 核心證據](qa/2026-10-08-b06-question-content.md)。完整 V3 content/analysis writer、唯一 queue、runtime、Review/Settings/建卡 UI 尚未整合，不把這一批視為 B 階段出口。
+詳見 [B06 核心證據](qa/2026-10-08-b06-question-content.md)。當時尚未接入的內容 writer/queue 核心由下節補齊；runtime、Review/Settings/建卡 UI 仍未整合，不把核心通過視為 B 階段出口。
+
+### V3 內容與分析流水線（B03、B04）
+
+`WordNoteV3ContentService` 現在承接分析任務、候選確認/批量預覽、手動加詞、內容/課程編輯、membership/tag 整理及安全撤銷。模型綁定的入口獨立於 V2；純值草稿、selection、confirmation/organization plan 繼續復用現有 `WordNoteV2*` 名稱，並不代表把 V2 writer 附在 V3 容器。
+
+手動、單候選和批量新建均同交易插入 Term、來源/課程關聯及一張 new 英文識別卡。Term.nextReviewAt 明確為 nil，舊學習計數為零；新卡不複製其他方向能力，也不直接取得 introducedAt。關聯已有詞不追加卡片、不製造復習事件。內容編輯拒絕改變 legacy mastery；已處理/忽略的來源不能再通過手動加詞入口保存。
+
+`WordNoteV3AnalysisAttempt` 帶不可變 request、store ticket、record revision/generation/attemptID，以及完整 InputRecord/RecordState 值。回調比較全部依賴，遺漏 revision 的來源改動亦拒絕；請求發出後課程改名不重寫其已凍結 courseName。分析保存只追加未出現的候選名，保留人工內容、已保存關聯和忽略狀態，不自動入庫。
+
+`WordNoteV3AnalysisQueue` 一個實例持有一個 worker，重用已驗證的退避/持久預算/取消 epoch 規則。保存或世代錯誤先暫停，不自動重發已付費請求。App runtime 接入時必須共享同一個實例，不能每個窗口自行建立 worker。`WordNoteDataProtection` 已有 V3 queue adapter、十一實體備份/預覽/切庫和待分析數；取消恢復或備份失敗保持暫停，新的 generation 要明確恢復分析，舊回調不落庫。
+
+V3 撤銷收據除內容/關聯外還記錄範圍內 TermHistory、卡片、正式事件、會話與項。開始會話、揭示、作答、精確重查、新增方向/填空或新增來源引用後，舊撤銷拒絕而不刪除學習資料；新建課程的凍結 session 引用也算依賴。關聯會話內其他項的變動可能保守地阻止撤銷，並明確報錯。無關詞的獨立復習不阻止內容撤銷。撤銷只恢復內容、推進 revision；從不恢復 legacy 排程/計數。撤銷確切新詞時，一併刪除收據保護下尚未使用的新卡，不做一般級聯。
+
+實作和兩次合成 live 的完整鏈路證據見 [V3 內容流水線](qa/2026-10-08-b03-v3-content-pipeline.md)。普通 App/V2 QA 尚未改用 V3，沒有正式詞庫升級，性能和原生 UI 仍待驗收。
 
 ### 備份、恢復與啟動
 

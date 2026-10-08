@@ -416,7 +416,9 @@ V1/V2 -> V3：每個 Term 的舊排程只複製至一張主卡，方向取最後
 
 持久化會話只保存 ID 和必要快照，不複製整份詞義。單窗口寫入租約為進程內協調狀態，App 重啟可重新取得，不能因舊 PID 永久鎖住。正式評分、卡片排程、session item 與游標在同一交易提交。
 
-2026-10-08 B03 第一批新增獨立 `WordNoteSchemaV3` 的十一個模型及離線遷移/快照 adapter；第二批接入共用版本化備份、受保護恢復與啟動；第三批完成刪除/停卡交易、完整性預覽及十一實體受保護修復。V1/V2 歷史類型未改，普通 App 仍為 V1、QA App 仍為 V2；完整 writer、資料保護 UI/分析隊列及新排程需與 B04 共同切換。這不是正式詞庫升級，也不表示復習頁已使用卡片。
+2026-10-08 B03 第一批新增獨立 `WordNoteSchemaV3` 的十一個模型及離線遷移/快照 adapter；第二批接入共用版本化備份、受保護恢復與啟動；第三批完成刪除/停卡交易、完整性預覽及十一實體受保護修復。後續 [V3 內容流水線](qa/2026-10-08-b03-v3-content-pipeline.md) 補齊分析、確認、編輯、整理、撤銷和 queue/資料保護核心，沒有新增 schema 字段或變更 format=4。V1/V2 歷史類型未改，普通 App 仍為 V1、QA App 仍為 V2；V3 runtime/UI 及新排程須共同切換。這不是正式詞庫升級，也不表示復習頁已使用卡片。
+
+V3 新詞的三種入口（手動、單候選、批量）只建立一張獨立 new 英文識別卡，Term.nextReviewAt 為 nil、legacy 三計數為零、legacySnapshotAt 為 nil；introducedAt 由首次正式呈現寫入，不由確認入庫寫入。既有詞關聯新的候選來源不複製卡片或能力。內容編輯和安全撤銷均不改 legacy 計數/排程，撤銷新詞必須先證明卡片、事件、session/item 及引用未被後續使用。
 
 V3 完整快照的 content 復用 V2 字段值定義，另存一對一 termHistories/eventStates、cards、sessions、sessionItems；不能單獨導出 content 作為完整 V3。SwiftData 存儲 scope/cloze/排程歷史時用排序鍵 JSON，adapter 嚴格解碼，損壞內容不能回退為空值。卡片/會話的業務唯一鍵、單一可恢復會話、跨表引用、actionID、事件前後摘要及會話作答數均由完整快照校驗。
 

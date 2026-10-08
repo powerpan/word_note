@@ -82,6 +82,14 @@ public final class WordNoteDataProtection {
         self.init(session: session, store: store, vault: vault, queue: .v2(queue), preferences: preferences)
     }
 
+    public convenience init(
+        session: WordNoteStoreSession, store: WordNoteRestoreStore, vault: WordNoteBackupVault,
+        queue: WordNoteV3AnalysisQueue,
+        preferences: @escaping @MainActor () -> WordNoteSnapshotPayload.Preferences
+    ) {
+        self.init(session: session, store: store, vault: vault, queue: .v3(queue), preferences: preferences)
+    }
+
     private init(
         session: WordNoteStoreSession, store: WordNoteRestoreStore, vault: WordNoteBackupVault,
         queue: DataProtectionAnalysisQueue,
@@ -306,7 +314,7 @@ public final class WordNoteDataProtection {
     public func resumeAnalysis() throws {
         guard !isWorking, !isRestoring else { throw WordNoteDataOperationError.busy }
         do {
-            // V2 normalizes interrupted attempts before clearing the durable pause itself.
+            // Versioned queues normalize interrupted attempts before clearing their durable pause.
             if schemaVersion == .v1 { try store.authorizeAnalysisResume(for: generation) }
             let count = try queue.resumePendingAnalyses()
             statusMessage = "Resumed \(count) pending analysis requests."
@@ -327,8 +335,8 @@ public final class WordNoteDataProtection {
             return try container.mainContext.fetch(FetchDescriptor<WordNoteSchemaV2.InputRecordModel>())
                 .filter { ["queued", "running"].contains($0.queueStateRaw) }.count
         case .v3:
-            // V3 runtime writers are deliberately not connected until the scheduler transition.
-            throw WordNoteSnapshotError.unsupportedSchema
+            return try container.mainContext.fetch(FetchDescriptor<WordNoteSchemaV3.InputRecordModel>())
+                .filter { ["queued", "running"].contains($0.queueStateRaw) }.count
         }
     }
 
@@ -379,11 +387,13 @@ public final class WordNoteDataProtection {
 private enum DataProtectionAnalysisQueue {
     case v1(QuickAddAnalysisQueue)
     case v2(WordNoteV2AnalysisQueue)
+    case v3(WordNoteV3AnalysisQueue)
 
     var isSuspended: Bool {
         switch self {
         case .v1(let queue): queue.isSuspended
         case .v2(let queue): queue.isSuspended
+        case .v3(let queue): queue.isSuspended
         }
     }
 
@@ -391,6 +401,7 @@ private enum DataProtectionAnalysisQueue {
         switch self {
         case .v1(let queue): queue.suspendForRestore()
         case .v2(let queue): queue.suspendForRestore()
+        case .v3(let queue): queue.suspendForRestore()
         }
     }
 
@@ -398,6 +409,7 @@ private enum DataProtectionAnalysisQueue {
         switch self {
         case .v1(let queue): try queue.resumePendingAnalyses()
         case .v2(let queue): try queue.resumePendingAnalyses()
+        case .v3(let queue): try queue.resumePendingAnalyses()
         }
     }
 }
