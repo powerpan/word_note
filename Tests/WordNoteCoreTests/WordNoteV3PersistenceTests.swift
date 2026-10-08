@@ -115,13 +115,14 @@ final class WordNoteV3PersistenceTests: XCTestCase {
         }
     }
 
-    func testV1V2AndProductionReadersDoNotSilentlyDropV3Data() throws {
-        let data = try WordNoteSnapshotV3Codec.encode(V3TestSupport.payload(), kind: .manual)
+    func testOldCodecsRejectV3AndVersionedReaderKeepsItsCompletePayload() throws {
+        let payload = try V3TestSupport.reviewedPayload()
+        let data = try WordNoteSnapshotV3Codec.encode(payload, kind: .manual)
         for decode in [WordNoteSnapshotCodec.decode as (Data) throws -> Any,
-                       WordNoteSnapshotV2Codec.decode as (Data) throws -> Any,
-                       WordNoteSnapshotReader.decode as (Data) throws -> Any] {
+                       WordNoteSnapshotV2Codec.decode as (Data) throws -> Any] {
             XCTAssertThrowsError(try decode(data)) { XCTAssertEqual($0 as? WordNoteSnapshotError, .unsupportedSchema) }
         }
+        XCTAssertEqual(try WordNoteSnapshotReader.decode(data).payload, .v3(payload.canonicalized))
         XCTAssertTrue(TermModel.self == WordNoteSchemaV1.TermModel.self)
         XCTAssertEqual(WordNoteSchemaV1.models.count, 5)
         XCTAssertEqual(WordNoteSchemaV2.models.count, 8)

@@ -404,9 +404,11 @@ V1/V2 -> V3：每個 Term 的舊排程只複製至一張主卡，方向取最後
 
 持久化會話只保存 ID 和必要快照，不複製整份詞義。單窗口寫入租約為進程內協調狀態，App 重啟可重新取得，不能因舊 PID 永久鎖住。正式評分、卡片排程、session item 與游標在同一交易提交。
 
-2026-10-08 B03 第一批已新增獨立 `WordNoteSchemaV3` 的十一個模型及離線遷移/快照 adapter；V1/V2 歷史類型未改。普通 App 仍為 V1，QA App 仍為 V2；共用備份/恢復/啟動路由暫時拒絕 V3，待 B03 下一批與 B04 寫入切換完成後才開通。這不是正式詞庫升級，也不表示復習頁已使用卡片。
+2026-10-08 B03 第一批新增獨立 `WordNoteSchemaV3` 的十一個模型及離線遷移/快照 adapter；第二批接入共用版本化備份、受保護恢復與啟動。V1/V2 歷史類型未改，普通 App 仍為 V1、QA App 仍為 V2；資料保護 UI/分析隊列及新排程需與 B04 共同切換。這不是正式詞庫升級，也不表示復習頁已使用卡片。
 
 V3 完整快照的 content 復用 V2 字段值定義，另存一對一 termHistories/eventStates、cards、sessions、sessionItems；不能單獨導出 content 作為完整 V3。SwiftData 存儲 scope/cloze/排程歷史時用排序鍵 JSON，adapter 嚴格解碼，損壞內容不能回退為空值。卡片/會話的業務唯一鍵、單一可恢復會話、跨表引用、actionID、事件前後摘要及會話作答數均由完整快照校驗。
+
+V3 的 `WordNoteBackupCounts` 包含 cards/sessions/sessionItems；舊版摘要這三欄為 0，但 V1/V2 持久快照和恢復日誌仍使用各自五/八類 counts，不藉新增可選字段放寬舊文件。V3 日誌為 version 3，十一欄必填，staging 建庫/重開與正式啟用皆核對完整 payload/checksum。遷移時間固定為此次驗證通過的 beforeMigration/beforeRestore.createdAt；原卡 ID、會話游標、已刪卡 tombstone、cloze 範圍均逐值保留。
 
 本批遷移細則：
 
@@ -417,7 +419,7 @@ V3 完整快照的 content 復用 V2 字段值定義，另存一對一 termHisto
 - clozeTarget 使用原文 UTF-8 hash 與 Swift Character 起點/長度，不是 UTF-16/byte 偏移；保存時必須精確匹配原文答案和所屬 occurrence。B06 的可用題目選擇及原文變更策略仍需實作。
 - 卡片增加 relearningTimeZoneID，與 relearningDayKey 成對保存，為 B04 日桶判斷保留明確時區。新事件 originalCardID 必填；刪除卡片後可清 cardID，但事件/會話項保留原 ID，會話項轉 unavailable，不在恢復時補建卡。
 
-證據與剩餘啟用門檻見 [B03 隔離基礎](qa/2026-10-08-b03-isolated-foundation.md)。
+證據與剩餘啟用門檻見 [B03 隔離基礎](qa/2026-10-08-b03-isolated-foundation.md) 及 [B03 受保護恢復](qa/2026-10-08-b03-protected-recovery.md)。
 
 ### V4：義項與版本
 

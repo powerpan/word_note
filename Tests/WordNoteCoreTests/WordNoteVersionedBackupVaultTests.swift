@@ -115,7 +115,7 @@ final class WordNoteVersionedBackupVaultTests: XCTestCase {
 
     func testMixedRetentionKeepsSevenNewestAutomaticAndEveryProtectedSnapshot() async throws {
         let vault = WordNoteBackupVault(directoryURL: root)
-        let versions: [WordNoteVersionedPayload] = [.v1(try v1Payload()), .v2(try v2Payload())]
+        let versions: [WordNoteVersionedPayload] = [.v1(try v1Payload()), .v2(try v2Payload()), .v3(try V3TestSupport.reviewedPayload())]
         var protected = Set<UUID>()
         for payload in versions {
             for kind in [WordNoteBackupKind.manual, .beforeMigration, .beforeRestore] {
@@ -124,10 +124,10 @@ final class WordNoteVersionedBackupVaultTests: XCTestCase {
         }
         var automatic: [UUID] = []
         for index in 0..<10 {
-            automatic.append(try await vault.create(versions[index % 2], kind: .automatic, now: Support.now.addingTimeInterval(Double(index))).snapshot.id)
+            automatic.append(try await vault.create(versions[index % versions.count], kind: .automatic, now: Support.now.addingTimeInterval(Double(index))).snapshot.id)
         }
         let inventory = try await vault.inventory()
-        XCTAssertEqual(inventory.snapshots.count, 13)
+        XCTAssertEqual(inventory.snapshots.count, 16)
         XCTAssertEqual(Set(inventory.snapshots.filter { $0.kind != .automatic }.map(\.id)), protected)
         XCTAssertEqual(Set(inventory.snapshots.filter { $0.kind == .automatic }.map(\.id)), Set(automatic.suffix(7)))
     }

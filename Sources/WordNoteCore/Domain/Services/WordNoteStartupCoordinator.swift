@@ -1,0 +1,243 @@
+import Foundation
+import Observation
+import SwiftData
+
+public enum WordNoteStartupMigrationError: LocalizedError, Equatable {
+    case busy
+    case recoveryRequired
+    case sourceChanged
+    case protectionMismatch
+    case repairUnavailable
+
+    public var errorDescription: String? {
+        switch self {
+        case .busy: "Data initialization is already in progress."
+        case .recoveryRequired: "Data initialization did not complete. The original store is retained. Review the error before explicitly retrying."
+        case .sourceChanged: "The original data changed while migration was being prepared. The original store is retained; retry from its latest state."
+        case .protectionMismatch: "The protection file does not match the original data. The data switch was stopped."
+        case .repairUnavailable: "Inspect the current data first. Only missing optional relationships can be repaired automatically."
+        }
+    }
+}
+
+/// Run before constructing views, form bindings, analysis workers, or any other store writer.
+@MainActor
+@Observable
+public final class WordNoteStartupCoordinator {
+    public enum Phase: Equatable { case idle, opening, inspecting, backingUp, staging, activating, ready, recoveryRequired }
+
+    public private(set) var phase = Phase.idle
+    public private(set) var errorMessage: String?
+    public private(set) var protectionBackup: WordNoteBackupSummary?
+    public private(set) var migrationIssues: [WordNoteV1ToV2Migration.Issue] = []
+    public private(set) var cardMigrationIssues: [WordNoteV2ToV3Migration.Issue] = []
+    public private(set) var session: WordNoteStoreSession?
+    public private(set) var repairReport: WordNoteV2IntegrityReport?
+    public private(set) var repairEvidence: WordNoteRepairEvidenceSummary?
+
+    @ObservationIgnored private let store: WordNoteRestoreStore
+    @ObservationIgnored private let vault: WordNoteBackupVault
+    @ObservationIgnored private let preferences: @MainActor () -> WordNoteSnapshotPayload.Preferences
+    @ObservationIgnored private let evidenceVault: WordNoteRepairEvidenceVault
+    @ObservationIgnored private var repairPlan: WordNoteV2IntegrityRepairPlan?
+    @ObservationIgnored private var sourceWriteTicket: WordNoteWriteGate.Ticket?
+    @ObservationIgnored private(set) var sourceSession: WordNoteStoreSession?
+
+    public init(
+        store: WordNoteRestoreStore, vault: WordNoteBackupVault,
+        preferences: @escaping @MainActor () -> WordNoteSnapshotPayload.Preferences,
+        evidenceVault: WordNoteRepairEvidenceVault? = nil
+    ) {
+        self.store = store
+        self.vault = vault
+        self.preferences = preferences
+        self.evidenceVault = evidenceVault ?? WordNoteRepairEvidenceVault(directoryURL: vault.directoryURL.appending(path: "RepairEvidence"))
+    }
+
+    @discardableResult
+    public func open(retryMigration: Bool = false) async throws -> WordNoteStoreSession {
+        if phase == .ready, let session { return session }
+        guard phase == .idle || phase == .recoveryRequired else { throw WordNoteStartupMigrationError.busy }
+        guard store.targetSchema != .v1 else { throw WordNoteSnapshotError.unsupportedSchema }
+        phase = .opening
+        errorMessage = nil
+        protectionBackup = nil
+        migrationIssues = []
+        cardMigrationIssues = []
+        repairReport = nil
+        repairPlan = nil
+        repairEvidence = nil
+        session = nil
+        sourceSession = nil
+        sourceWriteTicket = nil
+        var preparedGeneration: WordNoteStoreGeneration?
+
+        do {
+            try Task.checkCancellation()
+            let opened = try store.open()
+            sourceSession = opened
+            let frozenPreferences = opened.preferencesToApply ?? preferences()
+            if opened.schemaVersion == store.targetSchema {
+                _ = try await capture(opened, preferences: frozenPreferences)
+                session = opened
+                sourceSession = nil
+                phase = .ready
+                return opened
+            }
+            guard retryMigration || (opened.recoveryRequired == nil && opened.restoreOutcome != .rolledBack) else {
+                throw WordNoteStartupMigrationError.recoveryRequired
+            }
+            let context = opened.container.mainContext
+            guard !context.hasChanges else { throw WordNoteV2ContentError.unsavedChanges }
+            try blockSourceWrites(context)
+            // A failed backup or a process exit before staging must not trigger an automatic retry next launch.
+            try store.beginMigration(replacing: opened.generation)
+            let original = try await capture(opened, preferences: frozenPreferences)
+            phase = .backingUp
+            let result = try await vault.create(original, kind: .beforeMigration)
+            try Task.checkCancellation()
+            let verified = try await vault.readVersionedSnapshot(id: result.snapshot.id)
+            guard verified.payload == original, verified.summary == result.snapshot,
+                  verified.summary.kind == .beforeMigration else {
+                throw WordNoteStartupMigrationError.protectionMismatch
+            }
+            protectionBackup = result.snapshot
+            try await validateSource(opened, matches: original, preferences: frozenPreferences)
+            phase = .staging
+            let prepared = try await store.prepareMigration(verified, replacing: opened.generation)
+            preparedGeneration = prepared.generation
+            migrationIssues = prepared.migrationIssues
+            try await validateSource(opened, matches: original, preferences: frozenPreferences)
+            guard try store.preparedGeneration(for: opened.generation) == prepared.generation else {
+                throw WordNoteRestoreError.staleGeneration
+            }
+            try Task.checkCancellation()
+            phase = .activating
+            let upgraded = try store.open()
+            guard upgraded.schemaVersion == store.targetSchema, upgraded.generation == prepared.generation,
+                  upgraded.restoreOutcome == .migrated else { throw WordNoteStartupMigrationError.recoveryRequired }
+            session = upgraded
+            // No source context is ever attached to UI; retained references must remain write-blocked.
+            sourceSession = nil
+            phase = .ready
+            return upgraded
+        } catch {
+            cancelOwnPreparation(preparedGeneration)
+            if case WordNoteV2ToV3Migration.MigrationError.preflightFailed(let issues) = error {
+                cardMigrationIssues = issues
+            }
+            errorMessage = error.localizedDescription
+            phase = .recoveryRequired
+            throw error
+        }
+    }
+
+    /// A read-only preview. Calling open never opts the user into a repair.
+    @discardableResult
+    public func inspectRepair(at date: Date = Date()) async throws -> WordNoteV2IntegrityReport {
+        guard store.targetSchema == .v2, phase == .recoveryRequired, let sourceSession, sourceSession.schemaVersion == .v2 else {
+            throw WordNoteStartupMigrationError.repairUnavailable
+        }
+        phase = .inspecting
+        repairPlan = nil
+        repairReport = nil
+        defer { phase = .recoveryRequired }
+        do {
+            let source = try await captureForRepair(sourceSession)
+            let report = WordNoteV2IntegrityService.inspect(source)
+            repairReport = report
+            if report.canPrepareRepair { repairPlan = try WordNoteV2IntegrityService.prepareRepair(source, at: date) }
+            return report
+        } catch {
+            errorMessage = error.localizedDescription
+            throw error
+        }
+    }
+
+    /// Explicitly confirmed startup recovery only, before any views or workers use the source container.
+    @discardableResult
+    public func repair() async throws -> WordNoteStoreSession {
+        guard store.targetSchema == .v2, phase == .recoveryRequired, let sourceSession, let repairPlan else {
+            throw WordNoteStartupMigrationError.repairUnavailable
+        }
+        self.repairPlan = nil
+        phase = .backingUp
+        errorMessage = nil
+        repairEvidence = nil
+        var preparedGeneration: WordNoteStoreGeneration?
+        do {
+            try Task.checkCancellation()
+            let context = sourceSession.container.mainContext
+            guard !context.hasChanges else { throw WordNoteV2ContentError.unsavedChanges }
+            try blockSourceWrites(context)
+            try store.beginRepair(replacing: sourceSession.generation)
+            let source = try await captureForRepair(sourceSession)
+            _ = try repairPlan.validatedPayload(matching: source)
+            let saved = try await evidenceVault.create(source, generation: sourceSession.generation)
+            try Task.checkCancellation()
+            let verified = try await evidenceVault.read(id: saved.summary.id)
+            guard verified.summary == saved.summary, verified.payload == source else {
+                throw WordNoteStartupMigrationError.protectionMismatch
+            }
+            repairEvidence = verified.summary
+            _ = try repairPlan.validatedPayload(matching: await captureForRepair(sourceSession))
+            phase = .staging
+            let prepared = try await store.prepareRepair(repairPlan, protectedBy: verified, replacing: sourceSession.generation)
+            preparedGeneration = prepared.generation
+            _ = try repairPlan.validatedPayload(matching: await captureForRepair(sourceSession))
+            guard try store.preparedGeneration(for: sourceSession.generation) == prepared.generation else {
+                throw WordNoteRestoreError.staleGeneration
+            }
+            try Task.checkCancellation()
+            phase = .activating
+            let repaired = try store.open()
+            guard repaired.schemaVersion == .v2, repaired.generation == prepared.generation,
+                  repaired.restoreOutcome == .repaired else { throw WordNoteStartupMigrationError.recoveryRequired }
+            session = repaired
+            self.sourceSession = nil
+            phase = .ready
+            return repaired
+        } catch {
+            cancelOwnPreparation(preparedGeneration)
+            errorMessage = error.localizedDescription
+            phase = .recoveryRequired
+            throw error
+        }
+    }
+
+    private func cancelOwnPreparation(_ generation: WordNoteStoreGeneration?) {
+        guard let generation, let sourceSession else { return }
+        // Do not cancel a different operation that won a race with this startup.
+        if (try? store.preparedGeneration(for: sourceSession.generation)) == generation {
+            try? store.cancelPreparedRestore(replacing: sourceSession.generation, expectedPending: generation)
+        }
+    }
+
+    private func blockSourceWrites(_ context: ModelContext) throws {
+        if sourceWriteTicket == nil { sourceWriteTicket = try WordNoteWriteGate.beginRestore(context) }
+        context.autosaveEnabled = false
+    }
+
+    private func captureForRepair(_ source: WordNoteStoreSession) async throws -> WordNoteSnapshotV2Payload {
+        let frozenPreferences = source.preferencesToApply ?? preferences()
+        let payload = try await WordNoteSnapshotCapture.captureForIntegrityInspection(
+            container: source.container, preferences: frozenPreferences
+        )
+        guard frozenPreferences == (source.preferencesToApply ?? preferences()) else { throw WordNoteV2IntegrityError.staleRepairPlan }
+        return payload
+    }
+
+    private func capture(
+        _ source: WordNoteStoreSession, preferences: WordNoteSnapshotPayload.Preferences
+    ) async throws -> WordNoteVersionedPayload {
+        try await WordNoteSnapshotCapture(container: source.container)
+            .captureVersioned(preferences: preferences, requireCleanContext: true)
+    }
+
+    private func validateSource(
+        _ source: WordNoteStoreSession, matches original: WordNoteVersionedPayload,
+        preferences: WordNoteSnapshotPayload.Preferences
+    ) async throws {
+        guard try await capture(source, preferences: preferences) == original else { throw WordNoteStartupMigrationError.sourceChanged }
+    }
+}

@@ -283,7 +283,7 @@ A02 接入進展見 [V2 隔離 App 與版本化資料保護](qa/2026-10-08-a02-a
 
 ### WN2-B03：V3 卡片與歷史兼容
 
-狀態：進行中，隔離 V3 模型、確定性遷移與完整快照已實作；共用備份/恢復/啟動及 B04 寫入切換待接入。工作量：L。依賴：WN2-A02、WN2-A01。
+狀態：進行中，隔離 V3 模型、確定性遷移、完整備份及受保護恢復/啟動已實作；刪除/完整性交易及 B04 寫入切換待接入。工作量：L。依賴：WN2-A02、WN2-A01。
 
 - 新增 ReviewCard、ReviewSession、ReviewSessionItem，擴展 ReviewEvent 的 cardID、sessionID、冪等 actionID 和反饋語義版本。
 - 同版準備 B06 的原句填空目標及 sibling 暫時埋藏字段；C01 才增加可選 senseID。
@@ -294,11 +294,13 @@ A02 接入進展見 [V2 隔離 App 與版本化資料保護](qa/2026-10-08-a02-a
 
 驗收：遷移不憑空增加到期工作量、補答題歷史或改寫舊事件；每張卡 ID 可穩定恢復，快照包含 V3。關聯測試：QA-19、QA-20。
 
-第一批新增十一實體 V3 schema、純值 V2 -> V3 轉換、完整 payload/codec/校驗、空庫導入與磁盤重開測試。V1 原庫經已有 V1 -> V2 adapter 接續轉換；每詞唯一主卡，不補造其他方向或歷史作答，新事件用 originalCardID 保留刪卡身份。legacy contextCloze 無穩定目標時明確阻止自動遷移，不靜默換方向。普通/V2 QA App 及共用 reader 仍維持原版本，沒有正式啟用 V3。證據見 [B03 隔離基礎](qa/2026-10-08-b03-isolated-foundation.md)。
+第一批新增十一實體 V3 schema、純值 V2 -> V3 轉換、完整 payload/codec/校驗、空庫導入與磁盤重開測試。V1 原庫經已有 V1 -> V2 adapter 接續轉換；每詞唯一主卡，不補造其他方向或歷史作答，新事件用 originalCardID 保留刪卡身份。legacy contextCloze 無穩定目標時明確阻止自動遷移，不靜默換方向。第一批時共用 reader 尚未開通 V3，普通/V2 QA App 入口至今仍維持原版本。證據見 [B03 隔離基礎](qa/2026-10-08-b03-isolated-foundation.md)。
 
 第一批新增 37 項定向測試全部通過；普通 V1/V2 QA Debug、V2 QA Release 嚴格全套各 767 項中 762 通過、5 跳過。原始 V1 fixture bytes 和 V1/V2 模型未變，無正式詞庫讀寫或付費 AI 呼叫。
 
-下一批必須把 V3 接入版本化 reader/vault/counts、staged restore 日誌和啟動遷移，補刪除/完整性交易與失敗恢復；再與 B04 新排程、重複查詢信號及單一寫入源共同接入隔離 App。QA-20 的整體恢復/啟用門檻尚未通過，不能僅依空庫往返就結束 B03。
+第二批已接入完整 V3 reader/vault/counts、version 3 staged restore 日誌及共用 `WordNoteStartupCoordinator`。V1/V2 日誌保持五/八類 counts，新版十一類不能被舊入口忽略；V3 取消或回退後不降版日誌。遷移時鐘來自本次已重讀校驗的保護備份；V1 經 V2 純值轉換直達 V3，不建立中間活動庫。恢復涵蓋活動游標、已刪卡身份及 Unicode 填空。新增 36 項測試，證據見 [B03 備份恢復與啟動](qa/2026-10-08-b03-protected-recovery.md)。
+
+下一批補 V3 刪除/完整性交易，再與 B04 新排程、重複查詢信號及單一寫入源共同接入隔離 App。V3 完整資料保護 UI/分析隊列尚未接入，舊版修復器不能用於 V3。QA-20 的整體恢復/啟用門檻仍未通過，不以核心測試替代正式工作流驗收。
 
 ### WN2-B04：短期重學與查詢信號分離
 
@@ -447,7 +449,7 @@ A02 接入進展見 [V2 隔離 App 與版本化資料保護](qa/2026-10-08-a02-a
 | WN2-A06 | 進行中，隔離閱讀/篩選/整理已接入，實機與完整延遲待補 | L | [47 項功能回歸與核心性能記錄](qa/2026-10-08-a06-vocabulary-reading.md) |
 | WN2-B01 | 進行中，核心和部分原生流程通過，完整主題/尺寸/競態待補 | M | [持久分析隊列](qa/2026-10-08-a02-analysis-queue.md)、[34 項 Inbox 回歸及實機記錄](qa/2026-10-08-b01-inbox-workflow.md) |
 | WN2-B02 | 主要代碼已接入隔離 V2，快捷鍵/共享上下文/浮窗操作齊備，完整實機待補 | L | [第一批快捷鍵](qa/2026-10-08-b02-capture-shortcut.md)、[第二批上下文](qa/2026-10-08-b02-capture-context.md)、[第三批結果操作](qa/2026-10-08-b02-capture-feedback.md) |
-| WN2-B03 | 進行中，隔離 V3 模型/遷移/快照已實作，共用恢復與寫入切換待接入 | L | [B03 隔離基礎](qa/2026-10-08-b03-isolated-foundation.md) |
+| WN2-B03 | 進行中，隔離模型/完整備份/受保護恢復啟動已實作，刪除/完整性交易及 B04 寫入切換待接入 | L | [B03 受保護恢復](qa/2026-10-08-b03-protected-recovery.md) |
 | WN2-B04 | 待實施 | L | 待填 |
 | WN2-B05 | 待實施 | L | 待填 |
 | WN2-B06 | 待實施 | M | 待填 |

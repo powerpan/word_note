@@ -160,6 +160,7 @@ private struct RestorePreviewView: View {
         switch preview.snapshot {
         case .v1(let snapshot): snapshot.document.formatVersion
         case .v2(let snapshot): snapshot.document.formatVersion
+        case .v3(let snapshot): snapshot.document.formatVersion
         }
     }
 
@@ -176,10 +177,15 @@ private struct RestorePreviewView: View {
                 GridRow { Text("Candidates"); Text("\(document.counts.candidates)") }
                 GridRow { Text("Courses"); Text("\(document.counts.courses)") }
                 GridRow { Text("Review Events"); Text("\(document.counts.reviewEvents)") }
-                if document.schemaVersion == .v2 {
+                if document.schemaVersion != .v1 {
                     GridRow { Text("Sources"); Text("\(document.counts.occurrences)") }
                     GridRow { Text("Course Links"); Text("\(document.counts.courseLinks)") }
                     GridRow { Text("Lookup Events"); Text("\(document.counts.lookupEvents)") }
+                }
+                if document.schemaVersion == .v3 {
+                    GridRow { Text("Review Cards"); Text("\(document.counts.cards)") }
+                    GridRow { Text("Review Sessions"); Text("\(document.counts.sessions)") }
+                    GridRow { Text("Session Items"); Text("\(document.counts.sessionItems)") }
                 }
             }
             Text("This replaces all learning data, not a merge. A safety backup is required first. Word Note will quit; the replacement opens on its next launch. Unfinished AI requests will remain paused.")

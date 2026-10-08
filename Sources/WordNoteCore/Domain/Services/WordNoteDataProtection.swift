@@ -205,7 +205,7 @@ public final class WordNoteDataProtection {
     ) async throws {
         try await perform {
             try self.validateExportDestination(url)
-            if self.schemaVersion == .v2, courseMemberships == nil { throw WordNoteV2ContentError.invalidValue }
+            if self.schemaVersion != .v1, courseMemberships == nil { throw WordNoteV2ContentError.invalidValue }
             try await self.vault.exportCSV(terms: terms, courses: courses, courseMemberships: courseMemberships, to: url)
             self.statusMessage = "Exported \(terms.count) vocabulary entries."
         }
@@ -232,7 +232,7 @@ public final class WordNoteDataProtection {
     }
 
     private func validatedPreview(_ snapshot: VersionedWordNoteSnapshot) throws -> WordNoteVersionedRestorePreview {
-        guard schemaVersion == .v2 || snapshot.payload.schemaVersion == .v1 else {
+        guard schemaVersion.supports(snapshot.payload.schemaVersion) else {
             throw WordNoteSnapshotError.unsupportedSchema
         }
         return WordNoteVersionedRestorePreview(snapshot: snapshot)
@@ -254,7 +254,7 @@ public final class WordNoteDataProtection {
         guard !isWorking, !isRestoring else { throw WordNoteDataOperationError.busy }
         do {
             _ = try validatedPreview(preview.snapshot)
-            if schemaVersion == .v2, container.mainContext.hasChanges { throw WordNoteV2ContentError.unsavedChanges }
+            if schemaVersion != .v1, container.mainContext.hasChanges { throw WordNoteV2ContentError.unsavedChanges }
         } catch {
             errorMessage = error.localizedDescription
             throw error
@@ -326,6 +326,9 @@ public final class WordNoteDataProtection {
         case .v2:
             return try container.mainContext.fetch(FetchDescriptor<WordNoteSchemaV2.InputRecordModel>())
                 .filter { ["queued", "running"].contains($0.queueStateRaw) }.count
+        case .v3:
+            // V3 runtime writers are deliberately not connected until the scheduler transition.
+            throw WordNoteSnapshotError.unsupportedSchema
         }
     }
 

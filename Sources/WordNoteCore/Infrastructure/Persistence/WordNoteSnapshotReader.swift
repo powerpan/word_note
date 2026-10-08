@@ -3,6 +3,7 @@ import Foundation
 public enum VersionedWordNoteSnapshot: Sendable {
     case v1(DecodedWordNoteSnapshot)
     case v2(DecodedWordNoteSnapshotV2)
+    case v3(DecodedWordNoteSnapshotV3)
 }
 
 public enum WordNoteSnapshotReader {
@@ -18,6 +19,7 @@ public enum WordNoteSnapshotReader {
         switch header.sourceSchemaVersion {
         case "1.0.0": return .v1(try WordNoteSnapshotCodec.decode(data))
         case "2.0.0": return .v2(try WordNoteSnapshotV2Codec.decode(data))
+        case "3.0.0": return .v3(try WordNoteSnapshotV3Codec.decode(data))
         default: throw WordNoteSnapshotError.unsupportedSchema
         }
     }

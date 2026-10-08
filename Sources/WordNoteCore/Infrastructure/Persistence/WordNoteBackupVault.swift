@@ -28,6 +28,16 @@ public struct WordNoteBackupSummary: Identifiable, Equatable, Sendable {
         payloadChecksum = document.payloadChecksum
         appVersion = document.appVersion
     }
+
+    init(_ document: WordNoteSnapshotV3Document) {
+        id = document.snapshotID
+        createdAt = document.createdAt
+        kind = document.kind
+        schemaVersion = .v3
+        counts = WordNoteBackupCounts(document.counts)
+        payloadChecksum = document.payloadChecksum
+        appVersion = document.appVersion
+    }
 }
 
 public struct WordNoteBackupInventory: Sendable {
@@ -129,6 +139,12 @@ public actor WordNoteBackupVault {
     }
 
     public func createIfDue(
+        _ payload: WordNoteSnapshotV3Payload, now: Date = Date()
+    ) throws -> WordNoteBackupResult? {
+        try createIfDue(.v3(payload), now: now)
+    }
+
+    public func createIfDue(
         _ payload: WordNoteVersionedPayload, now: Date = Date()
     ) throws -> WordNoteBackupResult? {
         guard now.timeIntervalSince1970.isFinite, abs(now.timeIntervalSince1970) < 100_000_000_000 else {
@@ -161,6 +177,12 @@ public actor WordNoteBackupVault {
         _ payload: WordNoteSnapshotV2Payload, kind: WordNoteBackupKind, now: Date = Date()
     ) throws -> WordNoteBackupResult {
         try create(.v2(payload), kind: kind, now: now)
+    }
+
+    public func create(
+        _ payload: WordNoteSnapshotV3Payload, kind: WordNoteBackupKind, now: Date = Date()
+    ) throws -> WordNoteBackupResult {
+        try create(.v3(payload), kind: kind, now: now)
     }
 
     public func create(
@@ -215,6 +237,10 @@ public actor WordNoteBackupVault {
 
     public func exportSnapshot(_ payload: WordNoteSnapshotV2Payload, to url: URL) throws {
         try exportSnapshot(.v2(payload), to: url)
+    }
+
+    public func exportSnapshot(_ payload: WordNoteSnapshotV3Payload, to url: URL) throws {
+        try exportSnapshot(.v3(payload), to: url)
     }
 
     public func exportSnapshot(_ payload: WordNoteVersionedPayload, to url: URL) throws {

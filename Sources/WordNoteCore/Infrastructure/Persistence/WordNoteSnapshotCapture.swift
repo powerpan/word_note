@@ -49,13 +49,14 @@ public struct WordNoteSnapshotCapture {
         switch container.schema.version {
         case WordNoteSchemaV1.versionIdentifier: schema = .v1
         case WordNoteSchemaV2.versionIdentifier: schema = .v2
+        case WordNoteSchemaV3.versionIdentifier: schema = .v3
         default: throw WordNoteSnapshotError.unsupportedSchema
         }
         let changes = SnapshotSaveCounter(container: container)
         for _ in 0..<3 {
             try Task.checkCancellation()
             if container.mainContext.hasChanges {
-                // V2 form drafts must not bypass their revision-checked service through a backup.
+                // Versioned form drafts must not bypass their revision-checked service through a backup.
                 guard schema == .v1, !requireCleanContext else { throw WordNoteV2ContentError.unsavedChanges }
                 try container.mainContext.save()
             }

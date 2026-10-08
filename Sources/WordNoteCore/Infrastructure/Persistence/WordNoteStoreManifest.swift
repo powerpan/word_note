@@ -13,11 +13,14 @@ struct WordNoteStoreManifest: Codable {
 
     var activeSchema: WordNoteDataSchemaVersion { activeSchemaVersion ?? .v1 }
 
-    mutating func enableVersionedJournal() {
-        guard version == 1 else { return }
-        version = 2
-        activeSchemaVersion = .v1
-        previousSchemaVersion = previous == nil ? nil : .v1
+    mutating func enableVersionedJournal(for schema: WordNoteDataSchemaVersion = .v2) {
+        guard schema != .v1 else { return }
+        if version == 1 {
+            activeSchemaVersion = .v1
+            previousSchemaVersion = previous == nil ? nil : .v1
+        }
+        // A cancelled or rolled-back V3 transition must not become readable by an older writer.
+        version = max(version, schema.journalVersion)
     }
 
     struct PendingRestore: Codable {
@@ -61,6 +64,11 @@ struct WordNoteStoreManifest: Codable {
             case schemaVersion, counts, preferences, analysisRequiresResume, operation
         }
 
+        private enum CountKeys: String, CodingKey, CaseIterable {
+            case courses, inputRecords, candidates, terms, reviewEvents, occurrences, courseLinks, lookupEvents
+            case cards, sessions, sessionItems
+        }
+
         init(from decoder: Decoder) throws {
             let values = try decoder.container(keyedBy: CodingKeys.self)
             phase = try values.decode(Phase.self, forKey: .phase)
@@ -69,10 +77,22 @@ struct WordNoteStoreManifest: Codable {
             protectionSnapshotID = try values.decode(UUID.self, forKey: .protectionSnapshotID)
             payloadChecksum = try values.decode(String.self, forKey: .payloadChecksum)
             schemaVersion = try values.decodeIfPresent(WordNoteDataSchemaVersion.self, forKey: .schemaVersion)
-            if schemaVersion == nil {
+            let countKeys = try values.nestedContainer(keyedBy: CountKeys.self, forKey: .counts).allKeys
+            let countFieldCount = switch schemaVersion ?? .v1 {
+            case .v1: 5
+            case .v2: 8
+            case .v3: 11
+            }
+            guard Set(countKeys) == Set(CountKeys.allCases.prefix(countFieldCount)) else {
+                throw WordNoteRestoreError.invalidJournal
+            }
+            switch schemaVersion ?? .v1 {
+            case .v1:
                 counts = WordNoteBackupCounts(try values.decode(WordNoteSnapshotCounts.self, forKey: .counts))
-            } else {
-                counts = try values.decode(WordNoteBackupCounts.self, forKey: .counts)
+            case .v2:
+                counts = WordNoteBackupCounts(try values.decode(WordNoteSnapshotV2Counts.self, forKey: .counts))
+            case .v3:
+                counts = WordNoteBackupCounts(try values.decode(WordNoteSnapshotV3Counts.self, forKey: .counts))
             }
             preferences = try values.decode(WordNoteSnapshotPayload.Preferences.self, forKey: .preferences)
             analysisRequiresResume = try values.decode(Bool.self, forKey: .analysisRequiresResume)
@@ -87,13 +107,21 @@ struct WordNoteStoreManifest: Codable {
             try values.encode(protectionSnapshotID, forKey: .protectionSnapshotID)
             try values.encode(payloadChecksum, forKey: .payloadChecksum)
             try values.encodeIfPresent(schemaVersion, forKey: .schemaVersion)
-            if schemaVersion == nil {
+            switch schemaVersion ?? .v1 {
+            case .v1:
                 let legacyCounts = WordNoteSnapshotCounts(
                     courses: counts.courses, inputRecords: counts.inputRecords, candidates: counts.candidates,
                     terms: counts.terms, reviewEvents: counts.reviewEvents
                 )
                 try values.encode(legacyCounts, forKey: .counts)
-            } else {
+            case .v2:
+                let legacyCounts = WordNoteSnapshotV2Counts(
+                    courses: counts.courses, inputRecords: counts.inputRecords, candidates: counts.candidates,
+                    terms: counts.terms, reviewEvents: counts.reviewEvents, occurrences: counts.occurrences,
+                    courseLinks: counts.courseLinks, lookupEvents: counts.lookupEvents
+                )
+                try values.encode(legacyCounts, forKey: .counts)
+            case .v3:
                 try values.encode(counts, forKey: .counts)
             }
             try values.encode(preferences, forKey: .preferences)

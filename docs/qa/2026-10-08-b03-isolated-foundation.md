@@ -2,6 +2,8 @@
 
 日期：2026-10-08（Asia/Hong_Kong）。基線：`e733e70`，分支：`codex/supplemental-development`。對應 QA-19 及部分 QA-20，不是 B03/B04 完整啟用驗收。
 
+此檔保留第一批時點的測試及未過門檻。後續共用 reader/完整備份/日誌/受保護啟動已於 [第二批](2026-10-08-b03-protected-recovery.md) 接入；目前能力與剩餘範圍以第二批及 [開發計劃](../13-supplemental-development-plan.md) 為準，不回寫第一批歷史測試結果。
+
 ## 實作範圍
 
 - [WordNoteSchemaV3](../../Sources/WordNoteCore/Data/Schema/WordNoteSchemaV3.swift) 持有獨立十一實體，未改 V1/V2 歷史模型。新增 ReviewCard/ReviewSession/ReviewSessionItem，擴展 Term 歷史計數及 ReviewEvent 元資料。

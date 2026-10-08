@@ -9,7 +9,16 @@ public enum WordNoteV2ToV3Migration {
         public let eventID: UUID
     }
 
-    public enum MigrationError: Error, Equatable { case preflightFailed([Issue]) }
+    public enum MigrationError: LocalizedError, Equatable {
+        case preflightFailed([Issue])
+
+        public var errorDescription: String? {
+            switch self {
+            case .preflightFailed:
+                "Some legacy cloze reviews have no saved answer range. The data cannot be upgraded automatically. Resolve the reported review targets before retrying."
+            }
+        }
+    }
 
     public static func preflight(_ source: WordNoteSnapshotV2Payload) throws -> [Issue] {
         try source.validate()

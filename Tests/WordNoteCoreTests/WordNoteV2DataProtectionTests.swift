@@ -59,6 +59,26 @@ final class WordNoteV2DataProtectionTests: XCTestCase {
         XCTAssertEqual(try payload(h), before)
     }
 
+    func testV2RejectsV3PreviewAndPreparationBeforePausingOrCreatingProtection() async throws {
+        let h = try await harness()
+        let before = try payload(h)
+        let created = try await h.vault.create(V3TestSupport.reviewedPayload(), kind: .manual)
+        let inventory = try await h.vault.inventory()
+        let journalURL = h.store.directoryURL.appending(path: "store-generations.json")
+        let journal = try Data(contentsOf: journalURL)
+        do { _ = try await h.controller.previewVersionedRestore(id: created.snapshot.id); XCTFail("V2 cannot import V3.") }
+        catch { XCTAssertEqual(error as? WordNoteSnapshotError, .unsupportedSchema) }
+        let snapshot = try await h.vault.readVersionedSnapshot(id: created.snapshot.id)
+        do { try await h.controller.prepareRestore(.init(snapshot: snapshot)); XCTFail("Direct previews must also be checked.") }
+        catch { XCTAssertEqual(error as? WordNoteSnapshotError, .unsupportedSchema) }
+        XCTAssertFalse(WordNoteWriteGate.isBlocked(h.session.container.mainContext))
+        XCTAssertEqual(h.controller.restorePhase, .idle)
+        XCTAssertEqual(try Data(contentsOf: journalURL), journal)
+        XCTAssertEqual(try payload(h), before)
+        let after = try await h.vault.inventory()
+        XCTAssertEqual(after.snapshots, inventory.snapshots)
+    }
+
     func testDirtyV2ContextIsNotSavedByBackupOrRestore() async throws {
         let h = try await harness()
         try await h.controller.createBackup()
