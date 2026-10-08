@@ -46,6 +46,7 @@ public struct ReviewClozeTarget: Codable, Equatable, Sendable {
     public var characterCount: Int
     public var answer: String
     public var acceptedAnswers: [String]
+    public var sourceDeletedAt: Date?
 
     public init(id: UUID = UUID(), occurrenceID: UUID, sourceHash: String, startCharacterOffset: Int,
                 characterCount: Int, answer: String, acceptedAnswers: [String] = []) {
@@ -56,6 +57,7 @@ public struct ReviewClozeTarget: Codable, Equatable, Sendable {
         self.characterCount = characterCount
         self.answer = answer
         self.acceptedAnswers = acceptedAnswers
+        self.sourceDeletedAt = nil
     }
 
     public var contentScopeKey: String { "cloze:\(id.uuidString.lowercased())" }

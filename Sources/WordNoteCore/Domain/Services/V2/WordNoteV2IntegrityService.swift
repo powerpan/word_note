@@ -96,7 +96,7 @@ public enum WordNoteV2IntegrityService {
         return try Payload.captureForIntegrityInspection(from: container.mainContext, preferences: preferences)
     }
 
-    private static func detachingOptionalReferences(in source: Payload, issues: [Issue]) -> Payload {
+    static func detachingOptionalReferences(in source: Payload, issues: [Issue]) -> Payload {
         var result = source
         let detachments = issues.filter { $0.resolution == .detachMissingOptionalReference }
         let terms = Set(detachments.filter { $0.entity == .term }.map(\.entityID))

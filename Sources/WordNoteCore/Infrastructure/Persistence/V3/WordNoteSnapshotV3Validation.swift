@@ -47,8 +47,16 @@ extension WordNoteSnapshotV3Payload {
             }
             if card.mode == .contextCloze {
                 guard let target = card.clozeTarget, card.contentScopeKey == target.contentScopeKey else { throw WordNoteSnapshotError.invalidValue }
-                guard let source = sources[target.occurrenceID], source.termID == card.termID else { throw WordNoteSnapshotError.missingReference }
-                try cloze(target, source: source.rawTextSnapshot)
+                if let deletedAt = target.sourceDeletedAt {
+                    try date(deletedAt)
+                    guard sources[target.occurrenceID] == nil, card.schedule.phase == .suspended,
+                          card.schedule.nextReviewAt == nil, card.schedule.priorityRequestedAt == nil,
+                          target.sourceHash.isEmpty, target.startCharacterOffset == 0, target.characterCount == 0,
+                          target.answer.isEmpty, target.acceptedAnswers.isEmpty else { throw WordNoteSnapshotError.invalidValue }
+                } else {
+                    guard let source = sources[target.occurrenceID], source.termID == card.termID else { throw WordNoteSnapshotError.missingReference }
+                    try cloze(target, source: source.rawTextSnapshot)
+                }
             } else if card.contentScopeKey != "wholeTerm" || card.clozeTarget != nil {
                 throw WordNoteSnapshotError.invalidValue
             }
@@ -85,6 +93,7 @@ extension WordNoteSnapshotV3Payload {
             guard let session = sessionByID[item.sessionID] else { throw WordNoteSnapshotError.missingReference }
             if let id = item.cardID {
                 guard let card = cardByID[id], id == item.originalCardID, card.mode == session.scope.mode else { throw WordNoteSnapshotError.missingReference }
+                guard item.status.isTerminal || card.schedule.phase != .suspended else { throw WordNoteSnapshotError.invalidValue }
             } else if item.status != .unavailable { throw WordNoteSnapshotError.missingReference }
             try counter(item.position)
             try counter(item.attemptCount)

@@ -34,24 +34,29 @@ public final class WordNoteStartupCoordinator {
     public private(set) var session: WordNoteStoreSession?
     public private(set) var repairReport: WordNoteV2IntegrityReport?
     public private(set) var repairEvidence: WordNoteRepairEvidenceSummary?
+    public private(set) var v3RepairReport: WordNoteV3IntegrityReport?
+    public private(set) var v3RepairEvidence: WordNoteV3RepairEvidenceSummary?
 
     @ObservationIgnored private let store: WordNoteRestoreStore
     @ObservationIgnored private let vault: WordNoteBackupVault
     @ObservationIgnored private let preferences: @MainActor () -> WordNoteSnapshotPayload.Preferences
     @ObservationIgnored private let evidenceVault: WordNoteRepairEvidenceVault
-    @ObservationIgnored private var repairPlan: WordNoteV2IntegrityRepairPlan?
+    @ObservationIgnored private let v3EvidenceVault: WordNoteV3RepairEvidenceVault
+    @ObservationIgnored private var repairPlan: RepairPlan?
     @ObservationIgnored private var sourceWriteTicket: WordNoteWriteGate.Ticket?
     @ObservationIgnored private(set) var sourceSession: WordNoteStoreSession?
 
     public init(
         store: WordNoteRestoreStore, vault: WordNoteBackupVault,
         preferences: @escaping @MainActor () -> WordNoteSnapshotPayload.Preferences,
-        evidenceVault: WordNoteRepairEvidenceVault? = nil
+        evidenceVault: WordNoteRepairEvidenceVault? = nil,
+        v3EvidenceVault: WordNoteV3RepairEvidenceVault? = nil
     ) {
         self.store = store
         self.vault = vault
         self.preferences = preferences
         self.evidenceVault = evidenceVault ?? WordNoteRepairEvidenceVault(directoryURL: vault.directoryURL.appending(path: "RepairEvidence"))
+        self.v3EvidenceVault = v3EvidenceVault ?? WordNoteV3RepairEvidenceVault(directoryURL: vault.directoryURL.appending(path: "RepairEvidenceV3"))
     }
 
     @discardableResult
@@ -67,6 +72,8 @@ public final class WordNoteStartupCoordinator {
         repairReport = nil
         repairPlan = nil
         repairEvidence = nil
+        v3RepairReport = nil
+        v3RepairEvidence = nil
         session = nil
         sourceSession = nil
         sourceWriteTicket = nil
@@ -143,10 +150,31 @@ public final class WordNoteStartupCoordinator {
         repairReport = nil
         defer { phase = .recoveryRequired }
         do {
-            let source = try await captureForRepair(sourceSession)
+            guard case .v2(let source) = try await captureForRepair(sourceSession) else { throw WordNoteSnapshotError.unsupportedSchema }
             let report = WordNoteV2IntegrityService.inspect(source)
             repairReport = report
-            if report.canPrepareRepair { repairPlan = try WordNoteV2IntegrityService.prepareRepair(source, at: date) }
+            if report.canPrepareRepair { repairPlan = .v2(try WordNoteV2IntegrityService.prepareRepair(source, at: date)) }
+            return report
+        } catch {
+            errorMessage = error.localizedDescription
+            throw error
+        }
+    }
+
+    @discardableResult
+    public func inspectV3Repair(at date: Date = Date()) async throws -> WordNoteV3IntegrityReport {
+        guard store.targetSchema == .v3, phase == .recoveryRequired, let sourceSession, sourceSession.schemaVersion == .v3 else {
+            throw WordNoteStartupMigrationError.repairUnavailable
+        }
+        phase = .inspecting
+        repairPlan = nil
+        v3RepairReport = nil
+        defer { phase = .recoveryRequired }
+        do {
+            guard case .v3(let source) = try await captureForRepair(sourceSession) else { throw WordNoteSnapshotError.unsupportedSchema }
+            let report = WordNoteV3IntegrityService.inspect(source)
+            v3RepairReport = report
+            if report.canPrepareRepair { repairPlan = .v3(try WordNoteV3IntegrityService.prepareRepair(source, at: date)) }
             return report
         } catch {
             errorMessage = error.localizedDescription
@@ -157,13 +185,15 @@ public final class WordNoteStartupCoordinator {
     /// Explicitly confirmed startup recovery only, before any views or workers use the source container.
     @discardableResult
     public func repair() async throws -> WordNoteStoreSession {
-        guard store.targetSchema == .v2, phase == .recoveryRequired, let sourceSession, let repairPlan else {
+        guard store.targetSchema != .v1, phase == .recoveryRequired, let sourceSession,
+              sourceSession.schemaVersion == store.targetSchema, let repairPlan else {
             throw WordNoteStartupMigrationError.repairUnavailable
         }
         self.repairPlan = nil
         phase = .backingUp
         errorMessage = nil
         repairEvidence = nil
+        v3RepairEvidence = nil
         var preparedGeneration: WordNoteStoreGeneration?
         do {
             try Task.checkCancellation()
@@ -172,26 +202,20 @@ public final class WordNoteStartupCoordinator {
             try blockSourceWrites(context)
             try store.beginRepair(replacing: sourceSession.generation)
             let source = try await captureForRepair(sourceSession)
-            _ = try repairPlan.validatedPayload(matching: source)
-            let saved = try await evidenceVault.create(source, generation: sourceSession.generation)
-            try Task.checkCancellation()
-            let verified = try await evidenceVault.read(id: saved.summary.id)
-            guard verified.summary == saved.summary, verified.payload == source else {
-                throw WordNoteStartupMigrationError.protectionMismatch
-            }
-            repairEvidence = verified.summary
-            _ = try repairPlan.validatedPayload(matching: await captureForRepair(sourceSession))
+            try repairPlan.validate(source)
+            let protection = try await protectForRepair(source, generation: sourceSession.generation)
+            try repairPlan.validate(await captureForRepair(sourceSession))
             phase = .staging
-            let prepared = try await store.prepareRepair(repairPlan, protectedBy: verified, replacing: sourceSession.generation)
+            let prepared = try await prepareRepair(repairPlan, protection: protection, replacing: sourceSession.generation)
             preparedGeneration = prepared.generation
-            _ = try repairPlan.validatedPayload(matching: await captureForRepair(sourceSession))
+            try repairPlan.validate(await captureForRepair(sourceSession))
             guard try store.preparedGeneration(for: sourceSession.generation) == prepared.generation else {
                 throw WordNoteRestoreError.staleGeneration
             }
             try Task.checkCancellation()
             phase = .activating
             let repaired = try store.open()
-            guard repaired.schemaVersion == .v2, repaired.generation == prepared.generation,
+            guard repaired.schemaVersion == store.targetSchema, repaired.generation == prepared.generation,
                   repaired.restoreOutcome == .repaired else { throw WordNoteStartupMigrationError.recoveryRequired }
             session = repaired
             self.sourceSession = nil
@@ -218,12 +242,63 @@ public final class WordNoteStartupCoordinator {
         context.autosaveEnabled = false
     }
 
-    private func captureForRepair(_ source: WordNoteStoreSession) async throws -> WordNoteSnapshotV2Payload {
+    private enum RepairPlan {
+        case v2(WordNoteV2IntegrityRepairPlan)
+        case v3(WordNoteV3IntegrityRepairPlan)
+
+        func validate(_ source: WordNoteVersionedPayload) throws {
+            switch (self, source) {
+            case (.v2(let plan), .v2(let payload)): _ = try plan.validatedPayload(matching: payload)
+            case (.v3(let plan), .v3(let payload)): _ = try plan.validatedPayload(matching: payload)
+            default: throw WordNoteSnapshotError.unsupportedSchema
+            }
+        }
+    }
+
+    private enum RepairProtection {
+        case v2(VerifiedWordNoteRepairEvidence)
+        case v3(VerifiedWordNoteV3RepairEvidence)
+    }
+
+    private func protectForRepair(_ source: WordNoteVersionedPayload,
+                                  generation: WordNoteStoreGeneration) async throws -> RepairProtection {
+        switch source {
+        case .v2(let payload):
+            let saved = try await evidenceVault.create(payload, generation: generation)
+            try Task.checkCancellation()
+            let verified = try await evidenceVault.read(id: saved.summary.id)
+            guard verified.summary == saved.summary, verified.payload == payload else { throw WordNoteStartupMigrationError.protectionMismatch }
+            repairEvidence = verified.summary
+            return .v2(verified)
+        case .v3(let payload):
+            let saved = try await v3EvidenceVault.create(payload, generation: generation)
+            try Task.checkCancellation()
+            let verified = try await v3EvidenceVault.read(id: saved.summary.id)
+            guard verified.summary == saved.summary, verified.payload == payload else { throw WordNoteStartupMigrationError.protectionMismatch }
+            v3RepairEvidence = verified.summary
+            return .v3(verified)
+        case .v1: throw WordNoteSnapshotError.unsupportedSchema
+        }
+    }
+
+    private func prepareRepair(_ plan: RepairPlan, protection: RepairProtection,
+                               replacing generation: WordNoteStoreGeneration) async throws -> WordNotePreparedStore {
+        switch (plan, protection) {
+        case (.v2(let plan), .v2(let evidence)): return try await store.prepareRepair(plan, protectedBy: evidence, replacing: generation)
+        case (.v3(let plan), .v3(let evidence)): return try await store.prepareRepair(plan, protectedBy: evidence, replacing: generation)
+        default: throw WordNoteSnapshotError.unsupportedSchema
+        }
+    }
+
+    private func captureForRepair(_ source: WordNoteStoreSession) async throws -> WordNoteVersionedPayload {
         let frozenPreferences = source.preferencesToApply ?? preferences()
-        let payload = try await WordNoteSnapshotCapture.captureForIntegrityInspection(
+        let payload = try await WordNoteSnapshotCapture.captureVersionedForIntegrityInspection(
             container: source.container, preferences: frozenPreferences
         )
-        guard frozenPreferences == (source.preferencesToApply ?? preferences()) else { throw WordNoteV2IntegrityError.staleRepairPlan }
+        guard frozenPreferences == (source.preferencesToApply ?? preferences()) else {
+            if source.schemaVersion == .v3 { throw WordNoteV3IntegrityError.staleRepairPlan }
+            throw WordNoteV2IntegrityError.staleRepairPlan
+        }
         return payload
     }
 

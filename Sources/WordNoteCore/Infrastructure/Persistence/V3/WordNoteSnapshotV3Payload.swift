@@ -23,6 +23,14 @@ public struct WordNoteSnapshotV3Payload: Codable, Equatable, Sendable {
     /// This method must run on the context's owning executor. V1/V2 readers reject V3 stores.
     public static func capture(from context: ModelContext,
                                preferences: WordNoteSnapshotPayload.Preferences = .init()) throws -> Self {
+        let result = try captureForIntegrityInspection(from: context, preferences: preferences)
+        try result.validate()
+        return result
+    }
+
+    // Only integrity inspection may read invalid relationships; malformed JSON still fails closed.
+    static func captureForIntegrityInspection(from context: ModelContext,
+                                             preferences: WordNoteSnapshotPayload.Preferences = .init()) throws -> Self {
         guard context.container.schema.version == WordNoteSchemaV3.versionIdentifier else { throw WordNoteSnapshotError.unsupportedSchema }
         let courses = try context.fetch(FetchDescriptor<WordNoteSchemaV3.CourseModel>())
         let records = try context.fetch(FetchDescriptor<WordNoteSchemaV3.InputRecordModel>())
@@ -43,13 +51,11 @@ public struct WordNoteSnapshotV3Payload: Codable, Equatable, Sendable {
             occurrences: try context.fetch(FetchDescriptor<WordNoteSchemaV3.TermOccurrenceModel>()).map(WordNoteSnapshotV2Payload.Occurrence.init),
             courseLinks: try context.fetch(FetchDescriptor<WordNoteSchemaV3.TermCourseLinkModel>()).map(WordNoteSnapshotV2Payload.CourseLink.init),
             lookupEvents: try context.fetch(FetchDescriptor<WordNoteSchemaV3.LookupEventModel>()).map(WordNoteSnapshotV2Payload.LookupEvent.init))
-        let result = try Self(content: content, termHistories: terms.map(TermHistory.init),
+        return try Self(content: content, termHistories: terms.map(TermHistory.init),
             cards: context.fetch(FetchDescriptor<WordNoteSchemaV3.ReviewCardModel>()).map(Card.init),
             sessions: context.fetch(FetchDescriptor<WordNoteSchemaV3.ReviewSessionModel>()).map(Session.init),
             sessionItems: context.fetch(FetchDescriptor<WordNoteSchemaV3.ReviewSessionItemModel>()).map(SessionItem.init),
             eventStates: events.map(EventState.init)).canonicalized
-        try result.validate()
-        return result
     }
 
     public func populateEmptyStore(_ context: ModelContext) throws {

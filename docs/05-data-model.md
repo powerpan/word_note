@@ -404,7 +404,7 @@ V1/V2 -> V3：每個 Term 的舊排程只複製至一張主卡，方向取最後
 
 持久化會話只保存 ID 和必要快照，不複製整份詞義。單窗口寫入租約為進程內協調狀態，App 重啟可重新取得，不能因舊 PID 永久鎖住。正式評分、卡片排程、session item 與游標在同一交易提交。
 
-2026-10-08 B03 第一批新增獨立 `WordNoteSchemaV3` 的十一個模型及離線遷移/快照 adapter；第二批接入共用版本化備份、受保護恢復與啟動。V1/V2 歷史類型未改，普通 App 仍為 V1、QA App 仍為 V2；資料保護 UI/分析隊列及新排程需與 B04 共同切換。這不是正式詞庫升級，也不表示復習頁已使用卡片。
+2026-10-08 B03 第一批新增獨立 `WordNoteSchemaV3` 的十一個模型及離線遷移/快照 adapter；第二批接入共用版本化備份、受保護恢復與啟動；第三批完成刪除/停卡交易、完整性預覽及十一實體受保護修復。V1/V2 歷史類型未改，普通 App 仍為 V1、QA App 仍為 V2；完整 writer、資料保護 UI/分析隊列及新排程需與 B04 共同切換。這不是正式詞庫升級，也不表示復習頁已使用卡片。
 
 V3 完整快照的 content 復用 V2 字段值定義，另存一對一 termHistories/eventStates、cards、sessions、sessionItems；不能單獨導出 content 作為完整 V3。SwiftData 存儲 scope/cloze/排程歷史時用排序鍵 JSON，adapter 嚴格解碼，損壞內容不能回退為空值。卡片/會話的業務唯一鍵、單一可恢復會話、跨表引用、actionID、事件前後摘要及會話作答數均由完整快照校驗。
 
@@ -419,7 +419,7 @@ V3 的 `WordNoteBackupCounts` 包含 cards/sessions/sessionItems；舊版摘要�
 - clozeTarget 使用原文 UTF-8 hash 與 Swift Character 起點/長度，不是 UTF-16/byte 偏移；保存時必須精確匹配原文答案和所屬 occurrence。B06 的可用題目選擇及原文變更策略仍需實作。
 - 卡片增加 relearningTimeZoneID，與 relearningDayKey 成對保存，為 B04 日桶判斷保留明確時區。新事件 originalCardID 必填；刪除卡片後可清 cardID，但事件/會話項保留原 ID，會話項轉 unavailable，不在恢復時補建卡。
 
-證據與剩餘啟用門檻見 [B03 隔離基礎](qa/2026-10-08-b03-isolated-foundation.md) 及 [B03 受保護恢復](qa/2026-10-08-b03-protected-recovery.md)。
+證據與剩餘啟用門檻見 [B03 隔離基礎](qa/2026-10-08-b03-isolated-foundation.md)、[B03 受保護恢復](qa/2026-10-08-b03-protected-recovery.md) 及 [B03 刪除與修復](qa/2026-10-08-b03-deletion-integrity.md)。
 
 ### V4：義項與版本
 
@@ -440,12 +440,16 @@ V3 的 `WordNoteBackupCounts` 包含 cards/sessions/sessionItems；舊版摘要�
 
 - 刪 InputRecord：刪其候選/候選義項，清空外鍵；已確認詞和 occurrence 的原文快照保留。UI 必須說明這不是刪除所有已入庫來源內容。
 - 刪 occurrence：刪該來源並解除 LookupEvent.occurrenceID，可保留無原文的查詢事實；依賴它的 cloze 卡停用，不改人工釋義。
-- 刪 Term：級聯其義項、卡片、ReviewEvent、ContentRevision、來源、membership、LookupEvent；清空對應 savedTermID，活動會話項標 targetDeleted 並解除 cardID，不計作完成。
+- 刪 Term：級聯其義項、卡片、ReviewEvent、ContentRevision、來源、membership、LookupEvent；清空候選對應 savedTermID 並把其關聯標為 targetDeleted，會話項轉 unavailable 並解除 cardID，不計作成功作答。
 - 刪 sense：有活動卡或會話引用時阻止直接刪除，先停用卡並明確處理引用；不要把 sense 級歷史偷偷轉為另一個意思。允許封存代替刪除，保留歷史可讀內容。
 - 刪 Course：對 membership、InputRecord 和歷史 occurrence 均顯示引用數；必須先解除或保留可讀的課程快照，不能默默改成另一課程。本輪默認延續引用保護。
 - 所有版本的快照包含當時全部實體及相應關係；只有白名單非機密偏好，無 Key/env。
 - 每次遷移先做保護快照、預檢、隔離副本轉換和完整性比對；遇衝突或不足磁碟停在舊庫，不先跑「清理」刪掉可恢復資料。
 - 下行回退使用舊版可讀的遷移前快照，不能让舊二進制直接讀新 schema；回退會丟失快照後改動，必須先導出目前庫並提示差異。
+
+V3 刪除補充契約：來源刪除使用 clozeTarget JSON 內的可選 `sourceDeletedAt` 作明確 tombstone，不新增 SwiftData 欄位。保留卡 ID、scope/target ID 和原 occurrence ID（此時只作歷史身份，不再是活動外鍵）；清空 hash、答案/變體和範圍，卡 phase=suspended、nextReviewAt/priorityRequestedAt=nil。沒有明確 tombstone 的缺來源仍屬損壞，不能自動當成使用者已刪除。舊 JSON 缺少此可選欄位仍按正常目標解碼。
+
+刪卡或停用卡時，其會話項保留 originalCardID、順序、attemptCount 和 lastActionID，解除 cardID 並改為 unavailable，不寫新的作答事件或增加成功數。會話修正與刪除同一次保存：當前項失效且仍有其他待展示項時退回 paused，不自動抽一張；未暫停的會話只剩等待項時轉 waiting，原已 paused 則保持暫停；全部為終態時結束會話，但不可用項仍不算 reviewed。原已 ended/completed 的會話保留結束時間及範圍。刪 Term 級聯其作答事件；單獨刪卡/刪來源保留詞條及事件，只解除必要引用。歷史 Course 範圍快照不隨刪課程改寫。
 
 ### 完整性報告與修復預覽
 
@@ -460,3 +464,7 @@ V2 檢查不沿用 V1 的刪孤兒行策略，依 [完整性實施記錄](qa/202
 先在副本上模擬允許的外鍵解除，再做完整字段校驗，避免第一個 missingReference 掩蓋非法日期、計數或未知狀態。仍有任何阻塞項時不生成半修復資料。預覽後的任何內容/關係/revision/非機密偏好變化均使方案過期，不只檢查時間戳。
 
 修復結果只允許交給隔離空庫及共用切庫機制；[隔離啟動修復](qa/2026-10-08-a02-startup-repair.md) 已接入原始證據保護、staging 與 journal，仍沒有在原容器上套用修復的方法，沒有正式修復 UI 或自動執行入口。非法引用連同八實體及元資料保存在獨立 evidence 文件，不冒充可直接恢復的 backup；普通 reader 仍拒絕它。原庫和證據文件保留、不自動輪替。V1 App 啟動現改為只讀引用檢查，發現斷鏈即停止正常寫入並保留資料，不再靜默清理。
+
+V3 擴展檢查卡/會話/會話項/Term 歷史/事件狀態：缺失或不匹配的必要引用、重複 ID/業務鍵/actionID、元資料不成對及非法排程皆阻止自動修復。只復用上表三種可空外鍵解除，卡、會話、作答事件和 legacy 計數逐值保留；沒有 tombstone 的缺失 cloze 來源不能被自動視為已刪除。完整 V3 payload 及偏好共同綁定修復方案，僅新 review 字段變動也會使預覽失效。
+
+V3 修復使用獨立 evidence schemaVersion=3.0.0（十一類 counts），包含不合法關聯但不放寬 JSON 解碼；普通 backup reader 及 V2 evidence reader 均拒絕。共用啟動協調器先保存 repair 意圖/暫停分析、寫入和重讀原始證據，再在獨立 generation 修復；前後重讀源庫及完整值比對，失败保留原 SQLite/證據，不自動重試。V1/V2 歷史 schema/codec/evidence 格式不變，詳見 [第三批證據](qa/2026-10-08-b03-deletion-integrity.md)。

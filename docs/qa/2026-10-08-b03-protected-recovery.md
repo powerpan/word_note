@@ -2,6 +2,8 @@
 
 日期：2026-10-08（Asia/Hong_Kong）。基線：`3925a0a`，分支：`codex/supplemental-development`。對應 QA-19、部分 QA-20；承接 [第一批](2026-10-08-b03-isolated-foundation.md)，不是 B03/B04 完整啟用驗收。
 
+此檔保留第二批時點的測試結果與未過門檻；後續 V3 刪除/完整性與受保護修復見 [第三批](2026-10-08-b03-deletion-integrity.md)。不回寫本批歷史測試結果，當前進展以第三批及開發計劃為準。
+
 ## 交付範圍
 
 - [VersionedPayload](../../Sources/WordNoteCore/Infrastructure/Persistence/WordNoteVersionedPayload.swift)、[reader](../../Sources/WordNoteCore/Infrastructure/Persistence/WordNoteSnapshotReader.swift)、[background capture](../../Sources/WordNoteCore/Infrastructure/Persistence/WordNoteSnapshotCapture.swift) 與 [vault](../../Sources/WordNoteCore/Infrastructure/Persistence/WordNoteBackupVault.swift) 現可完整捕獲、驗證、列出和導出 V3。cards/sessions/sessionItems 及事件前後狀態都參與 checksum，不能只備份 nested content。

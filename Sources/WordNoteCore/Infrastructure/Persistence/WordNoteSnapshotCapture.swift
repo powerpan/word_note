@@ -79,13 +79,22 @@ public struct WordNoteSnapshotCapture {
         container: ModelContainer, preferences: WordNoteSnapshotPayload.Preferences
     ) async throws -> WordNoteSnapshotV2Payload {
         guard container.schema.version == WordNoteSchemaV2.versionIdentifier else { throw WordNoteSnapshotError.unsupportedSchema }
-        let reader = WordNoteSnapshotCapture(versionedContainer: container) { container, preferences in
-            try await readVersionedOnBackgroundExecutor(container: container, preferences: preferences, integrityInspection: true)
-        }
-        guard case .v2(let payload) = try await reader.captureVersioned(preferences: preferences, requireCleanContext: true) else {
+        guard case .v2(let payload) = try await captureVersionedForIntegrityInspection(container: container, preferences: preferences) else {
             throw WordNoteSnapshotError.unsupportedSchema
         }
         return payload
+    }
+
+    static func captureVersionedForIntegrityInspection(
+        container: ModelContainer, preferences: WordNoteSnapshotPayload.Preferences
+    ) async throws -> WordNoteVersionedPayload {
+        guard [WordNoteSchemaV2.versionIdentifier, WordNoteSchemaV3.versionIdentifier].contains(container.schema.version) else {
+            throw WordNoteSnapshotError.unsupportedSchema
+        }
+        let reader = WordNoteSnapshotCapture(versionedContainer: container) { container, preferences in
+            try await readVersionedOnBackgroundExecutor(container: container, preferences: preferences, integrityInspection: true)
+        }
+        return try await reader.captureVersioned(preferences: preferences, requireCleanContext: true)
     }
 
     nonisolated static func readOnBackgroundExecutor(
@@ -108,8 +117,13 @@ public struct WordNoteSnapshotCapture {
                 context.autosaveEnabled = false
                 let payload: WordNoteVersionedPayload
                 if integrityInspection {
-                    guard container.schema.version == WordNoteSchemaV2.versionIdentifier else { throw WordNoteSnapshotError.unsupportedSchema }
-                    payload = .v2(try WordNoteSnapshotV2Payload.captureForIntegrityInspection(from: context, preferences: preferences))
+                    switch container.schema.version {
+                    case WordNoteSchemaV2.versionIdentifier:
+                        payload = .v2(try WordNoteSnapshotV2Payload.captureForIntegrityInspection(from: context, preferences: preferences))
+                    case WordNoteSchemaV3.versionIdentifier:
+                        payload = .v3(try WordNoteSnapshotV3Payload.captureForIntegrityInspection(from: context, preferences: preferences))
+                    default: throw WordNoteSnapshotError.unsupportedSchema
+                    }
                 } else {
                     payload = try WordNoteVersionedPayload.capture(from: context, preferences: preferences)
                 }
