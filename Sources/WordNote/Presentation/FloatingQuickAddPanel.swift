@@ -85,7 +85,7 @@ struct FloatingQuickAddPanelView: View {
             if let submissionError {
                 ScrollView {
                     HStack(alignment: .top, spacing: 8) {
-                        Label(submissionError, systemImage: "exclamationmark.triangle")
+                        Label(AppLocalization.text(submissionError), systemImage: "exclamationmark.triangle")
                             .font(.caption).fixedSize(horizontal: false, vertical: true)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         Button("Dismiss Error", systemImage: "xmark") { self.submissionError = nil }
@@ -199,7 +199,7 @@ struct FloatingQuickAddPanelView: View {
                     .labelStyle(.iconOnly).buttonStyle(.plain)
                     .frame(width: 24, height: 32)
                     .foregroundStyle(captureContext.courseWarning == nil && captureContext.preferenceWarning == nil ? WordNoteTheme.mutedInk : WordNoteTheme.amber)
-                    .help(captureContext.courseWarning ?? captureContext.preferenceWarning ?? "Course, source and lookup direction")
+                    .help(AppLocalization.text(captureContext.courseWarning ?? captureContext.preferenceWarning ?? "Course, source and lookup direction"))
                     .popover(isPresented: $showsContext, arrowEdge: .bottom) {
                         CaptureContextFields(controller: captureContext)
                             .padding(16).frame(width: 300)
@@ -221,6 +221,7 @@ struct FloatingQuickAddPanelView: View {
             .disabled(!canSubmit)
             .foregroundStyle(canSubmit ? WordNoteTheme.brand : WordNoteTheme.mutedInk.opacity(0.45))
             .help("Add term or analyze input")
+            .accessibilityLabel("Add term or analyze input")
         }
     }
 
@@ -239,8 +240,8 @@ struct FloatingQuickAddPanelView: View {
             }.font(.caption).frame(height: 32)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Analysis tasks: \(pending) pending, \(failed) failed\(analysisQueue.isSuspended ? ", paused" : "")")
-        .help("\(pending) pending, \(failed) failed\(analysisQueue.isSuspended ? "; analysis paused" : "")")
+        .accessibilityLabel("Analysis tasks: \(pending) pending, \(failed) failed\(analysisQueue.isSuspended ? AppLocalization.text(", paused") : "")")
+        .help("\(pending) pending, \(failed) failed\(analysisQueue.isSuspended ? AppLocalization.text("; analysis paused") : "")")
         .popover(isPresented: $showsTasks, arrowEdge: .bottom) {
             V2AnalysisTasksView(queue: analysisQueue, startsExpanded: true)
                 .frame(width: 320)
@@ -374,7 +375,7 @@ private struct FloatingExplanationResultsView: View {
                     explanationRow(row)
                 }
                 if let message = actions?.message {
-                    Label(message, systemImage: "exclamationmark.circle")
+                    Label(AppLocalization.text(message), systemImage: "exclamationmark.circle")
                         .font(.caption).foregroundStyle(WordNoteTheme.amber)
                         .fixedSize(horizontal: false, vertical: true)
                 }

@@ -22,7 +22,7 @@ struct V3CoursesView: View {
     var body: some View {
         WorkspaceSplitView(preferredWidth: $listWidth, rules: .courses, label: "Course list width") {
             VStack(spacing: 0) {
-                PageHeader(title: "Courses", subtitle: "\(courses.count) courses") {
+                PageHeader(title: "Courses", subtitle: AppLocalization.format("%lld courses", courses.count)) {
                     Button("Add", systemImage: "plus") {
                         protectingEdits(protection) { creating = true; editing = false }
                     }.labelStyle(.iconOnly).help("Add course")
@@ -103,7 +103,7 @@ private struct V3CourseLearningView: View {
                     VStack(alignment: .leading) { actions }
                 }
                 Picker("Direction", selection: mode) {
-                    ForEach(ReviewMode.allCases) { Text($0.displayTitle).tag($0) }
+                    ForEach(ReviewMode.allCases) { Text(AppLocalization.text($0.displayTitle)).tag($0) }
                 }.frame(maxWidth: 400)
                     V3LearningSummary(statistics: value.statistics)
                     Text("\(value.terms.count) unique terms / \(value.cards.count) cards in this direction")
@@ -117,7 +117,7 @@ private struct V3CourseLearningView: View {
                         termRows(value.terms)
                     case .cards:
                         Picker("State", selection: cardState) {
-                            ForEach(ReviewCardBrowseState.allCases) { Text($0.title).tag($0) }
+                            ForEach(ReviewCardBrowseState.allCases) { Text(AppLocalization.text($0.title)).tag($0) }
                         }.frame(maxWidth: 340)
                         LearningCardRows(cards: value.cards.filter { $0.state == cardState.wrappedValue }, open: open)
                     case .weak:
@@ -138,7 +138,7 @@ private struct V3CourseLearningView: View {
                         if value.pendingRecords.isEmpty { Text("Inbox is clear for this course").foregroundStyle(.secondary) }
                         VStack(spacing: 0) {
                           ForEach(value.pendingRecords) { item in
-                            LearningLinkRow(title: item.record.rawText, subtitle: item.preview, detail: item.statusTitle) { open(.record(item.id)) }
+                            LearningLinkRow(title: item.record.rawText, subtitle: item.previewText, detail: AppLocalization.text(item.statusTitle)) { open(.record(item.id)) }
                                 .rememberListRow(item.id)
                             Divider()
                           }

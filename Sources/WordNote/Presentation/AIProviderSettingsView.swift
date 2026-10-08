@@ -41,8 +41,8 @@ struct AIProviderSettingsView: View {
                     Button("Remove Saved Key", systemImage: "trash", role: .destructive) { confirmDelete = true }
                         .disabled(connection.state == .running)
                 }
-                if let keyStatus { Text(keyStatus).foregroundStyle(.secondary) }
-                if let keyError { Label(keyError, systemImage: "exclamationmark.triangle").foregroundStyle(.secondary) }
+                if let keyStatus { Text(AppLocalization.text(keyStatus)).foregroundStyle(.secondary) }
+                if let keyError { Label(AppLocalization.text(keyError), systemImage: "exclamationmark.triangle").foregroundStyle(.secondary) }
                 DisclosureGroup("Environment File") {
                     Text(store.fileURL.path).font(.caption.monospaced()).textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
@@ -76,7 +76,7 @@ struct AIProviderSettingsView: View {
             LabeledContent("Responding model", value: receipt.model)
             LabeledContent("Last successful test") { Text(receipt.completedAt, format: .dateTime.year().month().day().hour().minute()) }
         case .failed(let message):
-            Label(message, systemImage: "exclamationmark.triangle").foregroundStyle(.secondary)
+            Label(AppLocalization.text(message), systemImage: "exclamationmark.triangle").foregroundStyle(.secondary)
             if let date = connection.retryNotBefore {
                 LabeledContent("Retry after") { Text(date, format: .dateTime.hour().minute().second()) }
             }

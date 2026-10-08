@@ -36,7 +36,7 @@ struct SavedChangeUndoControls: ViewModifier {
     let history: AppUndoHistory
     @State private var errorMessage: String?
 
-    private var title: String { history.title.map { "Undo \($0)" } ?? "Undo Saved Change" }
+    private var title: String { history.title.map { AppLocalization.format("Undo %@", AppLocalization.text($0)) } ?? AppLocalization.text("Undo Saved Change") }
     private var enabled: Bool { history.canUndo && !dataProtection.isRestoring }
 
     func body(content: Content) -> some View {
@@ -65,7 +65,7 @@ struct SavedChangeUndoControls: ViewModifier {
 struct SavedChangeUndoCommand: View {
     @FocusedValue(\.savedChangeUndoAction) private var action
     var body: some View {
-        Button(action?.title ?? "Undo Saved Change", systemImage: "arrow.uturn.backward") { action?.perform() }
+        Button(action?.title ?? AppLocalization.text("Undo Saved Change"), systemImage: "arrow.uturn.backward") { action?.perform() }
             .disabled(action?.isEnabled != true)
     }
 }

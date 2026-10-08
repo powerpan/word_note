@@ -280,14 +280,14 @@ struct CourseEditor: View {
             load()
         }
         .onChange(of: course?.editRevision) { if !isDirty { load() } }
-        .protectEdits(id: draftID, value: draft, isDirty: { values.isDirty }, title: "Course: \(original.courseName.isEmpty ? "New Course" : original.courseName)",
+        .protectEdits(id: draftID, value: draft, isDirty: { values.isDirty }, title: AppLocalization.format("Course: %@", original.courseName.isEmpty ? AppLocalization.text("New Course") : original.courseName),
                       preview: { values.value.preview }, save: capturedSave, discard: discardDraft)
     }
 
     @ViewBuilder
     private func formRow<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
         GridRow {
-            Text(title)
+            Text(AppLocalization.text(title))
                 .foregroundStyle(.secondary)
             content()
         }
@@ -393,7 +393,7 @@ private struct CourseMetric: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(title)
+            Text(AppLocalization.text(title))
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Text(value, format: .number)

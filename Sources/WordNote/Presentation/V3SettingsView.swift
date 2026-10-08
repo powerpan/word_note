@@ -39,7 +39,7 @@ struct V3SettingsView: View {
             SwiftUI.Section("Appearance") {
                 Picker("Theme", selection: $appearance) {
                     ForEach(AppAppearancePreference.allCases) { item in
-                        Label(item.displayTitle, systemImage: item.systemImage).tag(item.rawValue)
+                        Label(AppLocalization.text(item.displayTitle), systemImage: item.systemImage).tag(item.rawValue)
                     }
                 }.pickerStyle(.segmented)
             }
@@ -79,7 +79,7 @@ struct V3SettingsView: View {
     }
 
     @ViewBuilder private var preferenceWarning: some View {
-        if let preferenceError { Label(preferenceError, systemImage: "exclamationmark.triangle").foregroundStyle(.secondary) }
+        if let preferenceError { Label(AppLocalization.text(preferenceError), systemImage: "exclamationmark.triangle").foregroundStyle(.secondary) }
     }
 
     private func validatePreferences() {

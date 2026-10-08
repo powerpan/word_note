@@ -69,7 +69,7 @@ struct V2CandidateReviewView: View {
                                 HStack {
                                     Text(candidate.term).font(.headline)
                                     Spacer()
-                                    Text(candidate.status.rawValue.capitalized).font(.caption).foregroundStyle(.secondary)
+                                    Text(AppLocalization.text(candidate.status.rawValue.capitalized)).font(.caption).foregroundStyle(.secondary)
                                 }
                                 if let meaning = candidate.chineseMeaning { Text(meaning).textSelection(.enabled).lineSpacing(4) }
                                 if let definition = candidate.englishDefinition { Text(definition).foregroundStyle(.secondary).textSelection(.enabled) }

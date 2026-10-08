@@ -49,7 +49,7 @@ struct V2ConfirmationPreview: View {
                 Spacer()
             }
             if let errorMessage { StatusBanner(message: errorMessage, kind: .warning).padding(.horizontal, 20) }
-            if let statusMessage { Text(statusMessage).font(.caption).foregroundStyle(.secondary).padding(.horizontal, 20) }
+            if let statusMessage { Text(AppLocalization.text(statusMessage)).font(.caption).foregroundStyle(.secondary).padding(.horizontal, 20) }
             Divider().padding(.top, 12)
             HStack {
                 Button("Refresh Preview", systemImage: "arrow.clockwise", action: refresh)

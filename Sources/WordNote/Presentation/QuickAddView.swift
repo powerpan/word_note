@@ -39,7 +39,7 @@ struct QuickAddView: View {
             VStack(alignment: .leading, spacing: 22) {
                 PageHeader(
                     title: "Quick Add",
-                    subtitle: "Capture English text, or enter Chinese when you need the right English expression."
+                    subtitle: AppLocalization.text("Capture English text, or enter Chinese when you need the right English expression.")
                 ) {
                     EmptyView()
                 }
@@ -66,7 +66,7 @@ struct QuickAddView: View {
 
                         if let detectedLookupDirection {
                             Label(
-                                detectedLookupDirection.displayTitle,
+                                AppLocalization.text(detectedLookupDirection.displayTitle),
                                 systemImage: "arrow.left.arrow.right"
                             )
                             .font(.caption)
@@ -95,7 +95,7 @@ struct QuickAddView: View {
                             }
                             Picker("Source", selection: $selectedSourceType) {
                                 ForEach(SourceType.allCases) { sourceType in
-                                    Text(sourceType.displayTitle).tag(sourceType)
+                                    Text(AppLocalization.text(sourceType.displayTitle)).tag(sourceType)
                                 }
                             }
                         }
@@ -191,7 +191,7 @@ struct QuickAddView: View {
             rawText = ""
             note = ""
             errorMessage = nil
-            statusMessage = statusOverride ?? "Saved draft: \(record.rawText)"
+            statusMessage = statusOverride ?? AppLocalization.format("Saved draft: %@", record.rawText)
         } catch {
             statusMessage = nil
             errorMessage = error.localizedDescription
@@ -279,7 +279,7 @@ struct QuickAddView: View {
                                 Text(candidate.term)
                                     .font(.subheadline.weight(.semibold))
                                 Spacer()
-                                TagChip(title: candidate.importance.displayTitle, tint: WordNoteTheme.amber)
+                                TagChip(title: AppLocalization.text(candidate.importance.displayTitle), tint: WordNoteTheme.amber)
                             }
 
                             if let chineseMeaning = candidate.chineseMeaning {

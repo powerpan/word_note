@@ -13,10 +13,10 @@ struct V2CandidateEditorRow: View {
                 Toggle("Select \(draft.term)", isOn: $isSelected).labelsHidden().toggleStyle(.checkbox)
                 TextField("Term", text: $draft.term).font(.headline)
                 Picker("Importance", selection: $draft.importance) {
-                    ForEach(Importance.allCases) { Text($0.displayTitle).tag($0) }
+                    ForEach(Importance.allCases) { Text(AppLocalization.text($0.displayTitle)).tag($0) }
                 }.labelsHidden().frame(width: 120)
                 Picker("Category", selection: $draft.category) {
-                    ForEach(TermCategory.allCases) { Text($0.displayTitle).tag($0) }
+                    ForEach(TermCategory.allCases) { Text(AppLocalization.text($0.displayTitle)).tag($0) }
                 }.labelsHidden().frame(width: 150)
             }
             Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {

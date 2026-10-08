@@ -88,13 +88,13 @@ struct ReviewView: View {
                 }
             }
             Picker("Direction", selection: setupSelection.mode) {
-                ForEach(ReviewMode.allCases) { Text($0.displayTitle).tag($0) }
+                ForEach(ReviewMode.allCases) { Text(AppLocalization.text($0.displayTitle)).tag($0) }
             }
             Picker("Queue", selection: setupSelection.queue) {
-                ForEach(ReviewQueueScope.allCases) { Text($0.displayTitle).tag($0) }
+                ForEach(ReviewQueueScope.allCases) { Text(AppLocalization.text($0.displayTitle)).tag($0) }
             }
             Toggle("Include new cards", isOn: setupSelection.includesNew).toggleStyle(.checkbox)
-            LabeledContent("Group size", value: "\(min(max(target, 5), 100)) cards")
+            LabeledContent("Group size", value: AppLocalization.format("%lld cards", min(max(target, 5), 100)))
             LabeledContent("Daily new-card limit", value: String(min(max(newLimit, 0), 50)))
             LabeledContent("Study time zone", value: TimeZone.current.identifier)
             Button("Start Review", systemImage: "play.fill") {
@@ -108,9 +108,9 @@ struct ReviewView: View {
 
     private func sessionHeader(_ value: WordNoteV3ReviewSessionSnapshot, statistics: ReviewSessionStatistics?) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("\(value.session.scope.courseName ?? "All courses") / \(value.session.scope.mode.displayTitle)")
+            Text("\(value.session.scope.courseName ?? AppLocalization.text("All courses")) / \(AppLocalization.text(value.session.scope.mode.displayTitle))")
                 .font(.headline)
-            Text("\(value.session.scope.queue.displayTitle) / \(value.session.scope.studyTimeZoneID)")
+            Text("\(AppLocalization.text(value.session.scope.queue.displayTitle)) / \(value.session.scope.studyTimeZoneID)")
                 .font(.caption).foregroundStyle(.secondary)
             if let statistics {
                 ProgressView(value: Double(statistics.processedItems), total: Double(max(1, statistics.totalItems)))
@@ -167,7 +167,7 @@ private struct V3ReviewQuestionView: View {
         ForEach(ReviewFeedback.allCases) { feedback in
             Button { controller.answer(feedback) } label: {
                 VStack(spacing: 5) {
-                    Text(feedback.displayTitle).fontWeight(.semibold)
+                    Text(AppLocalization.text(feedback.displayTitle)).fontWeight(.semibold)
                     Text(controller.delay(for: feedback)).font(.caption)
                 }.frame(minWidth: 110, maxWidth: .infinity, minHeight: 44)
             }.disabled(!controller.canAnswer)

@@ -47,9 +47,9 @@ struct V2InputRecordDetailView: View {
                                 Text(note).fixedSize(horizontal: false, vertical: true)
                             }
                         }
-                        LabeledContent("Source", value: record.sourceType.displayTitle)
-                        LabeledContent("Course", value: course?.courseName ?? "No course")
-                        LabeledContent("Direction", value: record.resolvedDirection.displayTitle)
+                        LabeledContent("Source", value: AppLocalization.text(record.sourceType.displayTitle))
+                        LabeledContent("Course", value: course?.courseName ?? AppLocalization.text("No course"))
+                        LabeledContent("Direction", value: AppLocalization.text(record.resolvedDirection.displayTitle))
                         LabeledContent("Created", value: record.createdAt.formatted(date: .abbreviated, time: .shortened))
                     }.textSelection(.enabled).padding(.top, 10)
                 } label: { Text("Input & Source").font(.subheadline.weight(.semibold)) }

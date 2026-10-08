@@ -12,6 +12,10 @@ enum SidebarDestination: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 
     var title: String {
+        AppLocalization.text(titleKey)
+    }
+
+    private var titleKey: String {
         switch self {
         case .dashboard:
             return "Dashboard"

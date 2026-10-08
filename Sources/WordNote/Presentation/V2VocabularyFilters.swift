@@ -39,7 +39,7 @@ struct V2VocabularyFilters: View {
                 #if !WORDNOTE_V3_VALIDATION
                 Picker("Mastery", selection: $query.mastery) {
                     Text("All mastery").tag(MasteryLevel?.none)
-                    ForEach(MasteryLevel.allCases) { Text($0.displayTitle).tag(Optional($0)) }
+                    ForEach(MasteryLevel.allCases) { Text(AppLocalization.text($0.displayTitle)).tag(Optional($0)) }
                 }.labelsHidden().help("Mastery filter")
                 #endif
             }
@@ -50,11 +50,11 @@ struct V2VocabularyFilters: View {
                     if let key = query.tag, !tags.contains(where: { $0.id == key }) { Text(key).tag(Optional(key)) }
                 }.labelsHidden().help("Tag filter")
                 Picker("Activity", selection: $query.activity) {
-                    ForEach(VocabularyActivity.allCases) { Text($0.title).tag($0) }
+                    ForEach(VocabularyActivity.allCases) { Text(AppLocalization.text($0.title)).tag($0) }
                 }.labelsHidden().help("Recorded repeat lookups")
             }
             Picker("Sort", selection: $query.sort) {
-                ForEach(VocabularySort.allCases) { Text($0.title).tag($0) }
+                ForEach(VocabularySort.allCases) { Text(AppLocalization.text($0.title)).tag($0) }
             }
             HStack {
                 Button(allSelected ? "Clear Selection" : "Select All", systemImage: "checklist", action: onSelectAll)

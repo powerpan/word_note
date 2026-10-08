@@ -295,12 +295,12 @@ private struct DashboardTermLedgerRow: View {
                 .lineLimit(1)
                 .frame(width: 128, alignment: .leading)
 
-            Text(term.chineseMeaning ?? term.englishDefinition ?? term.masteryLevel.displayTitle)
+            Text(term.chineseMeaning ?? term.englishDefinition ?? AppLocalization.text(term.masteryLevel.displayTitle))
                 .font(.system(size: 12))
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            TagChip(title: term.importance.displayTitle, tint: importanceTint)
+            TagChip(title: AppLocalization.text(term.importance.displayTitle), tint: importanceTint)
                 .frame(width: 76, alignment: .leading)
 
             ProgressView(value: masteryProgress)

@@ -66,7 +66,7 @@ struct InputRecordDetailView: View {
             VStack(alignment: .leading, spacing: 18) {
                 PageHeader(
                     title: "Input Record",
-                    subtitle: "\(record.sourceType.displayTitle) - \(lookupDirection.displayTitle)"
+                    subtitle: "\(AppLocalization.text(record.sourceType.displayTitle)) - \(AppLocalization.text(lookupDirection.displayTitle))"
                 ) {
                     Button {
                         onAnalyze(record)
@@ -114,7 +114,7 @@ struct InputRecordDetailView: View {
 
                 Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 10) {
                     detailRow("Status", record.visibleStatusTitle)
-                    detailRow("Source", record.sourceType.displayTitle)
+                    detailRow("Source", AppLocalization.text(record.sourceType.displayTitle))
                     detailRow("Course", courseName ?? "No Course")
                     detailRow("Created", record.createdAt.formatted(date: .abbreviated, time: .shortened))
                     detailRow("Updated", record.updatedAt.formatted(date: .abbreviated, time: .shortened))

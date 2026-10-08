@@ -72,7 +72,7 @@ struct V2ConfirmationGroupView: View {
                 }
             )).toggleStyle(.checkbox)
             Text("Candidate \(number): \(candidate.content.term)").font(.subheadline.bold())
-            Text(candidate.content.chineseMeaning ?? candidate.content.englishDefinition ?? "No definition")
+            Text(candidate.content.chineseMeaning ?? candidate.content.englishDefinition ?? AppLocalization.text("No definition"))
                 .foregroundStyle(.secondary).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
             DisclosureGroup("Candidate Details") {
                 VStack(alignment: .leading, spacing: 8) {
@@ -91,9 +91,9 @@ struct V2ConfirmationGroupView: View {
     private func fieldRow(_ field: WordNoteV2ConfirmationField, target: WordNoteV2ConfirmationPlan.Target) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text(field.title).font(.subheadline.bold())
+                Text(AppLocalization.text(field.title)).font(.subheadline.bold())
                 Spacer()
-                Picker(field.title, selection: Binding(
+                Picker(AppLocalization.text(field.title), selection: Binding(
                     get: { choice.fieldSources[field] },
                     set: { choices.groups[group.id, default: .init()].fieldSources[field] = $0 }
                 )) {
@@ -107,11 +107,11 @@ struct V2ConfirmationGroupView: View {
             }
             if let id = choice.fieldSources[field], let value = active.first(where: { $0.id == id })?.values[field] {
                 HStack(alignment: .top, spacing: 16) {
-                    valueColumn("Stored", target.values[field] ?? "(Empty)")
+                    valueColumn("Stored", target.values[field] ?? AppLocalization.text("(Empty)"))
                     valueColumn("Selected", value)
                 }
             } else {
-                Text(target.values[field] ?? "(Empty)").foregroundStyle(.secondary)
+                Text(target.values[field] ?? AppLocalization.text("(Empty)")).foregroundStyle(.secondary)
                     .textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
             }
         }.padding(.vertical, 6)
@@ -119,7 +119,7 @@ struct V2ConfirmationGroupView: View {
 
     private func valueColumn(_ title: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(title).font(.caption).foregroundStyle(.secondary)
+            Text(AppLocalization.text(title)).font(.caption).foregroundStyle(.secondary)
             Text(value).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
         }.frame(maxWidth: .infinity, alignment: .leading)
     }

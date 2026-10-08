@@ -42,10 +42,10 @@ struct CaptureContextFields: View {
                 }
             }
             Picker(scope == .defaults ? "Default source" : "Source", selection: sourceBinding) {
-                ForEach(SourceType.allCases) { source in Text(source.displayTitle).tag(source) }
+                ForEach(SourceType.allCases) { source in Text(AppLocalization.text(source.displayTitle)).tag(source) }
             }
             Picker(scope == .defaults ? "Default direction" : "Direction", selection: intentBinding) {
-                ForEach(LookupIntent.allCases, id: \.self) { intent in Text(intent.displayTitle).tag(intent) }
+                ForEach(LookupIntent.allCases, id: \.self) { intent in Text(AppLocalization.text(intent.displayTitle)).tag(intent) }
             }
             if scope == .current {
                 HStack {
@@ -61,7 +61,7 @@ struct CaptureContextFields: View {
                 }
             }
             if let warning = errorMessage ?? controller.courseWarning ?? controller.preferenceWarning {
-                Label(warning, systemImage: "exclamationmark.triangle")
+                Label(AppLocalization.text(warning), systemImage: "exclamationmark.triangle")
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }

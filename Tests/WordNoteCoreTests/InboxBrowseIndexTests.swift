@@ -5,6 +5,18 @@ import XCTest
 final class InboxBrowseIndexTests: XCTestCase {
     private typealias Values = InboxTestValues
 
+    func testPreviewSeparatesUserContentFromStatusFallback() {
+        let record = Values.record()
+        let empty = InboxBrowseItem(record: record, candidates: [])
+        XCTAssertNil(empty.previewText)
+        XCTAssertEqual(empty.preview, empty.statusTitle)
+
+        record.sentenceMeaning = "Draft"
+        let content = InboxBrowseItem(record: record, candidates: [])
+        XCTAssertEqual(content.previewText, "Draft")
+        XCTAssertEqual(content.preview, "Draft")
+    }
+
     func testSearchMatchesSourceNoteSentenceAndCandidateFieldsWithChineseVariants() {
         let record = Values.record("A source sentence")
         record.note = "課堂筆記"

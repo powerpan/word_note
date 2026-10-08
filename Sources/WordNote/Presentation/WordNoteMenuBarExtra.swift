@@ -61,8 +61,8 @@ struct WordNoteMenuBarMenu: View {
 
     private var menuStatusTitle: String {
         if analysisQueue.queuedCount > 0 {
-            return "\(analysisQueue.queuedCount) queued"
+            return AppLocalization.format("%lld queued", analysisQueue.queuedCount)
         }
-        return "Analyzing"
+        return AppLocalization.text("Analyzing")
     }
 }

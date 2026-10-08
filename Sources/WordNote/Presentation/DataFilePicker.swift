@@ -9,8 +9,8 @@ enum DataFilePicker {
         panel.canCreateDirectories = true
         panel.nameFieldStringValue = csvCount == nil ? "WordNote-Backup.json" : "WordNote-Vocabulary.csv"
         panel.message = csvCount.map {
-            "Export \($0) vocabulary entries as CSV. This is not a full backup. The file contains private learning content and is not encrypted."
-        } ?? "Export all learning data as JSON. The file contains private learning content and is not encrypted. API keys are excluded."
+            AppLocalization.format("Export %lld vocabulary entries as CSV. This is not a full backup. The file contains private learning content and is not encrypted.", $0)
+        } ?? AppLocalization.text("Export all learning data as JSON. The file contains private learning content and is not encrypted. API keys are excluded.")
         return await withCheckedContinuation { continuation in
             panel.begin { response in
                 continuation.resume(returning: response == .OK ? panel.url : nil)
@@ -23,7 +23,7 @@ enum DataFilePicker {
         panel.allowedContentTypes = [.json]
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
-        panel.message = "Choose a complete Word Note JSON backup. Nothing is replaced until you confirm."
+        panel.message = AppLocalization.text("Choose a complete Word Note JSON backup. Nothing is replaced until you confirm.")
         return await withCheckedContinuation { continuation in
             panel.begin { response in
                 continuation.resume(returning: response == .OK ? panel.url : nil)

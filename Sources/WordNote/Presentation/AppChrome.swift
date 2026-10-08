@@ -31,7 +31,7 @@ struct PageHeader<Actions: View>: View {
 
     private var titleBlock: some View {
         VStack(alignment: .leading, spacing: 5) {
-            Text(title)
+            Text(AppLocalization.text(title))
                 .font(WordNoteTheme.editorialFont(size: 25, weight: .semibold))
                 .lineLimit(1)
                 .minimumScaleFactor(0.86)
@@ -56,9 +56,9 @@ struct EmptyStateView<Actions: View>: View {
                 .foregroundStyle(.tertiary)
 
             VStack(spacing: 5) {
-                Text(title)
+                Text(AppLocalization.text(title))
                     .font(WordNoteTheme.editorialFont(size: 21, weight: .semibold))
-                Text(message)
+                Text(AppLocalization.text(message))
                     .font(.callout)
                     .foregroundStyle(WordNoteTheme.mutedInk)
                     .multilineTextAlignment(.center)
@@ -105,7 +105,7 @@ struct StatusBanner: View {
     let kind: Kind
 
     var body: some View {
-        Label(message, systemImage: kind.systemImage)
+        Label(AppLocalization.text(message), systemImage: kind.systemImage)
             .font(.callout)
             .foregroundStyle(kind.tint)
             .padding(.horizontal, 12)

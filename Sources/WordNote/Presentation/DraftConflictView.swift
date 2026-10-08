@@ -39,7 +39,7 @@ struct DraftConflictView<Value: Equatable>: View {
                     let remaining = comparison.unresolvedCount(choices: choices)
                     if remaining > 0 { Text("\(remaining) unresolved").font(.caption).foregroundStyle(.secondary) }
                     Spacer()
-                    Button(applyTitle, systemImage: "checkmark", action: apply)
+                    Button(AppLocalization.text(applyTitle), systemImage: "checkmark", action: apply)
                         .disabled(remaining > 0 || comparison.current.blockingMessage != nil)
                 }
             }
@@ -76,7 +76,7 @@ private struct DraftDifferenceRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text(row.title).font(.subheadline.bold())
+                Text(AppLocalization.text(row.title)).font(.subheadline.bold())
                 Spacer()
                 if row.requiresChoice {
                     Picker("Use value", selection: $choice) {
@@ -107,8 +107,8 @@ private struct DraftDifferenceRow: View {
 
     private func column(_ title: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(title).font(.caption).foregroundStyle(.secondary)
-            Text(value.isEmpty ? "(Empty)" : value).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+            Text(AppLocalization.text(title)).font(.caption).foregroundStyle(.secondary)
+            Text(value.isEmpty ? AppLocalization.text("(Empty)") : value).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
         }.frame(maxWidth: .infinity, alignment: .leading)
     }
 }

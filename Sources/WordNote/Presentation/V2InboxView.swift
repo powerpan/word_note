@@ -55,7 +55,7 @@ struct V2InboxView: View {
         .sheet(item: $confirmationPlan) { plan in
             V2ConfirmationPreview(plan: plan) { result in
                 selection.clearBatch()
-                showSuccess("Saved or linked \(result.counts.candidates - result.counts.ignoredCandidates) candidates; ignored \(result.counts.ignoredCandidates).")
+                showSuccess(AppLocalization.format("Saved or linked %lld candidates; ignored %lld.", result.counts.candidates - result.counts.ignoredCandidates, result.counts.ignoredCandidates))
             }
         }
     }
@@ -108,7 +108,7 @@ struct V2InboxView: View {
             if let errorMessage { StatusBanner(message: errorMessage, kind: .warning).padding(.horizontal, 16).padding(.bottom, 8) }
             if let statusMessage {
                 HStack(alignment: .top) {
-                    Text(statusMessage).font(.caption).foregroundStyle(.secondary)
+                    Text(AppLocalization.text(statusMessage)).font(.caption).foregroundStyle(.secondary)
                     Spacer()
                     Button("Dismiss", systemImage: "xmark") { self.statusMessage = nil }.labelStyle(.iconOnly).help("Dismiss status")
                 }.padding(.horizontal, 16).padding(.bottom, 8)
@@ -149,8 +149,8 @@ struct V2InboxView: View {
         HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 5) {
                 Text(item.record.rawText).font(.headline).lineLimit(1)
-                if !item.isFailed || item.preview != item.statusTitle {
-                    Text(item.preview).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
+                if !item.isFailed || item.previewText != nil {
+                    Text(item.localizedPreview).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
                 }
                 if item.isFailed { Label("Analysis failed", systemImage: "exclamationmark.circle").font(.caption).foregroundStyle(WordNoteTheme.amber) }
             }.frame(maxWidth: .infinity, alignment: .leading)
@@ -223,7 +223,7 @@ struct V2InboxView: View {
         protectingEdits(editProtection) {
             perform {
                 try AppContentService(container: context.container, undoHistory: undoHistory).ignoreCandidates(currentSelections(ids))
-                showSuccess("Ignored \(ids.count) candidates.")
+                showSuccess(AppLocalization.format("Ignored %lld candidates.", ids.count))
             }
         }
     }

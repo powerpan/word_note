@@ -217,7 +217,7 @@ private struct CandidateEditorRow: View {
 
                 Picker("Importance", selection: guarded($candidate.importance)) {
                     ForEach(Importance.allCases) { importance in
-                        Text(importance.displayTitle).tag(importance)
+                        Text(AppLocalization.text(importance.displayTitle)).tag(importance)
                     }
                 }
                 .labelsHidden()
@@ -225,7 +225,7 @@ private struct CandidateEditorRow: View {
 
                 Picker("Category", selection: guarded($candidate.category)) {
                     ForEach(TermCategory.allCases) { category in
-                        Text(category.displayTitle).tag(category)
+                        Text(AppLocalization.text(category.displayTitle)).tag(category)
                     }
                 }
                 .labelsHidden()

@@ -78,7 +78,7 @@ struct TermDetailEditor: View {
         .onAppear(perform: loadTerm)
         .onChange(of: term.id) { loadTerm() }
         .onChange(of: term.editRevision) { if !isDirty { loadTerm() } }
-        .protectEdits(id: draftID, value: draft, isDirty: { values.isDirty }, title: "Term: \(original.termText)", preview: { values.value.preview },
+        .protectEdits(id: draftID, value: draft, isDirty: { values.isDirty }, title: AppLocalization.format("Term: %@", original.termText), preview: { values.value.preview },
                       save: capturedSave, discard: discardDraft)
     }
 
@@ -91,7 +91,7 @@ struct TermDetailEditor: View {
                 formRow("Type") {
                     Picker("Type", selection: $values.value.termType) {
                         ForEach(TermType.allCases) { type in
-                            Text(type.displayTitle).tag(type)
+                            Text(AppLocalization.text(type.displayTitle)).tag(type)
                         }
                     }
                 }
@@ -146,21 +146,21 @@ struct TermDetailEditor: View {
                 formRow("Source") {
                     Picker("Source", selection: $values.value.sourceType) {
                         ForEach(SourceType.allCases) { sourceType in
-                            Text(sourceType.displayTitle).tag(sourceType)
+                            Text(AppLocalization.text(sourceType.displayTitle)).tag(sourceType)
                         }
                     }
                 }
                 formRow("Category") {
                     Picker("Category", selection: $values.value.category) {
                         ForEach(TermCategory.allCases) { category in
-                            Text(category.displayTitle).tag(category)
+                            Text(AppLocalization.text(category.displayTitle)).tag(category)
                         }
                     }
                 }
                 formRow("Importance") {
                     Picker("Importance", selection: $values.value.importance) {
                         ForEach(Importance.allCases) { importance in
-                            Text(importance.displayTitle).tag(importance)
+                            Text(AppLocalization.text(importance.displayTitle)).tag(importance)
                         }
                     }
                 }
@@ -168,7 +168,7 @@ struct TermDetailEditor: View {
                 formRow("Mastery") {
                     Picker("Mastery", selection: $values.value.masteryLevel) {
                         ForEach(MasteryLevel.allCases) { masteryLevel in
-                            Text(masteryLevel.displayTitle).tag(masteryLevel)
+                            Text(AppLocalization.text(masteryLevel.displayTitle)).tag(masteryLevel)
                         }
                     }
                 }
@@ -181,7 +181,7 @@ struct TermDetailEditor: View {
     @ViewBuilder
     private func formRow<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
         GridRow {
-            Text(title)
+            Text(AppLocalization.text(title))
                 .foregroundStyle(.secondary)
             content()
         }

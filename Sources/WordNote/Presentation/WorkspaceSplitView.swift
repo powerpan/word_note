@@ -59,7 +59,7 @@ struct WorkspaceSplitView<Leading: View, Detail: View>: View {
             .onKeyPress(.leftArrow) { adjust(-20, width: width, available: available); return .handled }
             .onKeyPress(.rightArrow) { adjust(20, width: width, available: available); return .handled }
             .accessibilityElement()
-            .accessibilityLabel(label)
+            .accessibilityLabel(AppLocalization.text(label))
             .accessibilityValue("\(Int(width)) points")
             .accessibilityAdjustableAction { direction in
                 switch direction {
@@ -69,7 +69,7 @@ struct WorkspaceSplitView<Leading: View, Detail: View>: View {
                 }
             }
             .accessibilityAction(named: Text("Reset width")) { preferredWidth = rules.preferred }
-            .help(label)
+            .help(AppLocalization.text(label))
     }
 
     private func adjust(_ amount: Double, width: Double, available: Double) {

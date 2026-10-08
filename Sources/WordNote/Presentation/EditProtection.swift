@@ -73,7 +73,7 @@ struct EditProtectionHost<Content: View>: View {
                         VStack(alignment: .leading, spacing: 12) {
                             ForEach(protection.drafts) { draft in
                                 VStack(alignment: .leading, spacing: 4) {
-                                    Text(draft.title).font(.headline)
+                                    Text(AppLocalization.text(draft.title)).font(.headline)
                                     Text(draft.preview).foregroundStyle(.secondary).textSelection(.enabled)
                                 }
                                 .frame(maxWidth: .infinity, alignment: .leading)

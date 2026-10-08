@@ -29,14 +29,14 @@ struct DashboardView: View {
                     Text("Today").font(WordNoteTheme.editorialFont(size: 30, weight: .semibold))
                     Spacer()
                     Picker("Direction", selection: mode) {
-                        ForEach(ReviewMode.allCases) { Text($0.displayTitle).tag($0) }
+                        ForEach(ReviewMode.allCases) { Text(AppLocalization.text($0.displayTitle)).tag($0) }
                     }.fixedSize()
                 }.rememberListRow(LearningWorkspace.dashboardHeaderID)
                     HStack {
                         VStack(alignment: .leading, spacing: 6) {
                             Text(value.resumableSession == nil ? "Review" : "Current group").font(.title2.weight(.semibold))
                             if let active = value.resumableSession {
-                                Text("\(active.session.scope.courseName ?? "All courses") / \(active.session.scope.mode.displayTitle)")
+                                Text("\(active.session.scope.courseName ?? AppLocalization.text("All courses")) / \(AppLocalization.text(active.session.scope.mode.displayTitle))")
                                     .font(.subheadline).foregroundStyle(.secondary)
                                 Text("\(active.items.count) cards").font(.caption).foregroundStyle(.secondary)
                             }
@@ -72,7 +72,7 @@ struct DashboardView: View {
                     }
                     VStack(spacing: 0) {
                         ForEach(value.pendingRecords.prefix(5)) { item in
-                            LearningLinkRow(title: item.record.rawText, subtitle: item.preview, detail: item.statusTitle) { open(.record(item.id)) }
+                            LearningLinkRow(title: item.record.rawText, subtitle: item.previewText, detail: AppLocalization.text(item.statusTitle)) { open(.record(item.id)) }
                                 .rememberListRow(item.id)
                         }
                     }

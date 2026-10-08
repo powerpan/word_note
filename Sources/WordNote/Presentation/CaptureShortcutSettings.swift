@@ -27,7 +27,7 @@ struct CaptureShortcutSettings: View {
                 Toggle("Enabled", isOn: $draft.enabled)
                 HStack {
                     Picker("Key", selection: $draft.shortcut.key) {
-                        ForEach(CaptureShortcut.Key.allCases) { Text($0.title).tag($0) }
+                        ForEach(CaptureShortcut.Key.allCases) { Text(AppLocalization.text($0.title)).tag($0) }
                     }.frame(maxWidth: 180)
                     Spacer()
                 }

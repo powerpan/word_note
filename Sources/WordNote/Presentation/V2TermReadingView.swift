@@ -50,7 +50,7 @@ private struct V2TermReadingView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(term.term).font(WordNoteTheme.editorialFont(size: 28, weight: .semibold))
                             .textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
-                        Text("\(term.termType.displayTitle), \(term.category.displayTitle)").font(.subheadline).foregroundStyle(.secondary)
+                        Text("\(AppLocalization.text(term.termType.displayTitle)), \(AppLocalization.text(term.category.displayTitle))").font(.subheadline).foregroundStyle(.secondary)
                     }.frame(maxWidth: .infinity, alignment: .leading)
                     Button("Organize", systemImage: "tag", action: onOrganize)
                         .labelStyle(.iconOnly).help("Organize courses and tags")
@@ -62,8 +62,8 @@ private struct V2TermReadingView: View {
                 Divider()
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Organization").font(.headline)
-                    LabeledContent("Courses", value: memberships.names(for: term, courses: courses) ?? "No course")
-                    LabeledContent("Tags", value: term.tags.isEmpty ? "No tags" : term.tags.joined(separator: ", "))
+                    LabeledContent("Courses", value: memberships.names(for: term, courses: courses) ?? AppLocalization.text("No course"))
+                    LabeledContent("Tags", value: term.tags.isEmpty ? AppLocalization.text("No tags") : term.tags.joined(separator: ", "))
                 }.textSelection(.enabled)
                 if !content.sources.isEmpty {
                     Divider()
@@ -79,8 +79,8 @@ private struct V2TermReadingView: View {
                 #else
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Learning").font(.headline)
-                    LabeledContent("Mastery", value: term.masteryLevel.displayTitle)
-                    LabeledContent("Importance", value: term.importance.displayTitle)
+                    LabeledContent("Mastery", value: AppLocalization.text(term.masteryLevel.displayTitle))
+                    LabeledContent("Importance", value: AppLocalization.text(term.importance.displayTitle))
                     LabeledContent("Next review", value: term.nextReviewAt?.formatted(date: .abbreviated, time: .shortened) ?? "Not scheduled")
                     LabeledContent("Last review", value: term.lastReviewedAt?.formatted(date: .abbreviated, time: .shortened) ?? "Not reviewed")
                     LabeledContent("Legacy reviews", value: String(term.reviewCount))
@@ -101,7 +101,7 @@ private struct V2TermReadingView: View {
 
     private func readingSection(_ section: VocabularyReadingContent.Section) -> some View {
         VStack(alignment: .leading, spacing: 7) {
-            Text(section.title).font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+            Text(AppLocalization.text(section.title)).font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
             Text(section.text).font(.system(size: 15)).lineSpacing(5)
                 .textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
         }.frame(maxWidth: .infinity, alignment: .leading)

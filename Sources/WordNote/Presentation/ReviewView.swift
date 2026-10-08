@@ -120,7 +120,7 @@ struct ReviewView: View {
     private var scopePicker: some View {
         Picker("Queue", selection: $queueScope) {
             ForEach(ReviewQueueScope.allCases) { scope in
-                Text(scope.displayTitle).tag(scope)
+                Text(AppLocalization.text(scope.displayTitle)).tag(scope)
             }
         }
         .pickerStyle(.segmented)
@@ -183,7 +183,7 @@ struct ReviewView: View {
             queueIDs.removeAll { $0 == activeTerm.id }
             feedbackCounts[feedback, default: 0] += 1
             isAnswerVisible = false
-            statusMessage = "Recorded: \(feedback.displayTitle)"
+            statusMessage = "Recorded: \(AppLocalization.text(feedback.displayTitle))"
             errorMessage = nil
         } catch {
             statusMessage = nil
@@ -262,8 +262,8 @@ private struct ReviewCard: View {
                         .fixedSize(horizontal: false, vertical: true)
 
                     HStack(spacing: 10) {
-                        TagChip(title: term.termType.displayTitle, tint: WordNoteTheme.teal)
-                        TagChip(title: term.masteryLevel.displayTitle, tint: WordNoteTheme.brand)
+                        TagChip(title: AppLocalization.text(term.termType.displayTitle), tint: WordNoteTheme.teal)
+                        TagChip(title: AppLocalization.text(term.masteryLevel.displayTitle), tint: WordNoteTheme.brand)
                         if let courseName {
                             Text(courseName)
                                 .lineLimit(1)
@@ -338,10 +338,10 @@ private struct ReviewCard: View {
         Button {
             onFeedback(feedback)
         } label: {
-            Text("\(keyLabel)  \(feedback.displayTitle)")
+            Text("\(keyLabel)  \(AppLocalization.text(feedback.displayTitle))")
         }
         .keyboardShortcut(key, modifiers: [])
-        .help("Record \(feedback.displayTitle) (\(keyLabel))")
+        .help("Record \(AppLocalization.text(feedback.displayTitle)) (\(keyLabel))")
     }
 
     @ViewBuilder
@@ -371,7 +371,7 @@ private struct ReviewCompletionView: View {
 
             HStack(spacing: 24) {
                 ForEach(ReviewFeedback.allCases) { feedback in
-                    LabeledContent(feedback.displayTitle) {
+                    LabeledContent(AppLocalization.text(feedback.displayTitle)) {
                         Text(feedbackCounts[feedback, default: 0], format: .number)
                             .monospacedDigit()
                     }

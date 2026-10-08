@@ -4,6 +4,7 @@ import PackageDescription
 
 let package = Package(
     name: "WordNote",
+    defaultLocalization: "en",
     platforms: [
         .macOS(.v14)
     ],
@@ -16,6 +17,7 @@ let package = Package(
             name: "WordNote",
             dependencies: ["WordNoteCore"],
             path: "Sources/WordNote",
+            resources: [.process("Resources")],
             swiftSettings: [.enableUpcomingFeature("InferSendableFromCaptures")]
         ),
         .target(

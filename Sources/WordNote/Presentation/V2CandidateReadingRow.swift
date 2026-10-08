@@ -34,7 +34,7 @@ struct V2CandidateReadingRow: View {
                     VStack(alignment: .leading, spacing: 10) {
                         ForEach(details, id: \.0) { title, text in
                             VStack(alignment: .leading, spacing: 4) {
-                                Text(title).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                                Text(AppLocalization.text(title)).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                                 Text(text).textSelection(.enabled).lineSpacing(4).fixedSize(horizontal: false, vertical: true)
                             }
                         }
@@ -46,7 +46,7 @@ struct V2CandidateReadingRow: View {
                     .help(hasExistingTerm ? "Preview existing matches before linking" : "Preview and save candidate")
                 Button("Ignore", systemImage: "archivebox", action: onIgnore).labelStyle(.iconOnly).help("Ignore candidate")
                 Spacer()
-                Text(value.importance.displayTitle).font(.caption).foregroundStyle(.secondary)
+                Text(AppLocalization.text(value.importance.displayTitle)).font(.caption).foregroundStyle(.secondary)
             }
         }.padding(.vertical, 6)
     }

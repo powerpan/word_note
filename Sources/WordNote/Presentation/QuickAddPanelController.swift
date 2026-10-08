@@ -86,7 +86,7 @@ final class QuickAddPanelController: NSObject {
             backing: .buffered,
             defer: false
         )
-        panel.title = "Quick Add"
+        panel.title = AppLocalization.text("Quick Add")
         panel.isReleasedWhenClosed = false
         panel.isOpaque = false
         panel.backgroundColor = .clear

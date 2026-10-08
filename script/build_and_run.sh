@@ -7,6 +7,7 @@ BUNDLE_ID="com.powerpan.WordNote"
 MIN_SYSTEM_VERSION="14.0"
 FIXTURE="${2:-populated}"
 APPEARANCE="${3:-light}"
+QA_LANGUAGE="${5:-system}"
 BUILD_FLAGS=(-Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency -Xswiftc -warnings-as-errors)
 
 case "$MODE" in
@@ -14,6 +15,7 @@ case "$MODE" in
   --ui-fixture|--ui-v2-fixture|--ui-v3-fixture)
     [[ "$FIXTURE" == "empty" || "$FIXTURE" == "populated" || "$FIXTURE" == "learning" ]] || { echo "Invalid fixture" >&2; exit 2; }
     [[ "$APPEARANCE" == "light" || "$APPEARANCE" == "dark" ]] || { echo "Invalid appearance" >&2; exit 2; }
+    [[ "$QA_LANGUAGE" == "system" || "$QA_LANGUAGE" == "en" || "$QA_LANGUAGE" == "zh-Hans" || "$QA_LANGUAGE" == "zh-Hant" ]] || { echo "Invalid QA language" >&2; exit 2; }
     QA_SESSION="${4:-$(uuidgen)}"
     [[ "$QA_SESSION" =~ ^[[:xdigit:]]{8}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{12}$ ]] || { echo "Invalid QA session UUID" >&2; exit 2; }
     APP_NAME="WordNoteQA"
@@ -25,7 +27,7 @@ case "$MODE" in
     fi
     ;;
   *)
-    echo "usage: $0 [run|--debug|--logs|--telemetry|--verify|--ui-fixture|--ui-v2-fixture|--ui-v3-fixture [empty|populated|learning] [light|dark] [session-UUID]]" >&2
+    echo "usage: $0 [run|--debug|--logs|--telemetry|--verify|--ui-fixture|--ui-v2-fixture|--ui-v3-fixture [empty|populated|learning] [light|dark] [session-UUID] [system|en|zh-Hans|zh-Hant]]" >&2
     exit 2
     ;;
 esac
@@ -55,12 +57,24 @@ if [[ ! -f "$APP_ICON_SOURCE"
 fi
 
 swift build "${BUILD_FLAGS[@]}"
-BUILD_BINARY="$(swift build "${BUILD_FLAGS[@]}" --show-bin-path)/WordNote"
+BUILD_DIR="$(swift build "${BUILD_FLAGS[@]}" --show-bin-path)"
+BUILD_BINARY="$BUILD_DIR/WordNote"
 
 rm -rf "$APP_BUNDLE"
 mkdir -p "$APP_MACOS" "$APP_RESOURCES"
 cp "$BUILD_BINARY" "$APP_BINARY"
 cp "$APP_ICON_SOURCE" "$APP_RESOURCES/AppIcon.icns"
+cp -R "$BUILD_DIR/WordNote_WordNote.bundle" "$APP_RESOURCES/"
+if [[ "$MODE" == "--ui-v3-fixture" ]]; then
+  # SwiftUI literals use the main bundle; dynamic labels use Bundle.module.
+  LOCALIZATION_RESOURCES="$APP_RESOURCES/WordNote_WordNote.bundle"
+  if [[ -d "$LOCALIZATION_RESOURCES/Contents/Resources" ]]; then
+    LOCALIZATION_RESOURCES="$LOCALIZATION_RESOURCES/Contents/Resources"
+  fi
+  for LANGUAGE in en zh-Hans zh-Hant; do
+    cp -R "$LOCALIZATION_RESOURCES/$LANGUAGE.lproj" "$APP_RESOURCES/"
+  done
+fi
 chmod +x "$APP_BINARY"
 
 cat >"$INFO_PLIST" <<PLIST
@@ -74,6 +88,8 @@ cat >"$INFO_PLIST" <<PLIST
   <string>$BUNDLE_ID</string>
   <key>CFBundleName</key>
   <string>$APP_NAME</string>
+  <key>CFBundleDevelopmentRegion</key>
+  <string>en</string>
   <key>CFBundleIconFile</key>
   <string>AppIcon.icns</string>
   <key>CFBundlePackageType</key>
@@ -112,7 +128,11 @@ case "$MODE" in
     ;;
   --ui-fixture|--ui-v2-fixture|--ui-v3-fixture)
     echo "QA session: $QA_SESSION"
-    /usr/bin/open -n "$APP_BUNDLE" --args --ui-fixture "$FIXTURE" --ui-appearance "$APPEARANCE" --ui-session "$QA_SESSION"
+    QA_ARGS=(--ui-fixture "$FIXTURE" --ui-appearance "$APPEARANCE" --ui-session "$QA_SESSION")
+    if [[ "$QA_LANGUAGE" != "system" ]]; then
+      QA_ARGS+=(-AppleLanguages "($QA_LANGUAGE)" -AppleLocale "$QA_LANGUAGE")
+    fi
+    /usr/bin/open -n "$APP_BUNDLE" --args "${QA_ARGS[@]}"
     ;;
   *)
     echo "usage: $0 [run|--debug|--logs|--telemetry|--verify]" >&2

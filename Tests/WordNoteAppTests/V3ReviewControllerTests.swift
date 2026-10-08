@@ -50,7 +50,7 @@ final class V3ReviewControllerTests: XCTestCase {
         XCTAssertTrue(try snapshot(container).eventStates.isEmpty)
         controller.reveal(at: now)
         XCTAssertTrue(controller.canAnswer)
-        XCTAssertEqual(controller.delay(for: .again), "10 min")
+        XCTAssertEqual(controller.delay(for: .again), AppLocalization.format("%lld min", 10))
         controller.answer(.good, at: now)
         controller.answer(.good, at: now)
         XCTAssertEqual(try snapshot(container).eventStates.count, 1)

@@ -38,7 +38,7 @@ struct SettingsView: View {
                 GroupBox("Appearance") {
                     Picker("Theme", selection: appearanceSelection) {
                         ForEach(AppAppearancePreference.allCases) { appearance in
-                            Label(appearance.displayTitle, systemImage: appearance.systemImage)
+                            Label(AppLocalization.text(appearance.displayTitle), systemImage: appearance.systemImage)
                                 .tag(appearance)
                         }
                     }

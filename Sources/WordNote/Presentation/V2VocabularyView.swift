@@ -69,7 +69,7 @@ struct V2VocabularyView: View {
         .sheet(item: $organization) { request in
             V2VocabularyOrganizationSheet(termIDs: request.termIDs) { counts in
                 selection.clearBatch()
-                message = "Organized \(counts.changedTerms) terms."
+                message = AppLocalization.format("Organized %lld terms.", counts.changedTerms)
                 rebuildIndex()
             }
         }
@@ -227,12 +227,12 @@ struct V2VocabularyView: View {
         let memberships = Dictionary(uniqueKeysWithValues: values.map { term in
             (term.id, Set(links.filter { $0.termID == term.id }.map(\.courseID)))
         })
-        guard !values.isEmpty, values.count == ids.count else { exportMessage = "The selection changed. Select the terms again."; return }
+        guard !values.isEmpty, values.count == ids.count else { exportMessage = AppLocalization.text("The selection changed. Select the terms again."); return }
         Task {
             guard let url = await DataFilePicker.exportURL(csvCount: values.count) else { return }
             do {
                 try await dataProtection.exportVocabulary(terms: values, courses: courseValues, courseMemberships: memberships, to: url)
-                exportMessage = "Exported \(values.count) vocabulary entries."
+                exportMessage = AppLocalization.format("Exported %lld vocabulary entries.", values.count)
             } catch { exportMessage = error.localizedDescription }
         }
     }
@@ -245,14 +245,14 @@ private struct V2VocabularyRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
             Text(item.term.term).font(.headline).lineLimit(2).fixedSize(horizontal: false, vertical: true)
-            Text(item.chineseSummary.isEmpty ? "No Chinese meaning" : item.chineseSummary)
+            Text(item.chineseSummary.isEmpty ? AppLocalization.text("No Chinese meaning") : item.chineseSummary)
                 .font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
             let names = courses.filter { item.courseIDs.contains($0.id) }.map(\.courseName).sorted()
             #if WORDNOTE_V3_VALIDATION
-            Text(names.isEmpty ? "No course" : names.joined(separator: ", "))
+            Text(names.isEmpty ? AppLocalization.text("No course") : names.joined(separator: ", "))
                 .font(.caption).foregroundStyle(.tertiary).lineLimit(1)
             #else
-            Text(([MasteryLevel(rawValue: item.term.masteryLevelRaw)?.displayTitle ?? item.term.masteryLevelRaw] + names).joined(separator: ", "))
+            Text(([AppLocalization.text(MasteryLevel(rawValue: item.term.masteryLevelRaw)?.displayTitle ?? item.term.masteryLevelRaw)] + names).joined(separator: ", "))
                 .font(.caption).foregroundStyle(.tertiary).lineLimit(1)
             #endif
         }.frame(maxWidth: .infinity, alignment: .leading)

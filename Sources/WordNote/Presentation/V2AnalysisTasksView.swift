@@ -39,11 +39,11 @@ struct V2AnalysisTasksView: View {
                                             .help("Retry analysis").accessibilityLabel("Retry analysis")
                                     }
                                 }
-                                Text(job.state.rawValue.capitalized).font(.caption).foregroundStyle(.secondary)
+                                Text(AppLocalization.text(job.state.rawValue.capitalized)).font(.caption).foregroundStyle(.secondary)
                                 if let next = job.nextAttemptAt {
                                     Text("Retry after \(next.formatted(date: .omitted, time: .standard))").font(.caption).foregroundStyle(.secondary)
                                 }
-                                if let message = job.errorSummary { Text(message).font(.caption).foregroundStyle(.secondary) }
+                                if let message = job.errorSummary { Text(AppLocalization.text(message)).font(.caption).foregroundStyle(.secondary) }
                             }
                         }
                         if let errorMessage { StatusBanner(message: errorMessage, kind: .warning) }

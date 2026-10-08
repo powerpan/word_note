@@ -31,11 +31,11 @@ struct V2InboxFilters: View {
                 }.labelsHidden().help("Capture course")
                 Picker("Source", selection: $query.source) {
                     Text("All sources").tag(SourceType?.none)
-                    ForEach(SourceType.allCases) { Text($0.displayTitle).tag(Optional($0)) }
+                    ForEach(SourceType.allCases) { Text(AppLocalization.text($0.displayTitle)).tag(Optional($0)) }
                 }.labelsHidden().help("Capture source")
             }
             Picker("Status", selection: $query.status) {
-                ForEach(InboxStatusFilter.allCases) { Text($0.title).tag($0) }
+                ForEach(InboxStatusFilter.allCases) { Text(AppLocalization.text($0.title)).tag($0) }
             }
             HStack {
                 Text("\(selectedCounts.records) inputs, \(selectedCounts.candidates) candidates selected")

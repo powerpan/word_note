@@ -74,7 +74,7 @@ struct CaptureNavigationBanner: View {
     let onReturn: () -> Void
     var body: some View {
         HStack {
-            Text(title).font(.caption).foregroundStyle(.secondary)
+            Text(AppLocalization.text(title)).font(.caption).foregroundStyle(.secondary)
             Spacer()
             Button("Return to Results", systemImage: "arrow.uturn.backward", action: onReturn)
                 .labelStyle(.iconOnly).help("Return to current results")

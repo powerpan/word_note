@@ -87,7 +87,7 @@ struct V3LearningSummary: View {
     private func metric(_ title: String, _ count: Int) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(count.formatted()).font(.system(size: 26, weight: .semibold)).monospacedDigit()
-            Text(title).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            Text(AppLocalization.text(title)).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }.frame(maxWidth: .infinity, alignment: .leading)
     }
 }
@@ -119,7 +119,7 @@ struct LearningCardRows: View {
         if cards.isEmpty { Text("No cards in this state").foregroundStyle(.secondary).padding(.vertical, 12) }
         ForEach(cards) { item in
             LearningLinkRow(title: item.term.term, subtitle: item.term.chineseMeaning,
-                detail: item.waitingUntil?.formatted(date: .omitted, time: .shortened) ?? "Mastery: \(item.card.schedule.masteryLevel.displayTitle)") {
+                detail: item.waitingUntil?.formatted(date: .omitted, time: .shortened) ?? AppLocalization.format("Mastery: %@", AppLocalization.text(item.card.schedule.masteryLevel.displayTitle))) {
                 open(.term(item.term.id, cardID: item.id))
             }.rememberListRow(item.id)
             Divider()

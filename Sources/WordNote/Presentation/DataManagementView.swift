@@ -24,7 +24,7 @@ struct DataManagementView: View {
                 if let message = protection.errorMessage { StatusBanner(message: message, kind: .warning) }
                 if let localError { StatusBanner(message: localError, kind: .warning) }
                 if protection.unreadableBackupCount > 0 {
-                    StatusBanner(message: "\(protection.unreadableBackupCount) backup files could not be verified and were left untouched.", kind: .warning)
+                    StatusBanner(message: AppLocalization.format("%lld backup files could not be verified and were left untouched.", protection.unreadableBackupCount), kind: .warning)
                 }
                 if protection.catalogNeedsRepair {
                     StatusBanner(message: "The backup catalog is damaged. Verified backup files remain available.", kind: .warning)
@@ -142,10 +142,10 @@ struct DataManagementView: View {
 
     private func kindTitle(_ kind: WordNoteBackupKind) -> String {
         switch kind {
-        case .automatic: "Automatic"
-        case .manual: "Manual"
-        case .beforeMigration: "Before migration"
-        case .beforeRestore: "Before restore"
+        case .automatic: AppLocalization.text("Automatic")
+        case .manual: AppLocalization.text("Manual")
+        case .beforeMigration: AppLocalization.text("Before migration")
+        case .beforeRestore: AppLocalization.text("Before restore")
         }
     }
 }
@@ -191,7 +191,7 @@ private struct RestorePreviewView: View {
                     #if WORDNOTE_V3_VALIDATION
                     let learning = preview.snapshot.payload.learningPreferences ?? .init()
                     GridRow { Text("Default course"); Text(defaultCourseName(learning.defaultCourseID)).fixedSize(horizontal: false, vertical: true) }
-                    GridRow { Text("Default direction"); Text(learning.defaultLookupIntent.displayTitle) }
+                    GridRow { Text("Default direction"); Text(AppLocalization.text(learning.defaultLookupIntent.displayTitle)) }
                     GridRow { Text("Group size"); Text(String(learning.reviewTargetCards)) }
                     GridRow { Text("Daily new-card limit"); Text(String(learning.reviewDailyNewLimit)) }
                     #endif
@@ -223,8 +223,8 @@ private struct RestorePreviewView: View {
     }
 
     private func defaultCourseName(_ id: UUID?) -> String {
-        guard let id else { return "No Course" }
-        guard case .v3(let payload) = preview.snapshot.payload else { return "No Course" }
-        return payload.content.content.courses.first { $0.id == id }?.courseName ?? "Unavailable course"
+        guard let id else { return AppLocalization.text("No Course") }
+        guard case .v3(let payload) = preview.snapshot.payload else { return AppLocalization.text("No Course") }
+        return payload.content.content.courses.first { $0.id == id }?.courseName ?? AppLocalization.text("Unavailable course")
     }
 }

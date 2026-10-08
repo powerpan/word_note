@@ -71,7 +71,7 @@ struct VocabularyCompletionEditor: NSViewRepresentable {
     }
 
     private func configure(_ textView: CompletionTextView, coordinator: Coordinator) {
-        textView.placeholder = placeholder
+        textView.placeholder = AppLocalization.text(placeholder)
         textView.font = style.font
         textView.textContainerInset = style.textContainerInset
         textView.isMultiline = style.isMultiline
@@ -81,7 +81,7 @@ struct VocabularyCompletionEditor: NSViewRepresentable {
         textView.bindingUpdateHandler = { [weak coordinator] updatedText in
             coordinator?.updateBinding(with: updatedText)
         }
-        textView.setAccessibilityLabel("Quick Add input")
+        textView.setAccessibilityLabel(AppLocalization.text("Quick Add input"))
     }
 
     @MainActor

@@ -149,7 +149,7 @@ struct VocabularyView: View {
                 Picker("Mastery", selection: protected($selectedMasteryRaw)) {
                     Text("All Mastery").tag("all")
                     ForEach(MasteryLevel.allCases) { masteryLevel in
-                        Text(masteryLevel.displayTitle).tag(masteryLevel.rawValue)
+                        Text(AppLocalization.text(masteryLevel.displayTitle)).tag(masteryLevel.rawValue)
                     }
                 }
                 .frame(maxWidth: 170)
@@ -212,8 +212,8 @@ private struct VocabularyRow: View {
                 .font(.headline)
                 .lineLimit(1)
             HStack(spacing: 8) {
-                TagChip(title: term.masteryLevel.displayTitle, tint: WordNoteTheme.teal)
-                TagChip(title: term.importance.displayTitle, tint: WordNoteTheme.amber)
+                TagChip(title: AppLocalization.text(term.masteryLevel.displayTitle), tint: WordNoteTheme.teal)
+                TagChip(title: AppLocalization.text(term.importance.displayTitle), tint: WordNoteTheme.amber)
                 if let courseName {
                     Text(courseName)
                         .lineLimit(1)

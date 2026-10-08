@@ -41,7 +41,7 @@ struct V3TermReviewCardsView: View {
             ForEach(cards.sorted { ($0.modeRaw, $0.id.uuidString) < ($1.modeRaw, $1.id.uuidString) }, id: \.id) { card in
                 VStack(alignment: .leading, spacing: 7) {
                     HStack {
-                        Text(ReviewMode(rawValue: card.modeRaw)?.displayTitle ?? card.modeRaw).fontWeight(.semibold)
+                        Text(AppLocalization.text(ReviewMode(rawValue: card.modeRaw)?.displayTitle ?? card.modeRaw)).fontWeight(.semibold)
                         Spacer()
                         if card.phaseRaw != ReviewCardPhase.suspended.rawValue {
                             Button("Suspend", systemImage: "pause.circle") { suspend(card) }.labelStyle(.iconOnly).help("Suspend this card")
@@ -49,9 +49,9 @@ struct V3TermReviewCardsView: View {
                             Button("Enable", systemImage: "play.circle") { resume(card) }.labelStyle(.iconOnly).help("Enable this card")
                         }
                     }
-                    LabeledContent("State", value: card.phaseRaw.capitalized)
-                    LabeledContent("Mastery", value: MasteryLevel(rawValue: card.masteryLevelRaw)?.displayTitle ?? card.masteryLevelRaw)
-                    LabeledContent("Next review", value: card.nextReviewAt?.formatted(date: .abbreviated, time: .shortened) ?? "Not scheduled")
+                    LabeledContent("State", value: AppLocalization.text(card.phaseRaw.capitalized))
+                    LabeledContent("Mastery", value: AppLocalization.text(MasteryLevel(rawValue: card.masteryLevelRaw)?.displayTitle ?? card.masteryLevelRaw))
+                    LabeledContent("Next review", value: card.nextReviewAt?.formatted(date: .abbreviated, time: .shortened) ?? AppLocalization.text("Not scheduled"))
                     if let until = card.buriedUntil, until > Date() {
                         LabeledContent("Deferred until", value: until.formatted(date: .abbreviated, time: .shortened))
                     }

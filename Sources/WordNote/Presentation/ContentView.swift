@@ -214,11 +214,13 @@ private struct SidebarView: View {
                     Label("Local-first", systemImage: "lock.shield")
                         .font(.caption)
                         .foregroundStyle(WordNoteTheme.mutedInk)
+                    #if !WORDNOTE_V3_VALIDATION
                     Text("DeepSeek is used only when you analyze a record.")
                         .font(.caption2)
                         .foregroundStyle(WordNoteTheme.mutedInk.opacity(0.8))
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
+                    #endif
                 }
                 .padding(.horizontal, 18)
                 .padding(.bottom, 18)

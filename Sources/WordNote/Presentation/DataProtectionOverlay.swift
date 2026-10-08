@@ -21,7 +21,7 @@ struct DataProtectionOverlay: ViewModifier {
                                 Image(systemName: "externaldrive.badge.checkmark").font(.title)
                                 Text(protection.restorePhase == .readyToQuit ? "Restore Ready" : "Restore Needs Attention")
                                     .font(.headline)
-                                Text(protection.errorMessage ?? "Data changes are paused until Word Note quits.")
+                                Text(AppLocalization.text(protection.errorMessage ?? "Data changes are paused until Word Note quits."))
                                 HStack {
                                     if protection.restorePhase == .readyToQuit {
                                         Button("Cancel Restore", role: .cancel) { try? protection.cancelRestore() }

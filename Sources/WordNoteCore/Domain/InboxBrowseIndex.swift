@@ -69,6 +69,10 @@ public struct InboxBrowseItem: Identifiable, Sendable {
     }
 
     public var preview: String {
+        previewText ?? statusTitle
+    }
+
+    public var previewText: String? {
         let ordered = pendingCandidates + candidates.filter { $0.statusRaw != "pending" }
         let values = ordered.map { state.resolvedLookupDirectionRaw == "chineseToEnglish" ? $0.term : $0.chineseMeaning }
         let text = (values + [record.sentenceMeaning]).compactMap { value -> String? in
@@ -76,7 +80,7 @@ public struct InboxBrowseItem: Identifiable, Sendable {
             let normalized = value.split(whereSeparator: \.isWhitespace).joined(separator: " ")
             return normalized.isEmpty ? nil : normalized
         }.first
-        return text.map { String($0.prefix(18)) } ?? statusTitle
+        return text.map { String($0.prefix(18)) }
     }
 
     public var statusTitle: String {

@@ -186,14 +186,14 @@ extension InputRecordModel {
     var visibleStatusTitle: String {
         #if WORDNOTE_V2_VALIDATION || WORDNOTE_V3_VALIDATION
         switch queueStateRaw {
-        case "queued": return "Queued"
-        case "running": return "Analyzing"
-        case "failed": return "Analysis failed"
-        case "cancelled": return "Analysis cancelled"
-        default: return status.displayTitle
+        case "queued": return AppLocalization.text("Queued")
+        case "running": return AppLocalization.text("Analyzing")
+        case "failed": return AppLocalization.text("Analysis failed")
+        case "cancelled": return AppLocalization.text("Analysis cancelled")
+        default: return AppLocalization.text(status.displayTitle)
         }
         #else
-        return status.displayTitle
+        return AppLocalization.text(status.displayTitle)
         #endif
     }
 }

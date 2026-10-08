@@ -90,10 +90,10 @@ final class V3ReviewController {
         guard let plan = previews[feedback]?.plan else { return "" }
         let value: String
         switch plan.delay {
-        case .minutes(let count): value = "\(count) min"
-        case .calendarDays(let count): value = "\(count) day\(count == 1 ? "" : "s")"
+        case .minutes(let count): value = AppLocalization.format("%lld min", count)
+        case .calendarDays(let count): value = AppLocalization.format(count == 1 ? "%lld day" : "%lld days", count)
         }
-        return plan.disposition == .relearningLimitReached ? "\(value), daily limit" : value
+        return plan.disposition == .relearningLimitReached ? AppLocalization.format("%@, daily limit", value) : value
     }
 
     func answer(_ feedback: ReviewFeedback, at date: Date = Date()) {
