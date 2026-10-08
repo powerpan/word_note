@@ -451,7 +451,11 @@ P2 若做 iCloud，需要先制定資料衝突策略，不能直接把本地模�
 
 `captureID` 識別提交而非相同文字：同次重送返回已保存結果，不重建來源或增加計數；不同提交保留各自課程、note 和捕獲入口。Save Only 建草稿而非查詢事件。精確英文命中不排 AI、不進 Inbox；候選確認只做內容/來源整理，不冒充再次查詞。此批仍保留 `legacyMixed` 的復習反饋，B04 才改新統計。
 
-單項確認支援新建與關聯已有詞，校驗候選/記錄/目標 revision 及分析世代；相同 confirmationOperationID 重送返回原目標，目標已刪除則明確報錯、不重建。QA App 沿用新詞批量確認交互，先核對全部候選/記錄 revision，整批單次保存；遇精確重複仍整批拒絕，不自行關聯。A04 undo receipt 已接入下述交易；A05 批次預覽/逐字段補充尚未實作。刪除與課程引用保護的基礎證據見 [V2 內容交易](qa/2026-10-08-a02-content-transactions.md)。
+單項確認支援新建與關聯已有詞，校驗候選/記錄/目標 revision 及分析世代；相同 confirmationOperationID 重送返回原目標，目標已刪除則明確報錯、不重建。`confirmNewCandidates` 保留為顯式 new-only 相容 API，不偷偷改為覆蓋已有詞。刪除與課程引用保護的基礎證據見 [V2 內容交易](qa/2026-10-08-a02-content-transactions.md)。
+
+A05 的 V2 QA Inbox 和候選確認改用不可變 `WordNoteV2ConfirmationPlan`。讀取時凍結選中候選、來源、課程、同名目標及其關係；選擇和 resolve 都是純值運算。既有詞預設 link，逐字段補充必須顯式指定候選；新同名候選內容不同時選一份主內容，不拼接義項。commit 在同步交易中重讀依賴及同名詞集合，先全量檢查再一次保存。無關詞條更新不使方案失效，相關字段即使漏加 revision 仍由值比較擋住；每個來源和被修改的既有詞在整批中最多增加一次 revision。
+
+保存候選的 token 綁定預覽 operationID 與解析後的實際選擇，防止換了覆蓋決定仍被當成原操作重試。相同方案重送是零寫入，不替換 undo receipt；V2 的 ignored 不允許持久 token，只接受精確終態及單步 revision 相符的零寫入收斂，不能據此聲稱操作所有權。失敗可用原方案重試；資料過期則 refresh 產生新方案並清空選擇，原選中候選被處理/刪除時拒絕刷新，不悄悄縮小批次。見 [A05 預覽與原子確認證據](qa/2026-10-08-a05-confirmation-preview.md)。
 
 V2 QA 的候選輸入綁定值型 `WordNoteV2CandidateEdit`，保存前不碰 SwiftData；已修改未保存的行會阻止該候選區直接確認。Term/Course 表單在載入時保存 revision，正式保存與刪除不能偷偷改用當前 revision。詞條課程成員資格由 TermCourseLink 控制，編輯不改寫原 occurrence 或兼容 courseID；詞庫、課程計數、復習篩選及 CSV 使用相同成員資料。V2 review 只把既有排程搬入原子交易，保留 legacyMixed，不提前啟用 V3 分方向規則。
 

@@ -15,7 +15,7 @@ public struct WordNoteV2CandidateSelection: Sendable {
 }
 
 extension WordNoteV2ContentService {
-    /// Preserves the existing all-or-nothing, new-term-only workflow until A05 adds explicit conflict choices.
+    /// Compatibility API for explicitly new-only callers. Inbox uses the read-only confirmation plan.
     public func confirmNewCandidates(
         _ selections: [WordNoteV2CandidateSelection], at date: Date = Date()
     ) throws -> [WordNoteV2VersionedID] {

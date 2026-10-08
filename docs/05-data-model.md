@@ -364,7 +364,13 @@ ConfirmationPlan 是非持久化值，包含 operationID、選中記錄/候選 I
 
 Term、Candidate 狀態、savedTermID、membership、occurrence 單次保存；失敗全部回滾。英文字母、必要符號及數字可存在詞頭（如 C++、L2），不允許純中文主體；旧不合格 Term 提示人工修正，不因遷移被刪除。
 
-A02 的單項 link 保留已有正式字段及復習統計，只在新增來源/課程時增加 Term.revision；同一 capture 的第二個同詞候選不重建 occurrence。候選和其 InputRecord 的整理狀態/revision 隨確認保存；queued/running 記錄不允許同時確認。英文主體及中文查英文所需中文釋義的校驗使用記錄已凍結的方向，不重新偵測原文。完整 ConfirmationPlan、批次歸併、fill 仍待 A05。
+A02 的單項 link 保留已有正式字段及復習統計，只在新增來源/課程時增加 Term.revision；同一 capture 的第二個同詞候選不重建 occurrence。候選和其 InputRecord 的整理狀態/revision 隨確認保存；queued/running 記錄不允許同時確認。英文主體及中文查英文所需中文釋義的校驗使用記錄已凍結的方向，不重新偵測原文。
+
+A05 已在隔離 V2 核心與 QA 界面接入 ConfirmationPlan，不新增 schema 或快照字段。newTerms 計唯一新 Term；linkedCandidates 計連向既有詞及同批新詞的其餘候選，不是 occurrence 數；ignoredCandidates 是正式轉為 ignored，不是保留 pending。已解決方案中 `newTerms + linkedCandidates + ignoredCandidates == candidates`，存在衝突時差額為 unresolvedCandidates。supplementedTerms 計至少一個顯式字段真正改變的既有詞，與 links 有重疊，不可相加當總量。
+
+fill 只支持中文、英文、技術釋義和例句；每字段選一個非空候選值，未選字段、主體、人工標籤、分類、重要度及復習排程/統計完全保留。新詞衝突的主候選同時決定詞型、分類、重要度及主要來源；所有被納入候選的獨立來源與課程仍保存。同 capture 同詞只一個 occurrence。
+
+批次 saved 候選的 confirmationOperationID 實際存放 SHA-256 派生的 UUID token，綁定 plan.operationID、穩定排序的目標/候選/最終字段/忽略集合；相同語義重送不二次建詞，更改選擇不冒充原操作。ignored 的 savedTermID、confirmationOperationID 仍為 nil，savedLinkState 仍為 none；精確終態重試可零寫入返回，但不作持久操作所有權聲明。方案本身不跨 App 重啟持久化；恢復後候選 saved/ignored 狀態和 token 保留，不能重新作為 pending 建詞。證據見 [A05](qa/2026-10-08-a05-confirmation-preview.md)。
 
 A04 [運行期撤銷](qa/2026-10-08-a04-safe-undo.md) 不新增持久表或改 schema：receipt 只留受影響實體的局部 DTO、操作 ID 和前後引用狀態。只可刪本次新建且之後未改/未被引用的 Term/Course/關係；舊詞和原始輸入不因撤銷確認被級聯刪除。還原值時 revision 繼續增加，lookup/review 事件不得反向清除；重啟後不保留 receipt，亦不能把局部 DTO 當完整快照恢復。
 

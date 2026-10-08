@@ -15,6 +15,10 @@ struct InboxView: View {
     @State private var selectedBatchRecordIDs = Set<UUID>()
     @State private var errorMessage: String?
     @State private var analyzingRecordID: UUID?
+    #if WORDNOTE_V2_VALIDATION
+    @State private var confirmationPlan: WordNoteV2ConfirmationPlan?
+    @State private var confirmationMessage: String?
+    #endif
     @SceneStorage("inboxConfirmedRecordsExpanded") private var confirmedRecordsExpanded = false
 
     private var records: [InputRecordModel] {
@@ -104,6 +108,14 @@ struct InboxView: View {
             pruneBatchSelection()
         }
         #if WORDNOTE_V2_VALIDATION
+        .sheet(item: $confirmationPlan) { plan in
+            V2ConfirmationPreview(plan: plan) { result in
+                selectedBatchRecordIDs.removeAll()
+                errorMessage = nil
+                confirmationMessage = "Confirmed \(result.counts.candidates - result.counts.ignoredCandidates) candidates; ignored \(result.counts.ignoredCandidates)."
+                maintainSelection()
+            }
+        }
         .onChange(of: storedRecords.map { "\($0.id):\($0.revision)" }) {
             guard !WordNoteWriteGate.isBlocked(modelContext) else { return }
             do { try analysisQueue.refreshJobs() }
@@ -190,6 +202,15 @@ struct InboxView: View {
                 .padding(18)
                 .background(WordNoteTheme.surface)
                 #if WORDNOTE_V2_VALIDATION
+                if !selectedBatchRecordIDs.isEmpty {
+                    let selected = confirmableRecords.filter { selectedBatchRecordIDs.contains($0.id) }
+                    Text("\(selected.count) records, \(selected.reduce(0) { $0 + pendingCandidates(for: $1).count }) candidates selected")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 18).padding(.bottom, 10)
+                }
+                if let confirmationMessage {
+                    StatusBanner(message: confirmationMessage, kind: .success).padding(.horizontal, 18).padding(.bottom, 10)
+                }
                 V2AnalysisTasksView(queue: analysisQueue)
                 #endif
             }
@@ -308,6 +329,15 @@ struct InboxView: View {
 
         guard !recordsToConfirm.isEmpty else { return }
 
+        #if WORDNOTE_V2_VALIDATION
+        do {
+            confirmationPlan = try WordNoteV2ContentService(container: modelContext.container).makeConfirmationPlan(
+                recordsToConfirm.flatMap { CandidateConfirmation(candidates: $0.candidates, sourceRecord: $0.record).selections }
+            )
+            confirmationMessage = nil
+            errorMessage = nil
+        } catch { errorMessage = error.localizedDescription }
+        #else
         let service = VocabularyService(modelContext: modelContext, undoHistory: undoHistory)
 
         do {
@@ -322,6 +352,7 @@ struct InboxView: View {
         } catch {
             errorMessage = error.localizedDescription
         }
+        #endif
     }
 
     private func pruneBatchSelection() {

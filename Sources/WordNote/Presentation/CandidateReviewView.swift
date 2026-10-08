@@ -15,6 +15,9 @@ struct CandidateReviewView: View {
     @State private var errorMessage: String?
     @State private var isManualEditorPresented = false
     @State private var editedCandidateIDs = Set<UUID>()
+    #if WORDNOTE_V2_VALIDATION
+    @State private var confirmationPlan: WordNoteV2ConfirmationPlan?
+    #endif
 
     private var pendingCandidates: [CandidateTermModel] {
         candidates.filter { $0.status == .pending }
@@ -120,6 +123,15 @@ struct CandidateReviewView: View {
         .onChange(of: candidates.map(\.id)) {
             selectDefaultCandidates()
         }
+        #if WORDNOTE_V2_VALIDATION
+        .sheet(item: $confirmationPlan) { plan in
+            V2ConfirmationPreview(plan: plan) { result in
+                selectedCandidateIDs.removeAll()
+                errorMessage = nil
+                statusMessage = "Confirmed \(result.counts.candidates - result.counts.ignoredCandidates) candidates; ignored \(result.counts.ignoredCandidates)."
+            }
+        }
+        #endif
     }
 
     private func selectDefaultCandidates() {
@@ -133,6 +145,19 @@ struct CandidateReviewView: View {
 
     private func saveSelected() {
         let selectedCandidates = pendingCandidates.filter { selectedCandidateIDs.contains($0.id) }
+        guard !selectedCandidates.isEmpty else { return }
+        #if WORDNOTE_V2_VALIDATION
+        do {
+            confirmationPlan = try WordNoteV2ContentService(container: modelContext.container).makeConfirmationPlan(
+                CandidateConfirmation(candidates: selectedCandidates, sourceRecord: record).selections
+            )
+            errorMessage = nil
+            statusMessage = nil
+        } catch {
+            statusMessage = nil
+            errorMessage = error.localizedDescription
+        }
+        #else
         let service = VocabularyService(modelContext: modelContext, undoHistory: undoHistory)
 
         do {
@@ -144,6 +169,7 @@ struct CandidateReviewView: View {
             statusMessage = nil
             errorMessage = error.localizedDescription
         }
+        #endif
     }
 
     private func ignoreSelected() {
