@@ -56,6 +56,7 @@ public final class WordNoteV3ReviewService {
     func currentSnapshot(sessionID: UUID) throws -> WordNoteV3ReviewAnswerSnapshot {
         let session = try Payload.Session(session(sessionID))
         guard session.status == .active, let itemID = session.currentItemID,
+              session.controls?.skippedItemIDs.contains(itemID) != true,
               let item = try content.fetch(Item.self).first(where: { $0.id == itemID }),
               item.sessionID == sessionID, item.statusRaw == ReviewSessionItemStatus.presented.rawValue,
               let cardID = item.cardID else { throw WordNoteV3ReviewError.noActivePresentedItem }

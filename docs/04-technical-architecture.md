@@ -505,7 +505,7 @@ V3 `capture` 復用既有不可變 request/result 契約，但本地命中交易
 
 ### 正式作答交易（B04 第二批）
 
-`WordNoteV3ReviewService` 是隔離 V3 的唯一正式作答入口，復用 ContentService 的單 MainActor context、寫入屏障、草稿保護、前後完整校驗及一次 save/rollback。服務只對當前 active/presented 項操作，不兼作會話建立或呈現入口。完整 V3 校驗拒絕 presented 的 new 卡缺 introducedAt，導入/啟動/寫入一致阻擋，不在評分時補造配額事實。
+`WordNoteV3ReviewService` 是隔離 V3 的唯一正式作答入口，復用 ContentService 的單 MainActor context、寫入屏障、草稿保護、前後完整校驗及一次 save/rollback。正式作答方法只對當前 active/presented 項操作，不隱式建立會話或呈現卡片。完整 V3 校驗拒絕 presented 的 new 卡缺 introducedAt，導入/啟動/寫入一致阻擋，不在評分時補造配額事實。
 
 回答權按 ModelContainer 共享而不是每頁各自持有，綁 sessionID、窗口 ownerID、隨機 lease ID 和 WriteGate ticket。容器弱引用避免永久保留已關閉 store；同 owner 重取不換權，其他 owner 被拒。新可恢復會話或恢復後 ticket 變更才換代；遲到 release 不釋放新 owner。這是單進程、同一 runtime 容器內的窗口協調，沒有宣稱能協調兩個獨立進程/容器同寫 SQLite；App 仍須維持唯一 runtime writer。
 
@@ -515,7 +515,7 @@ V3 `capture` 復用既有不可變 request/result 契約，但本地命中交易
 
 正式保存同時新增 semantics=2/scheduler=simple-v2 事件、寫 Card 排程、Item 的 attempt/lastAction/結果、Session 的固定組游標及 revision。Term/legacy 快照不寫。唯一 actionID 由交易前完整校驗及串行 writer 保護；同操作重送只讀返回持久收據，已完成/刪卡仍可返回原 originalCardID，不再推進游標，也不清除下一張卡的揭示狀態。不同輸入的 actionID 衝突、已作廢事件或已刪 Term 不補記。保存成功後只執行不拋錯的內存清理，避免已提交卻向 UI 報失敗。
 
-正式 UI 尚未接入此服務。B05 仍需會話建立/排序、全局新卡配額、呈現冪等、暫停/繼續/Skip/Later 及窗口生命週期接入；B06 尚須可用的題型內容與原句範圍處理。證據見 [B04 作答交易](qa/2026-10-08-b04-answer-transactions.md)。
+正式 UI 尚未接入此服務。B05 會話及控制核心見下節，窗口生命週期仍待接入；B06 尚須可用的題型內容與原句範圍處理。證據見 [B04 作答交易](qa/2026-10-08-b04-answer-transactions.md)。
 
 ### 固定會話與首次呈現（B05 第一批）
 
@@ -529,7 +529,17 @@ V3 `capture` 復用既有不可變 request/result 契約，但本地命中交易
 
 新台帳改變必需保留的備份語義，因此 V3 ordinary backup 與 repair evidence 的各自格式號升為 2；舊讀取器明確拒絕，新版兼容沒有台帳的 format=1。不得把帶台帳資料降標為 1；V1/V2 格式/模型不改。V3 仍為未發布原型 schema，不聲稱舊 V3 SQLite 能直接跨此模型改動打開。
 
-B05 的 Skip/Later、分類統計、Settings/Review UI 和 V3 runtime 整套接入尚待實施；大庫 MainActor 全圖校驗仍有性能出口。測試及兼容邊界見 [B05 會話與呈現](qa/2026-10-08-b05-session-presentation.md)。
+第一批測試及兼容邊界見 [B05 會話與呈現](qa/2026-10-08-b05-session-presentation.md)。Settings/Review UI 和 V3 runtime 整套接入尚待實施；大庫 MainActor 全圖校驗仍有性能出口。
+
+### 非評分控制與共用統計（B05 第二批）
+
+`skip` / `later` 驗證完整當前回答快照與租約，但不要求先揭示。控制收據放在 Session.controlsJSON，actionID 與正式 ReviewEvent 共用唯一命名空間；保存前先檢查只讀重送，異來源/種類衝突拒絕。收據只保存 SHA-256 指紋、身份、時鐘、结果 revision/status/due，不複製答案內容。保存失敗不清理揭示/租約；成功後的記憶體清理不能再拋錯。每組有 10,000 筆上限，保留已有收據而非偷偷淘汰。
+
+Skip 輪轉固定項順序，保持 presented 和所有卡片排程/配額，保存 skippedItemIDs。全部當前可答項已略過就暫停並釋放回答權；未到重學不阻止暫停，已到重學可由下一次呈現優先接手。恢復從輪轉隊首開始；正式反饋、Later 或明確繼續清空略過輪次。Later 使用純延期計算，只把 due 延至不倒退時鐘的次日本地日界，保留重學桶和能力，不寫事件或增加 attempt。兩者與會話游標同次 save。
+
+新正式事件在同一交易分配 recordedOrder，按當前所有事件（包括作廢事件）的最大值递增並做溢出檢查。`ReviewStatisticsBuilder` 僅讀不可變 V3 快照，全局先按 dayKey/cardID 找首次有效回答，再過濾會話/課程/方向。legacy 和 invalidated 事件排除；舊原型缺序號時採觀察時間/UUID 並明示估計順序。當日日桶不因換報表時區而重寫歷史。只讀服務不回寫任何 Term 計數。
+
+處理進度使用實際固定 item 數，成功完成、手動延期、上限延期、原因未知延期、sibling、不可用、未驗證完成分開。課程統計依當前 membership；卡片刪除後仍按 originalCardID 計真實事件，刪詞已級聯移除的歷史不補造。工作量復用 `ReviewCardQueuePolicy`，將可答、等待重學、未引入新卡、埋藏/停用和缺中文方向分開。新控制/序號由 format=3 保護，format=1/2 仍按字段能力向後讀取。證據見 [B05 控制與統計](qa/2026-10-08-b05-controls-statistics.md)。
 
 ### 備份、恢復與啟動
 

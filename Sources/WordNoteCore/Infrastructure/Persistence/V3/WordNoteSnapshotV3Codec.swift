@@ -36,7 +36,7 @@ public struct DecodedWordNoteSnapshotV3: Sendable {
 
 public enum WordNoteSnapshotV3Codec {
     public static let maximumDocumentBytes = 64 * 1_024 * 1_024
-    public static let currentFormatVersion = 2
+    public static let currentFormatVersion = 3
     public static let currentSchemaVersion = "3.0.0"
 
     public static func encode(
@@ -86,7 +86,7 @@ public enum WordNoteSnapshotV3Codec {
         } catch {
             throw WordNoteSnapshotError.invalidDocument
         }
-        if document.formatVersion == 1, payload.sessions.contains(where: { $0.introductions != nil }) {
+        if document.formatVersion < payload.minimumRequiredFormatVersion {
             throw WordNoteSnapshotError.unsupportedFormat
         }
         try payload.validate()

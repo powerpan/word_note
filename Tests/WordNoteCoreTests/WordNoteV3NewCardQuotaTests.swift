@@ -153,7 +153,7 @@ final class WordNoteV3NewCardQuotaTests: XCTestCase {
         _ = try Support.introduce(WordNoteV3ReviewService(container: container))
         let bytes = try WordNoteSnapshotV3Codec.encode(Support.snapshot(container), kind: .manual)
         var document = try JSONDecoder().decode(WordNoteSnapshotV3Document.self, from: bytes)
-        XCTAssertEqual(document.formatVersion, 2)
+        XCTAssertEqual(document.formatVersion, WordNoteSnapshotV3Codec.currentFormatVersion)
         XCTAssertNoThrow(try WordNoteSnapshotReader.decode(bytes))
         document.formatVersion = 1
         let downgraded = try JSONEncoder().encode(document)
@@ -192,7 +192,7 @@ final class WordNoteV3NewCardQuotaTests: XCTestCase {
             XCTAssertEqual(read.payload, source.canonicalized)
             let url = await vault.fileURL(saved.summary.id)
             var document = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
-            XCTAssertEqual(document["evidenceFormatVersion"] as? Int, 2)
+            XCTAssertEqual(document["evidenceFormatVersion"] as? Int, 3)
             document["evidenceFormatVersion"] = 1
             try PrivateFileIO.write(JSONSerialization.data(withJSONObject: document), to: url)
             do {

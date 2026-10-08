@@ -179,6 +179,7 @@ extension WordNoteSnapshotV3Payload {
                       (item.status == .waiting) == (last.afterSchedule?.phase == .relearning) else { throw WordNoteSnapshotError.invalidValue }
             }
         }
+        try validateReviewControls()
     }
 
     private struct CardKey: Hashable { let termID: UUID; let mode: ReviewMode; let scope: String }

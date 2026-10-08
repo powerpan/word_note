@@ -4,6 +4,7 @@ public enum WordNoteV3ReviewError: LocalizedError, Equatable {
     case noActivePresentedItem, ownershipConflict, invalidLease, answerNotRevealed
     case stalePreview, invalidPreview, actionConflict, invalidatedAction
     case activeSessionExists(UUID), noEligibleCards, sessionPaused, newCardLimitReached
+    case controlRecordLimit
 
     public var errorDescription: String? {
         switch self {
@@ -13,12 +14,13 @@ public enum WordNoteV3ReviewError: LocalizedError, Equatable {
         case .answerNotRevealed: "Reveal the current answer before giving feedback."
         case .stalePreview: "This card, session, or study day changed. Refresh and reveal the answer again."
         case .invalidPreview: "The feedback preview does not match the scheduling rules. No answer was saved."
-        case .actionConflict: "This answer identifier was already used for different feedback."
+        case .actionConflict: "This action identifier was already used for a different review operation."
         case .invalidatedAction: "This saved answer was invalidated and cannot be replayed as a successful action."
         case .activeSessionExists: "Continue or end the existing review session before starting another."
         case .noEligibleCards: "There are no available cards in this scope."
         case .sessionPaused: "Resume this session before presenting a card."
         case .newCardLimitReached: "The daily new-card limit has been reached. No new card was introduced."
+        case .controlRecordLimit: "This session has reached its action limit. End it and start a new group."
         }
     }
 }
@@ -35,7 +37,7 @@ public struct WordNoteV3ReviewLease: Equatable, Sendable {
     let writeTicket: WordNoteWriteGate.Ticket
 }
 
-public struct WordNoteV3ReviewAnswerSnapshot: Equatable, Sendable {
+public struct WordNoteV3ReviewAnswerSnapshot: Codable, Equatable, Sendable {
     public let session: WordNoteSnapshotV3Payload.Session
     public let item: WordNoteSnapshotV3Payload.SessionItem
     public let card: WordNoteSnapshotV3Payload.Card

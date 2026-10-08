@@ -12,17 +12,12 @@ extension WordNoteV3ReviewService {
             let snapshot = try sessionSnapshot(session.id)
             guard snapshot.session.status != .paused else { throw WordNoteV3ReviewError.sessionPaused }
             guard snapshot.session.status.isResumable else { throw WordNoteV3ReviewError.noActivePresentedItem }
-            if snapshot.items.contains(where: { $0.id == session.currentItemID && $0.status == .presented }) {
+            let skipped = Set(snapshot.session.controls?.skippedItemIDs ?? [])
+            if snapshot.items.contains(where: { $0.id == session.currentItemID && $0.status == .presented && !skipped.contains($0.id) }) {
                 return try currentSnapshot(sessionID: session.id)
             }
-            let ready = try snapshot.items.filter { item in
-                guard item.status == .waiting, let id = item.cardID, (item.availableAt ?? .distantFuture) <= date else { return false }
-                let card = try Payload.Card(card(id))
-                return try ReviewCardQueuePolicy().availability(of: card.schedule, at: date,
-                    studyTimeZoneID: snapshot.session.scope.studyTimeZoneID, lastInteractionAt: card.updatedAt) == .relearningDue
-            }
-                .sorted { ($0.availableAt ?? .distantFuture, $0.position) < ($1.availableAt ?? .distantFuture, $1.position) }
-            guard let selected = ready.first ?? snapshot.items.first(where: { $0.status == .pending || $0.status == .presented }),
+            let ready = try readyRelearningItems(in: snapshot, at: date)
+            guard let selected = ready.first ?? snapshot.items.first(where: { ($0.status == .pending || $0.status == .presented) && !skipped.contains($0.id) }),
                   let cardID = selected.cardID else { return nil }
             let card = try card(cardID)
             let before = try Payload.Card(card)
@@ -59,5 +54,14 @@ extension WordNoteV3ReviewService {
             session.updatedAt = max(session.updatedAt, date)
             return try currentSnapshot(sessionID: session.id)
         }
+    }
+
+    func readyRelearningItems(in snapshot: WordNoteV3ReviewSessionSnapshot, at date: Date) throws -> [Payload.SessionItem] {
+        try snapshot.items.filter { item in
+            guard item.status == .waiting, let id = item.cardID, (item.availableAt ?? .distantFuture) <= date else { return false }
+            let card = try Payload.Card(card(id))
+            return try ReviewCardQueuePolicy().availability(of: card.schedule, at: date,
+                studyTimeZoneID: snapshot.session.scope.studyTimeZoneID, lastInteractionAt: card.updatedAt) == .relearningDue
+        }.sorted { ($0.availableAt ?? .distantFuture, $0.position) < ($1.availableAt ?? .distantFuture, $1.position) }
     }
 }

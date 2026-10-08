@@ -9,6 +9,7 @@ extension WordNoteSchemaV3 {
         public var targetCardCount: Int
         public var newCardLimitSnapshot: Int
         public var introductionsJSON: String? = nil
+        public var controlsJSON: String? = nil
         public var statusRaw: String = "paused"
         public var currentItemID: UUID? = nil
         public var createdAt: Date

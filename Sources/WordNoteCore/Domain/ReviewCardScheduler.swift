@@ -40,12 +40,31 @@ public struct ReviewCardPresentationPlan: Equatable, Sendable {
     public let isRelearningRepeat: Bool
 }
 
+public struct ReviewCardPostponementPlan: Equatable, Sendable {
+    public let before: ReviewCardSchedule
+    public let after: ReviewCardSchedule
+    public let clock: ReviewStudyClock
+}
+
 /// Pure V3 rules. Persist a presentation only when a session item actually becomes presented.
 public struct ReviewCardScheduler: Sendable {
     public static let relearningDelay: TimeInterval = 600
     public static let maximumDailyRepeats = 2
 
     public init() {}
+
+    public func postpone(_ before: ReviewCardSchedule, at date: Date, studyTimeZoneID: String,
+                         lastInteractionAt: Date? = nil) throws -> ReviewCardPostponementPlan {
+        let clock = try before.studyClock(at: date, timeZoneID: studyTimeZoneID, lastInteractionAt: lastInteractionAt)
+        try requireEnabled(before, at: date)
+        var after = before
+        let bucket = try before.relearningBucket(at: clock)
+        after.nextReviewAt = max(try clock.nextDayStart, before.phase == .relearning ? bucket.day.end : clock.effectiveAt)
+        if after.phase == .new { after.phase = .review }
+        if let priority = after.priorityRequestedAt, priority <= clock.observedAt { after.priorityRequestedAt = nil }
+        try after.validate()
+        return .init(before: before, after: after, clock: clock)
+    }
 
     public func presentation(for before: ReviewCardSchedule, at date: Date, studyTimeZoneID: String,
                              lastInteractionAt: Date? = nil) throws -> ReviewCardPresentationPlan {

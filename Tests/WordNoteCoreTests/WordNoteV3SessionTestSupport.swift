@@ -40,6 +40,19 @@ enum V3SessionTestSupport {
         try .capture(from: container.mainContext)
     }
 
+    static func startPresented(_ service: WordNoteV3ReviewService, newCards: Bool = false,
+                               at date: Date = now) throws -> (WordNoteV3ReviewLease, WordNoteV3ReviewAnswerSnapshot) {
+        let session = try service.startSession(scope: scope(newCards: newCards), at: date)
+        let lease = try service.acquireLease(sessionID: session.session.id, ownerID: UUID())
+        return try (lease, show(service, lease: lease, at: date))
+    }
+
+    static func show(_ service: WordNoteV3ReviewService, lease: WordNoteV3ReviewLease,
+                     at date: Date = now) throws -> WordNoteV3ReviewAnswerSnapshot {
+        let session = try service.reviewSession(lease.sessionID)
+        return try XCTUnwrap(service.presentNextCard(lease: lease, expectedRevision: session.session.revision, at: date))
+    }
+
     static func answer(_ service: WordNoteV3ReviewService, lease: WordNoteV3ReviewLease,
                        feedback: ReviewFeedback = .good, at date: Date = now) throws -> WordNoteV3FeedbackReceipt {
         let source = try service.currentAnswerSnapshot(sessionID: lease.sessionID)

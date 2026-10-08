@@ -43,6 +43,7 @@ extension WordNoteV3ReviewService {
             let session = Session(id: id, scopeSnapshotJSON: try ReviewPersistenceJSON.encode(selection.scope),
                 targetCardCount: targetCardCount, newCardLimitSnapshot: newCardLimit, createdAt: date)
             session.introductionsJSON = try ReviewPersistenceJSON.encode([ReviewNewCardIntroduction]())
+            session.controlsJSON = try ReviewPersistenceJSON.encode(ReviewSessionControls())
             session.statusRaw = ReviewSessionStatus.active.rawValue
             for (position, cardID) in selection.cardIDs.enumerated() {
                 let item = Item(sessionID: id, cardID: cardID, position: position, createdAt: date)
@@ -65,6 +66,7 @@ extension WordNoteV3ReviewService {
     public func resumeSession(lease: WordNoteV3ReviewLease, expectedRevision: Int, at date: Date = Date()) throws -> WordNoteV3ReviewSessionSnapshot {
         let result = try changeSession(lease: lease, expectedRevision: expectedRevision, at: date) { session in
             guard session.statusRaw == ReviewSessionStatus.paused.rawValue else { return }
+            try resetSkipRound(in: session)
             let items = try sessionSnapshot(session.id).items.filter { !$0.status.isTerminal }
             if items.isEmpty {
                 session.currentItemID = nil

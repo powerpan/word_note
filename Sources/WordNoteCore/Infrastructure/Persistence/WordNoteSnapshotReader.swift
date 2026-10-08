@@ -16,7 +16,7 @@ public enum WordNoteSnapshotReader {
             throw WordNoteSnapshotError.invalidDocument
         }
         guard header.formatVersion == 1 || (header.sourceSchemaVersion == "3.0.0"
-            && header.formatVersion == WordNoteSnapshotV3Codec.currentFormatVersion) else {
+            && (1...WordNoteSnapshotV3Codec.currentFormatVersion).contains(header.formatVersion)) else {
             throw WordNoteSnapshotError.unsupportedFormat
         }
         switch header.sourceSchemaVersion {

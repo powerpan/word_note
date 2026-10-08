@@ -10,6 +10,7 @@ extension WordNoteSchemaV3 {
         public var originalCardID: UUID? = nil
         public var sessionID: UUID? = nil
         public var actionID: UUID? = nil
+        public var recordedOrder: Int? = nil
         public var feedbackSemanticsVersion: Int = 1
         public var schedulerVersion: String = "legacy-v1"
         public var studyDayKey: String? = nil

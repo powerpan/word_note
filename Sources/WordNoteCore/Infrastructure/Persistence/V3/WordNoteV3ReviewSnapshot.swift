@@ -34,6 +34,7 @@ public extension WordNoteSnapshotV3Payload {
         public var endedAt: Date?
         public var revision: Int
         public var introductions: [ReviewNewCardIntroduction]? = nil
+        public var controls: ReviewSessionControls? = nil
     }
 
     struct SessionItem: Codable, Equatable, Sendable {
@@ -65,6 +66,7 @@ public extension WordNoteSnapshotV3Payload {
         public var afterSchedule: ReviewCardSchedule?
         public var clockAnomaly: ReviewClockAnomaly?
         public var invalidatedAt: Date?
+        public var recordedOrder: Int? = nil
     }
 }
 

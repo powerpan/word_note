@@ -13,6 +13,7 @@ extension WordNoteV3ReviewService {
                 }
                 return (saved, false)
             }
+            guard try savedControl(actionID: actionID) == nil else { throw WordNoteV3ReviewError.actionConflict }
             let owner = try WordNoteV3ReviewOwnership.require(lease, in: context)
             guard preview.leaseID == lease.id, preview.source.session.id == lease.sessionID else { throw WordNoteV3ReviewError.invalidLease }
             let current = try currentSnapshot(sessionID: lease.sessionID)
@@ -30,7 +31,8 @@ extension WordNoteV3ReviewService {
                 sessionID: current.session.id, actionID: actionID, feedbackSemanticsVersion: 2,
                 schedulerVersion: ReviewSchedulerVersion.current, studyDayKey: actual.clock.studyDayKey,
                 studyTimeZoneID: actual.clock.studyTimeZoneID, beforeSchedule: actual.before, afterSchedule: actual.after,
-                clockAnomaly: actual.clock.anomaly, invalidatedAt: nil).apply(to: event)
+                clockAnomaly: actual.clock.anomaly, invalidatedAt: nil,
+                recordedOrder: content.increment(content.fetch(Event.self).compactMap(\.recordedOrder).max() ?? 0)).apply(to: event)
             context.insert(event)
 
             let card = try card(current.card.id)
@@ -57,6 +59,7 @@ extension WordNoteV3ReviewService {
                 item.completionOutcomeRaw = ReviewCompletionOutcome.postponed.rawValue
             }
             let session = try session(current.session.id)
+            try resetSkipRound(in: session)
             try advanceCursor(in: session, at: actual.clock.effectiveAt)
             return try (receipt(event, replay: false), !Payload.Session(session).status.isResumable)
         }
@@ -79,7 +82,7 @@ extension WordNoteV3ReviewService {
         }
     }
 
-    private func advanceCursor(in session: Session, at date: Date) throws {
+    func advanceCursor(in session: Session, at date: Date) throws {
         let items = try content.fetch(Item.self).filter { $0.sessionID == session.id }.map { try Payload.SessionItem($0) }
         let remaining = items.filter { !$0.status.isTerminal }.sorted { ($0.position, $0.id.uuidString) < ($1.position, $1.id.uuidString) }
         if let next = remaining.first(where: { $0.status == .pending || $0.status == .presented }) {

@@ -90,6 +90,7 @@ extension WordNoteSnapshotV3Payload.Session {
         status = try snapshotEnum(model.statusRaw)
         scope = try ReviewPersistenceJSON.decode(model.scopeSnapshotJSON)
         introductions = try model.introductionsJSON.map { try ReviewPersistenceJSON.decode($0) }
+        controls = try model.controlsJSON.map { try ReviewPersistenceJSON.decode($0) }
     }
 
     func model() throws -> WordNoteSchemaV3.ReviewSessionModel {
@@ -101,6 +102,7 @@ extension WordNoteSnapshotV3Payload.Session {
         model.revision = revision
         model.statusRaw = status.rawValue
         model.introductionsJSON = try introductions.map { try ReviewPersistenceJSON.encode($0) }
+        model.controlsJSON = try controls.map { try ReviewPersistenceJSON.encode($0) }
         return model
     }
 }
@@ -141,6 +143,7 @@ extension WordNoteSnapshotV3Payload.EventState {
         originalCardID = model.originalCardID
         sessionID = model.sessionID
         actionID = model.actionID
+        recordedOrder = model.recordedOrder
         feedbackSemanticsVersion = model.feedbackSemanticsVersion
         schedulerVersion = model.schedulerVersion
         studyDayKey = model.studyDayKey
@@ -156,6 +159,7 @@ extension WordNoteSnapshotV3Payload.EventState {
         model.originalCardID = originalCardID
         model.sessionID = sessionID
         model.actionID = actionID
+        model.recordedOrder = recordedOrder
         model.feedbackSemanticsVersion = feedbackSemanticsVersion
         model.schedulerVersion = schedulerVersion
         model.studyDayKey = studyDayKey

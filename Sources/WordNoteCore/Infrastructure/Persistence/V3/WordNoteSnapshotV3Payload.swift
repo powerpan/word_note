@@ -17,6 +17,8 @@ public struct WordNoteSnapshotV3Payload: Codable, Equatable, Sendable {
         result.sessions.sort { $0.id.uuidString < $1.id.uuidString }
         for index in result.sessions.indices {
             result.sessions[index].introductions?.sort { $0.originalCardID.uuidString < $1.originalCardID.uuidString }
+            result.sessions[index].controls?.skippedItemIDs.sort { $0.uuidString < $1.uuidString }
+            result.sessions[index].controls?.records.sort { $0.resultingRevision < $1.resultingRevision }
         }
         result.sessionItems.sort { $0.id.uuidString < $1.id.uuidString }
         result.eventStates.sort { $0.id.uuidString < $1.id.uuidString }
