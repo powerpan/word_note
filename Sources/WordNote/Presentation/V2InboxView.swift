@@ -8,19 +8,25 @@ struct V2InboxView: View {
     @Environment(\.savedChangeHistory) private var undoHistory
     @Environment(\.editProtection) private var editProtection
     @Environment(\.captureNavigation) private var captureNavigation
+    @Environment(\.learningWorkspace) private var workspace
     @Environment(QuickAddAnalysisQueue.self) private var queue
     @Environment(WordNoteDataProtection.self) private var dataProtection
     @Query private var records: [InputRecordModel]
     @Query private var candidates: [CandidateTermModel]
     @Query private var courses: [CourseModel]
     @State private var index = InboxBrowseIndex()
-    @State private var query = InboxBrowseQuery()
+    @State private var localState = InboxWorkspaceState()
     @State private var visible = InboxBrowseIndex().matching(.init())
-    @State private var selection = InboxSelection()
     @State private var confirmationPlan: WordNoteV2ConfirmationPlan?
     @State private var errorMessage: String?
     @State private var statusMessage: String?
-    @State private var openedRecordID: UUID?
+    private var viewState: InboxWorkspaceState {
+        get { workspace?.inbox ?? localState }
+        nonmutating set { if let workspace { workspace.inbox = newValue } else { localState = newValue } }
+    }
+    private var query: InboxBrowseQuery { get { viewState.query } nonmutating set { viewState.query = newValue } }
+    private var selection: InboxSelection { get { viewState.selection } nonmutating set { viewState.selection = newValue } }
+    private var openedRecordID: UUID? { get { viewState.openedRecordID } nonmutating set { viewState.openedRecordID = newValue } }
     @SceneStorage("v2InboxHandledExpanded") private var handledExpanded = false
 
     private struct Version: Equatable {
@@ -58,6 +64,7 @@ struct V2InboxView: View {
         }
         .onChange(of: candidates.map { Version(id: $0.id, revision: $0.revision) }) { rebuildIndex() }
         .onChange(of: handledExpanded) { refreshVisible() }
+        .onChange(of: query) { refreshVisible() }
         .sheet(item: $confirmationPlan) { plan in
             V2ConfirmationPreview(plan: plan) { result in
                 selection.clearBatch()
@@ -75,7 +82,9 @@ struct V2InboxView: View {
                 canSelect: !selection.confirmableIDs.isEmpty, onSelectAll: { selection.toggleAll() }, onConfirm: confirmSelectedRecords)
                 .disabled(dataProtection.isRestoring)
             if openedRecordID != nil {
-                CaptureNavigationBanner { protectingEdits(editProtection) { openedRecordID = nil } }
+                CaptureNavigationBanner(title: workspace == nil ? "Opened from Quick Add" : "Linked input record") {
+                    protectingEdits(editProtection) { openedRecordID = nil }
+                }
             }
             if let errorMessage { StatusBanner(message: errorMessage, kind: .warning).padding(.horizontal, 16).padding(.bottom, 8) }
             if let statusMessage {
@@ -86,25 +95,25 @@ struct V2InboxView: View {
                 }.padding(.horizontal, 16).padding(.bottom, 8)
             }
             V2AnalysisTasksView(queue: queue).disabled(dataProtection.isRestoring)
-            List(selection: Binding(get: {
+            RememberingList(selection: Binding(get: {
                 if let openedRecordID { return selection.visibleIDs.contains(openedRecordID) ? openedRecordID : nil }
                 return selection.focusedID
             }, set: { id in
                 guard id != nil || openedRecordID == nil else { return }
                 guard id != selection.focusedID || openedRecordID != nil else { return }
                 protectingEdits(editProtection) { openedRecordID = nil; selection.focusedID = id }
-            })) {
+            }), anchor: Binding(get: { viewState.scrollID }, set: { viewState.scrollID = $0 }), ids: selection.visibleIDs.sorted { $0.uuidString < $1.uuidString }) {
                 ForEach(visible.active) { item in
                     row(item, selection: item.canConfirm ? Binding(
                         get: { selection.batchIDs.contains(item.id) },
                         set: { selection.setSelected($0, id: item.id) }
-                    ) : nil).tag(item.id)
+                    ) : nil).tag(item.id).rememberListRow(item.id)
                 }
                 if !visible.handled.isEmpty {
                     DisclosureGroup(isExpanded: Binding(get: { handledExpanded }, set: { value in
                         protectingEdits(editProtection) { handledExpanded = value }
                     })) {
-                        ForEach(visible.handled) { item in row(item, selection: nil).tag(item.id) }
+                        ForEach(visible.handled) { item in row(item, selection: nil).tag(item.id).rememberListRow(item.id) }
                     } label: { Label("Handled (\(visible.handled.count))", systemImage: "archivebox") }
                 }
             }

@@ -70,10 +70,11 @@ final class CaptureResultNavigator {
 }
 
 struct CaptureNavigationBanner: View {
+    var title = "Opened from Quick Add"
     let onReturn: () -> Void
     var body: some View {
         HStack {
-            Text("Opened from Quick Add").font(.caption).foregroundStyle(.secondary)
+            Text(title).font(.caption).foregroundStyle(.secondary)
             Spacer()
             Button("Return to Results", systemImage: "arrow.uturn.backward", action: onReturn)
                 .labelStyle(.iconOnly).help("Return to current results")

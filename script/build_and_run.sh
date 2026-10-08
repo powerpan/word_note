@@ -12,7 +12,7 @@ BUILD_FLAGS=(-Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency -X
 case "$MODE" in
   run|--debug|debug|--logs|logs|--telemetry|telemetry|--verify|verify) ;;
   --ui-fixture|--ui-v2-fixture|--ui-v3-fixture)
-    [[ "$FIXTURE" == "empty" || "$FIXTURE" == "populated" ]] || { echo "Invalid fixture" >&2; exit 2; }
+    [[ "$FIXTURE" == "empty" || "$FIXTURE" == "populated" || "$FIXTURE" == "learning" ]] || { echo "Invalid fixture" >&2; exit 2; }
     [[ "$APPEARANCE" == "light" || "$APPEARANCE" == "dark" ]] || { echo "Invalid appearance" >&2; exit 2; }
     QA_SESSION="${4:-$(uuidgen)}"
     [[ "$QA_SESSION" =~ ^[[:xdigit:]]{8}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{12}$ ]] || { echo "Invalid QA session UUID" >&2; exit 2; }
@@ -25,7 +25,7 @@ case "$MODE" in
     fi
     ;;
   *)
-    echo "usage: $0 [run|--debug|--logs|--telemetry|--verify|--ui-fixture|--ui-v2-fixture|--ui-v3-fixture [empty|populated] [light|dark] [session-UUID]]" >&2
+    echo "usage: $0 [run|--debug|--logs|--telemetry|--verify|--ui-fixture|--ui-v2-fixture|--ui-v3-fixture [empty|populated|learning] [light|dark] [session-UUID]]" >&2
     exit 2
     ;;
 esac

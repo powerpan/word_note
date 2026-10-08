@@ -6,6 +6,8 @@ import WordNoteCore
 struct V2VocabularyView: View {
     @Environment(\.editProtection) private var editProtection
     @Environment(\.captureNavigation) private var captureNavigation
+    @Environment(\.learningWorkspace) private var workspace
+    @Environment(\.modelContext) private var context
     @Environment(WordNoteDataProtection.self) private var dataProtection
     @Query private var terms: [TermModel]
     @Query private var courses: [CourseModel]
@@ -13,14 +15,23 @@ struct V2VocabularyView: View {
     @Query private var lookups: [AppSchema.LookupEventModel]
     @State private var index = VocabularyBrowseIndex()
     @State private var visible: [VocabularyBrowseItem] = []
-    @State private var query = VocabularyBrowseQuery()
-    @State private var selection = VocabularySelection()
+    @State private var localState = VocabularyWorkspaceState()
     @State private var organization: OrganizationSelection?
     @State private var message: String?
     @State private var exportMessage: String?
     @State private var now = Date()
     @State private var isLoaded = false
-    @State private var openedTermID: UUID?
+    #if WORDNOTE_V3_VALIDATION
+    @Query private var cards: [AppSchema.ReviewCardModel]
+    @State private var cardIndex: ReviewCardLearningIndex?
+    #endif
+    private var viewState: VocabularyWorkspaceState {
+        get { workspace?.vocabulary ?? localState }
+        nonmutating set { if let workspace { workspace.vocabulary = newValue } else { localState = newValue } }
+    }
+    private var query: VocabularyBrowseQuery { get { viewState.query } nonmutating set { viewState.query = newValue } }
+    private var selection: VocabularySelection { get { viewState.selection } nonmutating set { viewState.selection = newValue } }
+    private var openedTermID: UUID? { get { viewState.openedTermID } nonmutating set { viewState.openedTermID = newValue } }
 
     private struct OrganizationSelection: Identifiable {
         let id = UUID()
@@ -40,7 +51,7 @@ struct V2VocabularyView: View {
                 listPane.frame(width: min(max(proxy.size.width * 0.37, 310), 410))
                 Divider()
                 if let term = selectedTerm {
-                    V2TermDetailSurface(term: term, courses: courses, onOrganize: { organize([term.id]) })
+                    V2TermDetailSurface(term: term, courses: courses, requestedCardID: viewState.openedCardID, onOrganize: { organize([term.id]) })
                         .id(term.id).frame(minWidth: 400, maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     EmptyStateView(systemImage: "book", title: openedTermID == nil ? "No Term Selected" : "Term No Longer Available", message: "") { EmptyView() }
@@ -51,11 +62,19 @@ struct V2VocabularyView: View {
         .frame(minWidth: 800, minHeight: 600)
         .onAppear { rebuildIndex(); openCapturedTerm() }
         .onChange(of: captureNavigation?.pending) { openCapturedTerm() }
+        .onChange(of: query) { refreshVisible() }
         .onChange(of: terms.map { TermVersion(id: $0.id, revision: $0.revision) }) { rebuildIndex() }
         .onChange(of: links.map(WordNoteSnapshotV2Payload.CourseLink.init)) { rebuildIndex() }
         .onChange(of: lookups.map(WordNoteSnapshotV2Payload.LookupEvent.init)) { rebuildIndex() }
+        #if WORDNOTE_V3_VALIDATION
+        .onChange(of: cards.map { TermVersion(id: $0.id, revision: $0.revision) }) { rebuildIndex() }
+        .onChange(of: viewState.cards) { refreshVisible() }
+        #endif
         .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { date in
             now = date
+            #if WORDNOTE_V3_VALIDATION
+            rebuildCardIndex()
+            #endif
             refreshVisible()
         }
         .sheet(item: $organization) { request in
@@ -78,8 +97,18 @@ struct V2VocabularyView: View {
                                 onSelectAll: { selection.reconcile(visible.map(\.id)); selection.toggleAll() },
                                 onOrganize: { organize(effectiveBatch) }, onExport: export)
                 .disabled(dataProtection.isRestoring)
+            #if WORDNOTE_V3_VALIDATION
+            V3VocabularyCardFilters(query: Binding(get: { viewState.cards }, set: { value in
+                protectingEdits(editProtection) {
+                    viewState.cards = value; openedTermID = nil; viewState.openedCardID = nil
+                    refreshVisible(scopeChanged: true)
+                }
+            })).padding(.horizontal, 16).padding(.bottom, 12)
+            #endif
             if openedTermID != nil {
-                CaptureNavigationBanner { protectingEdits(editProtection) { openedTermID = nil } }
+                CaptureNavigationBanner(title: workspace == nil ? "Opened from Quick Add" : "Linked vocabulary") {
+                    protectingEdits(editProtection) { openedTermID = nil; viewState.openedCardID = nil }
+                }
             }
             if let message {
                 HStack(alignment: .top) {
@@ -88,14 +117,14 @@ struct V2VocabularyView: View {
                     Button("Dismiss", systemImage: "xmark") { self.message = nil }.labelStyle(.iconOnly).help("Dismiss status")
                 }.padding(.horizontal, 16).padding(.bottom, 8)
             }
-            List(selection: Binding(get: {
+            RememberingList(selection: Binding(get: {
                 if let openedTermID { return visible.contains { $0.id == openedTermID } ? openedTermID : nil }
                 return selection.focusedID
             }, set: { id in
                 guard id != nil || openedTermID == nil else { return }
                 guard id != selection.focusedID || openedTermID != nil else { return }
-                protectingEdits(editProtection) { openedTermID = nil; selection.focusedID = id }
-            })) {
+                protectingEdits(editProtection) { openedTermID = nil; viewState.openedCardID = nil; selection.focusedID = id }
+            }), anchor: Binding(get: { viewState.scrollID }, set: { viewState.scrollID = $0 }), ids: visible.map(\.id)) {
                 ForEach(visible) { item in
                     HStack(alignment: .top, spacing: 10) {
                         Toggle("Select \(item.term.term)", isOn: Binding(
@@ -103,7 +132,7 @@ struct V2VocabularyView: View {
                             set: { selection.setSelected($0, id: item.id) }
                         )).labelsHidden().toggleStyle(.checkbox).padding(.top, 3)
                         V2VocabularyRow(item: item, courses: courses)
-                    }.tag(item.id).padding(.vertical, 6)
+                    }.tag(item.id).padding(.vertical, 6).rememberListRow(item.id)
                 }
             }
             .scrollContentBackground(.hidden)
@@ -121,6 +150,7 @@ struct V2VocabularyView: View {
         guard value != query else { return }
         protectingEdits(editProtection) {
             openedTermID = nil
+            viewState.openedCardID = nil
             let scopeChanged = !query.hasSameScope(as: value)
             query = value
             refreshVisible(scopeChanged: scopeChanged)
@@ -139,13 +169,34 @@ struct V2VocabularyView: View {
                                      courseLinks: links.map(WordNoteSnapshotV2Payload.CourseLink.init),
                                      lookupEvents: lookups.map(WordNoteSnapshotV2Payload.LookupEvent.init))
         isLoaded = true
+        #if WORDNOTE_V3_VALIDATION
+        rebuildCardIndex()
+        #endif
         refreshVisible()
     }
 
     private func refreshVisible(scopeChanged: Bool = false) {
+        #if WORDNOTE_V3_VALIDATION
+        var contentQuery = query
+        contentQuery.mastery = nil
+        visible = index.matching(contentQuery, at: now)
+        if viewState.cards.isActive {
+            let ids = Set(cardIndex?.matching(query: viewState.cards).map { $0.term.id } ?? [])
+            visible = visible.filter { ids.contains($0.id) }
+        }
+        #else
         visible = index.matching(query, at: now)
+        #endif
         selection.reconcile(visible.map(\.id), scopeChanged: scopeChanged)
     }
+
+    #if WORDNOTE_V3_VALIDATION
+    private func rebuildCardIndex() {
+        do {
+            cardIndex = try ReviewCardLearningIndex(payload: .capture(from: context), studyTimeZoneID: TimeZone.current.identifier, at: now)
+        } catch { cardIndex = nil; message = error.localizedDescription }
+    }
+    #endif
 
     private func organize(_ ids: Set<UUID>) {
         guard !ids.isEmpty else { return }

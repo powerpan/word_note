@@ -4,6 +4,7 @@ import SwiftData
 public enum WordNoteTestFixture: String, Sendable {
     case empty
     case populated
+    case learning
 
     public static let referenceDate = Date(timeIntervalSince1970: 1_790_000_000)
 
@@ -17,7 +18,7 @@ public enum WordNoteTestFixture: String, Sendable {
             try context.fetchCount(FetchDescriptor<ReviewEventModel>())
         ]
         guard counts.allSatisfy({ $0 == 0 }) else { throw FixtureError.nonEmptyStore }
-        guard self == .populated else { return }
+        guard self != .empty else { return }
 
         let date = Self.referenceDate
         let course = CourseModel(
@@ -99,6 +100,7 @@ public enum WordNoteTestFixture: String, Sendable {
             previousNextReviewAt: date.addingTimeInterval(-86_400),
             newNextReviewAt: date, reviewedAt: date
         ))
+        if self == .learning { populateLearningEntries(context, courses: [course, secondCourse]) }
         try context.save()
     }
 
@@ -118,6 +120,27 @@ public enum WordNoteTestFixture: String, Sendable {
 
     private static func id(_ value: Int) -> UUID {
         UUID(uuidString: String(format: "00000000-0000-4000-8000-%012d", value))!
+    }
+
+    @MainActor
+    private func populateLearningEntries(_ context: ModelContext, courses: [CourseModel]) {
+        for index in 1...40 {
+            let term = String(format: "study term %02d", index)
+            let date = Self.referenceDate.addingTimeInterval(Double(index))
+            let course = courses[index % courses.count]
+            let record = InputRecordModel(id: Self.id(100 + index), rawText: "A \(term) appears in this synthetic reading sample.",
+                inputType: .sentence, status: .completed, courseID: course.id, sourceType: .book, createdAt: date, updatedAt: date)
+            context.insert(record)
+            context.insert(TermModel(id: Self.id(200 + index), term: term, termType: .phrase,
+                chineseMeaning: "学习示例\(index)：用于验证课程词表与滚动位置，不属于真实词库。",
+                courseID: course.id, sourceRecordID: record.id, sourceType: .book, tags: ["fixture"],
+                nextReviewAt: date, createdAt: date, updatedAt: date))
+        }
+        for index in 1...12 {
+            let date = Self.referenceDate.addingTimeInterval(Double(index + 50))
+            context.insert(InputRecordModel(id: Self.id(300 + index), rawText: String(format: "pending capture %02d", index),
+                status: .draft, courseID: courses[index % courses.count].id, sourceType: .book, createdAt: date, updatedAt: date))
+        }
     }
 
     public enum FixtureError: Error {

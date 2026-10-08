@@ -7,12 +7,14 @@ struct V3TermReviewCardsView: View {
     @Environment(\.modelContext) private var context
     @Environment(WordNoteDataProtection.self) private var protection
     let term: TermModel
+    let requestedCardID: UUID?
     @Query private var cards: [AppSchema.ReviewCardModel]
     @State private var errorMessage: String?
     @State private var showsCloze = false
 
-    init(term: TermModel) {
+    init(term: TermModel, requestedCardID: UUID? = nil) {
         self.term = term
+        self.requestedCardID = requestedCardID
         let id = term.id
         _cards = Query(filter: #Predicate<AppSchema.ReviewCardModel> { $0.termID == id })
     }
@@ -33,6 +35,9 @@ struct V3TermReviewCardsView: View {
             }
             if let errorMessage { StatusBanner(message: errorMessage, kind: .warning) }
             if cards.isEmpty { Text("No review cards").foregroundStyle(.secondary) }
+            if let requestedCardID, !cards.contains(where: { $0.id == requestedCardID }) {
+                StatusBanner(message: "The linked review card is no longer available.", kind: .warning)
+            }
             ForEach(cards.sorted { ($0.modeRaw, $0.id.uuidString) < ($1.modeRaw, $1.id.uuidString) }, id: \.id) { card in
                 VStack(alignment: .leading, spacing: 7) {
                     HStack {
@@ -51,7 +56,9 @@ struct V3TermReviewCardsView: View {
                         LabeledContent("Deferred until", value: until.formatted(date: .abbreviated, time: .shortened))
                     }
                     if card.priorityRequestedAt != nil { Label("Priority requested", systemImage: "arrow.up") }
-                }.font(.subheadline).padding(.vertical, 4)
+                }.font(.subheadline).padding(.vertical, 8).padding(.horizontal, 8)
+                    .background(card.id == requestedCardID ? WordNoteTheme.brand.opacity(0.08) : .clear)
+                    .id(card.id)
             }
             DisclosureGroup("Historical counters") {
                 LabeledContent("Legacy reviews", value: String(term.reviewCount))

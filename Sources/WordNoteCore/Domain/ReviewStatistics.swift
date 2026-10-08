@@ -86,40 +86,22 @@ public struct ReviewStatisticsBuilder: Sendable {
 
     public func overview(courseID: UUID? = nil, mode: ReviewMode? = nil, studyTimeZoneID: String,
                          at date: Date = Date()) throws -> ReviewStatisticsSnapshot {
+        try classifiedOverview(courseID: courseID, mode: mode, studyTimeZoneID: studyTimeZoneID, at: date).statistics
+    }
+
+    func classifiedOverview(courseID: UUID?, mode: ReviewMode?, studyTimeZoneID: String, at date: Date) throws
+        -> (statistics: ReviewStatisticsSnapshot, cards: [ReviewCardLearningItem]) {
         let day = try ReviewStudyDay(containing: date, timeZoneID: studyTimeZoneID)
         if let courseID, !payload.content.content.courses.contains(where: { $0.id == courseID }) {
             throw WordNoteV3ContentError.missingEntity
         }
         let courseTerms = Set(payload.content.courseLinks.filter { $0.courseID == courseID }.map(\.termID))
         let selected = answers.filter { (courseID == nil || courseTerms.contains($0.termID)) && (mode == nil || $0.mode == mode) }
-        let cards = payload.cards.filter { (courseID == nil || courseTerms.contains($0.termID)) && (mode == nil || $0.mode == mode) }
-        let terms = Dictionary(uniqueKeysWithValues: payload.content.content.terms.map { ($0.id, $0) })
-        let occurrences = Dictionary(uniqueKeysWithValues: payload.content.occurrences.map { ($0.id, $0) })
-        var workload = ReviewWorkload()
-        workload.pendingPriorityTerms = Set(cards.filter { $0.schedule.priorityRequestedAt != nil }.map(\.termID)).count
-        for card in cards {
-            if card.schedule.phase == .suspended { workload.suspendedCards += 1; continue }
-            guard let term = terms[card.termID], (try? ReviewQuestionContent.front(card: card, term: term,
-                occurrence: card.clozeTarget.flatMap { occurrences[$0.occurrenceID] })) != nil else {
-                workload.missingAnswerCards += 1
-                continue
-            }
-            switch try ReviewCardQueuePolicy().availability(of: card.schedule, at: date,
-                studyTimeZoneID: studyTimeZoneID, lastInteractionAt: card.updatedAt) {
-            case .priority, .due, .relearningDue: workload.readyCards += 1
-            case .newCard:
-                if card.schedule.introducedAt == nil { workload.newCards += 1 } else { workload.readyCards += 1 }
-            case .buried: workload.buriedCards += 1
-            case .suspended: workload.suspendedCards += 1
-            case .relearningWaiting(let until), .relearningLimit(let until):
-                workload.waitingRelearningCards += 1
-                let readyAt = max(until, card.schedule.nextReviewAt ?? until)
-                workload.nextRelearningAt = min(workload.nextRelearningAt ?? readyAt, readyAt)
-            case .notDue: break
-            }
-        }
-        return .init(asOf: date, studyDayKey: day.key, studyTimeZoneID: studyTimeZoneID, courseID: courseID, mode: mode,
-            today: summary(selected.filter { $0.day == day.key }), lifetime: summary(selected), workload: workload)
+        let cards = try ReviewCardLearningIndex(validatedPayload: payload, studyTimeZoneID: studyTimeZoneID, at: date)
+            .matching(courseID: courseID, query: .init(mode: mode))
+        return (.init(asOf: date, studyDayKey: day.key, studyTimeZoneID: studyTimeZoneID, courseID: courseID, mode: mode,
+            today: summary(selected.filter { $0.day == day.key }), lifetime: summary(selected),
+            workload: ReviewCardLearningIndex.workload(cards)), cards)
     }
 
     public func session(_ id: UUID, at date: Date = Date()) throws -> ReviewSessionStatistics {

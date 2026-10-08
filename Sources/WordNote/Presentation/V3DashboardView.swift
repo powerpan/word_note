@@ -1,103 +1,100 @@
 #if WORDNOTE_V3_VALIDATION
-import SwiftData
 import SwiftUI
 import WordNoteCore
 
 struct DashboardView: View {
-    @Environment(\.modelContext) private var context
-    @Query private var records: [InputRecordModel]
-    @Query private var terms: [TermModel]
-    @Query private var cards: [AppSchema.ReviewCardModel]
-    @Query private var events: [AppSchema.ReviewEventModel]
-    @State private var statistics: ReviewStatisticsSnapshot?
-    @State private var resumable: WordNoteV3ReviewSessionSnapshot?
-    @State private var errorMessage: String?
+    @Environment(\.learningWorkspace) private var workspace
+    @Environment(\.editProtection) private var protection
+    @State private var localMode = ReviewMode.englishToChinese
+    @State private var localCardState = ReviewCardBrowseState.ready
     let onOpenReview: () -> Void
     let onOpenInbox: () -> Void
-
-    private var pendingCount: Int {
-        records.filter { !$0.analysisPending && ($0.status == .draft || $0.status == .analyzed || $0.analysisFailed) }.count
+    private var mode: Binding<ReviewMode> {
+        Binding(get: { workspace?.dashboardMode ?? localMode }, set: {
+            if let workspace { workspace.dashboardMode = $0 } else { localMode = $0 }
+        })
+    }
+    private var cardState: Binding<ReviewCardBrowseState> {
+        Binding(get: { workspace?.dashboardCardState ?? localCardState }, set: {
+            if let workspace { workspace.dashboardCardState = $0 } else { localCardState = $0 }
+        })
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 28) {
-                Text("Today").font(WordNoteTheme.editorialFont(size: 32, weight: .semibold))
-                if let errorMessage { StatusBanner(message: errorMessage, kind: .warning) }
-                if let statistics {
-                    HStack(alignment: .top, spacing: 32) {
-                        metric("Ready cards", statistics.workload.readyCards)
-                        metric("New cards", statistics.workload.newCards)
-                        metric("Waiting", statistics.workload.waitingRelearningCards)
-                        metric("Pending records", pendingCount)
-                    }
-                    Divider()
+      V3LearningOverviewSurface(courseID: nil, mode: mode.wrappedValue) { value in
+        RememberingScrollView(anchor: Binding(get: { workspace?.dashboardScrollID }, set: { workspace?.dashboardScrollID = $0 }),
+            ids: [LearningWorkspace.dashboardHeaderID] + value.cards.map(\.id) + value.pendingRecords.map(\.id) + value.courses.map(\.id)) {
+            VStack(alignment: .leading, spacing: 24) {
+                HStack {
+                    Text("Today").font(WordNoteTheme.editorialFont(size: 30, weight: .semibold))
+                    Spacer()
+                    Picker("Direction", selection: mode) {
+                        ForEach(ReviewMode.allCases) { Text($0.displayTitle).tag($0) }
+                    }.fixedSize()
+                }.rememberListRow(LearningWorkspace.dashboardHeaderID)
                     HStack {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Review").font(.title2.weight(.semibold))
-                            if let resumable {
-                                Text("\(resumable.items.count) cards in the current group").foregroundStyle(.secondary)
-                            } else {
-                                Text("\(terms.count) vocabulary entries").foregroundStyle(.secondary)
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(value.resumableSession == nil ? "Review" : "Current group").font(.title2.weight(.semibold))
+                            if let active = value.resumableSession {
+                                Text("\(active.session.scope.courseName ?? "All courses") / \(active.session.scope.mode.displayTitle)")
+                                    .font(.subheadline).foregroundStyle(.secondary)
+                                Text("\(active.items.count) cards").font(.caption).foregroundStyle(.secondary)
                             }
                         }
                         Spacer()
-                        Button(resumable == nil ? "Start Review" : "Continue Review", systemImage: "play.fill", action: onOpenReview)
-                            .buttonStyle(.borderedProminent)
+                        Button(value.resumableSession == nil ? "Start Review" : "Continue Review", systemImage: "play.fill") {
+                            if workspace == nil { onOpenReview() }
+                            else if value.resumableSession != nil { open(.continueReview) }
+                            else { open(.review(.init(mode: mode.wrappedValue))) }
+                        }.buttonStyle(.borderedProminent)
                     }
-                    Grid(alignment: .leading, horizontalSpacing: 36, verticalSpacing: 14) {
-                        GridRow { Text("Cards answered today"); Text(String(statistics.today.answeredCardCount)).monospacedDigit() }
-                        GridRow { Text("Answer attempts"); Text(String(statistics.today.answerCount)).monospacedDigit() }
-                        GridRow { Text("Successful completions"); Text(String(statistics.today.completedCardCount)).monospacedDigit() }
-                        GridRow {
-                            Text("First recall today")
-                            if statistics.today.firstRecall.samples == 0 { Text("No answers yet").foregroundStyle(.secondary) }
-                            else { Text("\(statistics.today.firstRecall.successes) / \(statistics.today.firstRecall.samples)") }
+                    V3LearningSummary(statistics: value.statistics)
+                    Divider()
+                    Picker("Cards", selection: cardState) {
+                        Text("Ready (\(value.statistics.workload.readyCards))").tag(ReviewCardBrowseState.ready)
+                        Text("New (\(value.statistics.workload.newCards))").tag(ReviewCardBrowseState.new)
+                        Text("Waiting (\(value.statistics.workload.waitingRelearningCards))").tag(ReviewCardBrowseState.waiting)
+                    }.pickerStyle(.segmented)
+                    LearningCardRows(cards: Array(value.cards.filter { $0.state == cardState.wrappedValue }.prefix(5)), open: open)
+                    if value.cards.filter({ $0.state == cardState.wrappedValue }).count > 5 {
+                        Button("View All Cards", systemImage: "books.vertical") {
+                            open(.vocabulary(courseID: nil, cards: .init(mode: mode.wrappedValue, state: cardState.wrappedValue)))
                         }
-                        if let next = statistics.workload.nextRelearningAt {
-                            GridRow { Text("Next relearning"); Text(next.formatted(date: .abbreviated, time: .shortened)) }
-                        }
-                    }.font(.subheadline)
-                    if statistics.today.hasEstimatedOrder { Text("Some historical answer ordering is estimated.").font(.caption).foregroundStyle(.secondary) }
-                    Text("\(statistics.workload.buriedCards) deferred related cards / \(statistics.workload.suspendedCards) suspended / \(statistics.workload.missingAnswerCards) missing answers")
-                        .font(.caption).foregroundStyle(.secondary)
+                    }
                     Divider()
                     HStack {
                         Text("Inbox").font(.title2.weight(.semibold))
+                        Text(String(value.pendingRecords.count)).foregroundStyle(.secondary)
                         Spacer()
-                        Button("Open Inbox", systemImage: "tray", action: onOpenInbox)
+                        Button("Open Inbox", systemImage: "tray") {
+                            if workspace == nil { onOpenInbox() } else { open(.inbox(courseID: nil)) }
+                        }
                     }
-                    ForEach(records.filter { !$0.analysisPending && $0.status == .analyzed }.sorted { $0.updatedAt > $1.updatedAt }.prefix(5), id: \.id) { record in
-                        HStack {
-                            Text(record.rawText).lineLimit(2)
-                            Spacer()
-                            Text(record.updatedAt.formatted(date: .abbreviated, time: .shortened)).font(.caption).foregroundStyle(.secondary)
-                        }.padding(.vertical, 6)
+                    VStack(spacing: 0) {
+                        ForEach(value.pendingRecords.prefix(5)) { item in
+                            LearningLinkRow(title: item.record.rawText, subtitle: item.preview, detail: item.statusTitle) { open(.record(item.id)) }
+                                .rememberListRow(item.id)
+                        }
                     }
-                    if pendingCount == 0 { Text("Inbox is clear").foregroundStyle(.secondary) }
-                } else if errorMessage == nil { ProgressView() }
+                    if value.pendingRecords.isEmpty { Text("Inbox is clear").foregroundStyle(.secondary) }
+                    Divider()
+                    HStack {
+                        Text("Courses").font(.headline)
+                        Spacer()
+                        Text("\(value.terms.count) unique terms").font(.caption).foregroundStyle(.secondary)
+                    }
+                    VStack(spacing: 0) {
+                        ForEach(value.courses.sorted { $0.courseName < $1.courseName }, id: \.id) { course in
+                            LearningLinkRow(title: course.courseName, subtitle: course.courseCode) { open(.course(course.id)) }
+                                .rememberListRow(course.id)
+                        }
+                    }
+                    if value.courses.isEmpty { Text("No courses").foregroundStyle(.secondary) }
             }.padding(28).frame(maxWidth: 1040, alignment: .leading).frame(maxWidth: .infinity, alignment: .leading)
-        }.background(WordNoteTheme.canvas)
-        .onAppear(perform: refresh)
-        .onChange(of: cards.map { "\($0.id):\($0.revision)" }) { refresh() }
-        .onChange(of: events.count) { refresh() }
-        .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { _ in refresh() }
+        }
+      }.background(WordNoteTheme.canvas)
     }
 
-    private func metric(_ title: String, _ count: Int) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(count.formatted()).font(.system(size: 30, weight: .semibold)).monospacedDigit()
-            Text(title).font(.subheadline).foregroundStyle(.secondary)
-        }.frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func refresh() {
-        do {
-            let service = try WordNoteV3ReviewService(container: context.container)
-            statistics = try service.statistics(studyTimeZoneID: TimeZone.current.identifier)
-            resumable = try service.resumableSession()
-            errorMessage = nil
-        } catch { statistics = nil; errorMessage = error.localizedDescription }
-    }
+    private func open(_ route: LearningRoute) { workspace?.open(route, protection: protection) }
 }
 #endif

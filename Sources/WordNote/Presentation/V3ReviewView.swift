@@ -5,14 +5,17 @@ import WordNoteCore
 
 struct ReviewView: View {
     @Environment(\.modelContext) private var context
+    @Environment(\.learningWorkspace) private var workspace
     @Environment(WordNoteDataProtection.self) private var protection
     @Query private var courses: [CourseModel]
     @State private var controller: V3ReviewController?
     @State private var startupError: String?
-    @State private var courseID: UUID?
-    @State private var mode: ReviewMode = .englishToChinese
-    @State private var queue: ReviewQueueScope = .dueToday
-    @State private var includesNew = false
+    @State private var localSetup = ReviewSetupSelection()
+    private var setupSelection: Binding<ReviewSetupSelection> {
+        Binding(get: { workspace?.review ?? localSetup }, set: { value in
+            if let workspace { workspace.review = value } else { localSetup = value }
+        })
+    }
     @State private var confirmEnd = false
     @AppStorage("reviewTargetCards") private var target = 20
     @AppStorage("reviewDailyNewLimit") private var newLimit = 10
@@ -77,23 +80,27 @@ struct ReviewView: View {
 
     private func setup(_ controller: V3ReviewController) -> some View {
         VStack(alignment: .leading, spacing: 18) {
-            Picker("Course", selection: $courseID) {
+            Picker("Course", selection: setupSelection.courseID) {
                 Text("All courses").tag(UUID?.none)
                 ForEach(courses, id: \.id) { Text($0.courseName).tag(Optional($0.id)) }
+                if let id = setupSelection.wrappedValue.courseID, !courses.contains(where: { $0.id == id }) {
+                    Text("Unavailable course").tag(Optional(id))
+                }
             }
-            Picker("Direction", selection: $mode) {
+            Picker("Direction", selection: setupSelection.mode) {
                 ForEach(ReviewMode.allCases) { Text($0.displayTitle).tag($0) }
             }
-            Picker("Queue", selection: $queue) {
+            Picker("Queue", selection: setupSelection.queue) {
                 ForEach(ReviewQueueScope.allCases) { Text($0.displayTitle).tag($0) }
             }
-            Toggle("Include new cards", isOn: $includesNew).toggleStyle(.checkbox)
+            Toggle("Include new cards", isOn: setupSelection.includesNew).toggleStyle(.checkbox)
             LabeledContent("Group size", value: "\(min(max(target, 5), 100)) cards")
             LabeledContent("Daily new-card limit", value: String(min(max(newLimit, 0), 50)))
             LabeledContent("Study time zone", value: TimeZone.current.identifier)
             Button("Start Review", systemImage: "play.fill") {
-                controller.start(scope: .init(courseID: courseID, mode: mode, queue: queue,
-                    includesNewCards: includesNew, studyTimeZoneID: TimeZone.current.identifier),
+                let value = setupSelection.wrappedValue
+                controller.start(scope: .init(courseID: value.courseID, mode: value.mode, queue: value.queue,
+                    includesNewCards: value.includesNew, studyTimeZoneID: TimeZone.current.identifier),
                     target: min(max(target, 5), 100), newLimit: min(max(newLimit, 0), 50))
             }.buttonStyle(.borderedProminent).disabled(!controller.isWindowActive)
         }.frame(maxWidth: 520, alignment: .leading)

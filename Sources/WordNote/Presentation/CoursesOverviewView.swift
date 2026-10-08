@@ -171,12 +171,12 @@ private struct CourseRow: View {
     }
 }
 
-private enum CourseEditorMode {
+enum CourseEditorMode {
     case create
     case edit
 }
 
-private struct CourseEditor: View {
+struct CourseEditor: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.savedChangeHistory) private var undoHistory
 

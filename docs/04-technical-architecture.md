@@ -581,6 +581,14 @@ V3 撤銷收據除內容/關聯外還記錄範圍內 TermHistory、卡片、正�
 
 V3 詞库撤下 Term mastery 編輯/篩選，改為獨立卡片閱讀、方向啟用/停用及原句填空預覽；歷史 mixed counters 單獨收合。Dashboard 用共同 `ReviewStatisticsBuilder` 的卡片工作量和新事件統計，不再呼叫舊 Term queue policy。Settings 組大小/新卡限額目前為本機偏好，建立會話時凍結；偏好備份和統一設定窗口仍是 B08，不冒充完成。首次原生端到端與工具限制见 [V3 UI 證據](qa/2026-10-08-b03-v3-app-review.md)。
 
+### 學習概覽與窗口導航（B07）
+
+`LearningOverviewBuilder` 從完整已驗證 V3 快照產生只讀概覽。`ReviewCardLearningIndex` 統一現在可答、新卡、等待、關聯延期、停用、缺答案及未到期的分類，首頁/課程的數值和實際卡片列表使用同一次分類，Review 的工作量亦復用它。課程詞表按當前 membership 去重，最近遇見則按 occurrence 的凍結 courseID/occurredAt 過濾；待整理列表復用 Inbox 的純值投影及 active 規則，不另定一套狀態。薄弱詞僅由有效新語義 Again 或未消費優先請求推導。
+
+`LearningWorkspace` 屬於每個 `ContentView`，不是全局 runtime。它保存各列表查詢、批量選中、焦點、獨立閱讀目標、行級滾動錨點、課程标签/方向、新組預選及最多 30 個返回狀態。深鏈不破壞原搜索；Back/側欄切換和課程捕獲前置動作經同一編輯保護，取消或準備失敗不移頁。明確的「查看全部卡片」則建立新的可見範圍，返回恢復之前的詞庫狀態。沒有像素級滾動或重啟後保留完整導航歷史的承諾。
+
+卡片深鏈只在詞庫閱讀指定 term/card，失效 ID 顯示不可用，不替換成鄰近項、不作答。課程復習僅預選新組參數，已有持久組保持原範圍；加詞在保護通過後只更改當前 capture course，不改持久預設、source/intent 或已排隊請求。`RememberingList`/`RememberingScrollView` 記錄最上方可見行，窗口各自恢復。V3 詞庫的方向/mastery/state 必須同時匹配同一張卡；無卡片條件時仍可閱讀無卡詞條，不能以 Term 的 legacy mastery 代替卡片能力。新增 `learning` 合成 fixture 供長列表驗證，原 `populated` fixture 不變。證據及原生限制見 [B07](qa/2026-10-08-b07-learning-navigation.md)。
+
 ### 備份、恢復與啟動
 
 備份取得一致、不可變的 DTO 後才序列化及原子寫文件，不跨 executor 共用可變 ModelContext/model。A01 大庫測量發現 MainActor 全量捕獲會阻塞，因此日常/手動備份改用樂觀一致性讀取：V1 先保存當前已修改 context；V2 若存在直接模型的未提交修改則拒絕捕獲，不代替 revision 交易提交或丟棄表單。后台 worker 建自己的唯讀 context，讀取前後同步比較同容器的 willSave/didSave 計數；有任何保存或主 context 待保存修改就丟棄整次讀取並重試，最多三次，仍不穩定則保留舊備份並明確報錯。V2 重試時仍檢查未提交修改。不能把混合版本或只截取部分實體的結果當成成功快照。

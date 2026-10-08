@@ -7,6 +7,7 @@ struct V2TermDetailSurface: View {
     @Environment(\.editProtection) private var editProtection
     let term: TermModel
     let courses: [CourseModel]
+    var requestedCardID: UUID? = nil
     let onOrganize: () -> Void
     @State private var isEditing = false
 
@@ -16,7 +17,7 @@ struct V2TermDetailSurface: View {
                 protectingEdits(editProtection) { isEditing = false }
             })
         } else {
-            V2TermReadingView(term: term, courses: courses, onEdit: { isEditing = true }, onOrganize: onOrganize)
+            V2TermReadingView(term: term, courses: courses, requestedCardID: requestedCardID, onEdit: { isEditing = true }, onOrganize: onOrganize)
         }
     }
 }
@@ -25,13 +26,15 @@ private struct V2TermReadingView: View {
     private var memberships = AppCourseMemberships()
     let term: TermModel
     let courses: [CourseModel]
+    let requestedCardID: UUID?
     let onEdit: () -> Void
     let onOrganize: () -> Void
     @Query private var occurrences: [AppSchema.TermOccurrenceModel]
 
-    init(term: TermModel, courses: [CourseModel], onEdit: @escaping () -> Void, onOrganize: @escaping () -> Void) {
+    init(term: TermModel, courses: [CourseModel], requestedCardID: UUID?, onEdit: @escaping () -> Void, onOrganize: @escaping () -> Void) {
         self.term = term
         self.courses = courses
+        self.requestedCardID = requestedCardID
         self.onEdit = onEdit
         self.onOrganize = onOrganize
         let id = term.id
@@ -40,7 +43,8 @@ private struct V2TermReadingView: View {
 
     var body: some View {
         let content = VocabularyReadingContent(term: .init(term), occurrences: occurrences.map(WordNoteSnapshotV2Payload.Occurrence.init))
-        ScrollView {
+        ScrollViewReader { proxy in
+          ScrollView {
             VStack(alignment: .leading, spacing: 22) {
                 HStack(alignment: .top, spacing: 12) {
                     VStack(alignment: .leading, spacing: 6) {
@@ -71,7 +75,7 @@ private struct V2TermReadingView: View {
                 }
                 Divider()
                 #if WORDNOTE_V3_VALIDATION
-                V3TermReviewCardsView(term: term)
+                V3TermReviewCardsView(term: term, requestedCardID: requestedCardID).id("review-cards")
                 #else
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Learning").font(.headline)
@@ -85,7 +89,14 @@ private struct V2TermReadingView: View {
                 }.font(.subheadline)
                 #endif
             }.padding(24).frame(maxWidth: .infinity, alignment: .leading)
-        }.background(WordNoteTheme.canvas)
+          }.background(WordNoteTheme.canvas)
+          .task(id: requestedCardID) {
+              guard let requestedCardID else { return }
+              await Task.yield()
+              proxy.scrollTo("review-cards", anchor: .top)
+              proxy.scrollTo(requestedCardID, anchor: .top)
+          }
+        }
     }
 
     private func readingSection(_ section: VocabularyReadingContent.Section) -> some View {

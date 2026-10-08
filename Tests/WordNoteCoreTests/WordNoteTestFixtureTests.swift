@@ -63,6 +63,27 @@ final class WordNoteTestFixtureTests: XCTestCase {
         XCTAssertEqual(result.model, "offline-ui-fixture")
     }
 
+    func testLearningFixtureAddsLongListsWithoutChangingThePopulatedBaseline() throws {
+        let baseContainer = try makeContainer(), longContainer = try makeContainer()
+        try WordNoteTestFixture.populated.populate(baseContainer.mainContext)
+        try WordNoteTestFixture.learning.populate(longContainer.mainContext)
+        let base = try WordNoteSnapshotPayload.capture(from: baseContainer.mainContext)
+        let long = try WordNoteSnapshotPayload.capture(from: longContainer.mainContext)
+        XCTAssertEqual(long.terms.count, 44)
+        XCTAssertEqual(long.inputRecords.count, 55)
+        XCTAssertEqual(long.candidates, base.candidates)
+        XCTAssertEqual(long.reviewEvents, base.reviewEvents)
+        XCTAssertEqual(long.courses, base.courses)
+        XCTAssertEqual(long.terms.filter { item in base.terms.contains { $0.id == item.id } }, base.terms)
+        XCTAssertEqual(long.inputRecords.filter { item in base.inputRecords.contains { $0.id == item.id } }, base.inputRecords)
+        let v3 = try WordNoteV2ToV3Migration.convert(WordNoteV1ToV2Migration.convert(long).payload, at: WordNoteTestFixture.referenceDate)
+        let overview = try LearningOverviewBuilder(payload: v3).overview(mode: .englishToChinese,
+            studyTimeZoneID: "Asia/Hong_Kong", at: WordNoteTestFixture.referenceDate.addingTimeInterval(86400))
+        XCTAssertEqual(overview.pendingRecords.count, 15)
+        XCTAssertEqual(overview.recentOccurrences.count, 40)
+        XCTAssertEqual(overview.statistics.workload.readyCards, 44)
+    }
+
     private func makeContainer(url: URL? = nil) throws -> ModelContainer {
         let schema = Schema(versionedSchema: WordNoteSchemaV1.self)
         let configuration = url.map { ModelConfiguration("Fixture", schema: schema, url: $0) }

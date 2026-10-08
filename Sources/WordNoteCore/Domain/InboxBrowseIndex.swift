@@ -40,31 +40,27 @@ public struct InboxBrowseItem: Identifiable, Sendable {
 
     @MainActor
     public init(record: WordNoteSchemaV2.InputRecordModel, candidates models: [WordNoteSchemaV2.CandidateTermModel]) {
-        self.record = .init(record)
-        state = .init(record)
-        let matching = models.filter { $0.inputRecordID == record.id }.sorted {
-            $0.createdAt == $1.createdAt ? $0.id.uuidString < $1.id.uuidString : $0.createdAt < $1.createdAt
-        }
-        candidates = matching.map(WordNoteSnapshotPayload.Candidate.init)
-        selections = matching.filter { $0.status == .pending && $0.analysisGeneration == record.analysisGeneration }.map {
-            .init(id: $0.id, revision: $0.revision, recordID: record.id, recordRevision: record.revision)
-        }
-        let sourceText = [record.rawText, record.note, record.sentenceMeaning].compactMap { $0 }
-        searchEntries = sourceText.map { .init(term: $0, chineseMeaning: $0, englishDefinition: nil) } + candidates.map {
-            .init(term: $0.term, chineseMeaning: $0.chineseMeaning, englishDefinition: $0.englishDefinition)
-        }
+        self.init(record: .init(record), state: .init(record), candidates: models.map(WordNoteSnapshotPayload.Candidate.init),
+            candidateStates: Dictionary(uniqueKeysWithValues: models.map { ($0.id, .init($0)) }))
     }
 
     @MainActor
     public init(record: WordNoteSchemaV3.InputRecordModel, candidates models: [WordNoteSchemaV3.CandidateTermModel]) {
-        self.record = .init(record)
-        state = .init(record)
-        let matching = models.filter { $0.inputRecordID == record.id }.sorted {
+        self.init(record: .init(record), state: .init(record), candidates: models.map(WordNoteSnapshotPayload.Candidate.init),
+            candidateStates: Dictionary(uniqueKeysWithValues: models.map { ($0.id, .init($0)) }))
+    }
+
+    public init(record: WordNoteSnapshotPayload.InputRecord, state: WordNoteSnapshotV2Payload.RecordState,
+                candidates values: [WordNoteSnapshotPayload.Candidate], candidateStates: [UUID: WordNoteSnapshotV2Payload.CandidateState]) {
+        self.record = record
+        self.state = state
+        candidates = values.filter { $0.inputRecordID == record.id }.sorted {
             $0.createdAt == $1.createdAt ? $0.id.uuidString < $1.id.uuidString : $0.createdAt < $1.createdAt
         }
-        candidates = matching.map(WordNoteSnapshotPayload.Candidate.init)
-        selections = matching.filter { $0.status == .pending && $0.analysisGeneration == record.analysisGeneration }.map {
-            .init(id: $0.id, revision: $0.revision, recordID: record.id, recordRevision: record.revision)
+        selections = candidates.compactMap { candidate in
+            guard candidate.statusRaw == "pending", let value = candidateStates[candidate.id],
+                  value.analysisGeneration == state.analysisGeneration else { return nil }
+            return .init(id: candidate.id, revision: value.revision, recordID: record.id, recordRevision: state.revision)
         }
         let sourceText = [record.rawText, record.note, record.sentenceMeaning].compactMap { $0 }
         searchEntries = sourceText.map { .init(term: $0, chineseMeaning: $0, englishDefinition: nil) } + candidates.map {
