@@ -501,6 +501,10 @@ A06 的 `VocabularyBrowseIndex` 僅持有不可變 DTO 和預計算的中英文�
 
 每次 schema 改變同時更新 migration、snapshot adapter、刪除/完整性檢查與測試 fixture；先凍結 V1 真實類型形狀，不能讓 V1 指向持續改動的最新類型。V2/V3/V4 的主要寫入切換點見 [05](05-data-model.md)。
 
+V3 第一批沿用隔離純值轉換，不修改原 SQLite：`WordNoteV2ToV3Migration` 驗證 V2 DTO，按最後事件決定唯一主卡；遷移時間由呼叫方提供，將來須取自持久操作而非每次重啟重新取 now。`WordNoteSnapshotV3Payload` 擁有完整十一實體及元資料，校驗後只能寫入 V3 空庫，全部插入後單次保存，失敗 rollback。V1/V2 reader、普通 App 及 V2 QA writer 未切至 V3，因此不存在活動的 Term/Card 雙寫者；V3 共用路由、恢復日誌、啟動協調器、刪除交易與 B04 排程寫入仍須接入，不能繞過它們直接開正式 V3 庫。
+
+`ReviewCardSchedule` 是卡片和事件前後快照的共用值型；SwiftData 仍持有明確標量排程字段，cloze/scope/事件快照以嚴格 JSON adapter 保存。新 event.originalCardID 是歷史身份，cardID 是可解除的現存引用；刪卡 tombstone 的快照/磁盤往返已覆蓋，但尚非使用者可執行的 V3 刪除服務。缺來源或無法確定的 legacy cloze 不靠 AI/字符串替換補齊。詳見 [B03 第一批](qa/2026-10-08-b03-isolated-foundation.md)。
+
 2026-10-08 的隔離 V2 基礎不使用在原庫上直接執行的 lightweight migration。`WordNoteV1ToV2Migration` 先檢查完整 V1 DTO，再產生確定性的 V2 值；`WordNoteSnapshotV2Payload` 只允許写入 schema 為 V2 的空庫。隔離 `WordNoteV2StartupCoordinator` 已串接 A01 保護快照、后台建庫/重開比對和共用日誌，但正式 App 尚未接入，不能單獨改 typealias 就啟用。
 
 V2 邏輯快照沿用 formatVersion 1 的 checksum envelope，sourceSchemaVersion 為 2.0.0。payload.content 復用凍結的 V1 字段定義，另有按實體 ID 一對一匹配的 revision/捕獲/候選/計數語義元資料表，以及 occurrence、courseLink、lookupEvent 三類實體。缺行、多行、重複業務鍵和錯誤關聯均拒絕恢復。`WordNoteSnapshotReader` 按 schema 路由 V1/V2 讀取器；`WordNoteVersionedPayload` 共用捕獲、校驗、checksum 與編碼入口，不改兩版既有文件格式。

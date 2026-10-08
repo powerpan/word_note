@@ -388,10 +388,10 @@ A06 的批量整理沿用 V2 schema，不新增表或快照字段。課程關係
 
 | 實體 | 核心字段與約束 |
 |---|---|
-| ReviewCard | termID、mode、contentScopeKey、phase、masteryLevel、intervalDays、confidentStreak、lapseCount、nextReviewAt?、priorityRequestedAt?、introducedAt?、lastReviewedAt?、relearningDayKey?、relearningRepeatCount、buriedUntil?、clozeTarget?、revision、schedulerVersion；唯一 `(termID, mode, contentScopeKey)` |
+| ReviewCard | termID、mode、contentScopeKey、phase、masteryLevel、intervalDays、confidentStreak、lapseCount、nextReviewAt?、priorityRequestedAt?、introducedAt?、lastReviewedAt?、relearningDayKey?、relearningTimeZoneID?、relearningRepeatCount、buriedUntil?、clozeTarget?、revision、schedulerVersion；唯一 `(termID, mode, contentScopeKey)` |
 | ReviewSession | scopeSnapshot（課程/模式/隊列）、targetCardCount、newCardLimitSnapshot、status、currentItemID?、createdAt、updatedAt、endedAt?、revision；只保留一個可恢復的活動會話 |
 | ReviewSessionItem | sessionID、cardID?、originalCardID、position、status、attemptCount、availableAt?、lastActionID?、completionOutcome?；唯一 `(sessionID, originalCardID)`，目標刪除時保留不可用項但解除 cardID |
-| ReviewEvent 擴展 | cardID?、sessionID?、actionID?、feedbackSemanticsVersion、schedulerVersion、studyDayKey、studyTimeZoneID、before/after 排程快照、clockAnomaly?、invalidatedAt?；新事件的 actionID 必填且唯一 |
+| ReviewEvent 擴展 | cardID?、originalCardID?、sessionID?、actionID?、feedbackSemanticsVersion、schedulerVersion、studyDayKey、studyTimeZoneID、before/after 排程快照、clockAnomaly?、invalidatedAt?；新事件的 actionID 必填且唯一，originalCardID 保留刪卡後的歷史身份 |
 | Term 歷史快照 | legacyWrongCount、legacyReviewCount、legacyDuplicateHitCount、legacySnapshotAt；完整保留切換前混合計數，不標成新版實際錯題 |
 
 phase 為 new/review/relearning/suspended；contentScopeKey 在 V3 為 wholeTerm 或 cloze:<穩定目標 ID>，V4 才增加 sense:<UUID>。B06 的 clozeTarget 包括 occurrenceID、原文 hash、Unicode 安全範圍與答案形式；不能等到 V4 才補 B06 所需字段。新事件由正式反饋產生；Later/Skip/Lookup 不建 ReviewEvent。`introducedAt` 在第一次正式展示新卡時與會話項狀態一起保存，使切換會話不能繞過新卡配額。
@@ -403,6 +403,21 @@ V1/V2 -> V3：每個 Term 的舊排程只複製至一張主卡，方向取最後
 舊 ReviewEvent 不補造 actionID、會話、作答時間或語義；feedbackSemanticsVersion=1。新版統計只採 version=2。Term 舊排程字段只作遷移快照，不再參與 due/filter；詞條層的 UI 摘要從各已啟用卡計算並顯示方向，不把一張卡的 easy 宣稱為整詞全部掌握。
 
 持久化會話只保存 ID 和必要快照，不複製整份詞義。單窗口寫入租約為進程內協調狀態，App 重啟可重新取得，不能因舊 PID 永久鎖住。正式評分、卡片排程、session item 與游標在同一交易提交。
+
+2026-10-08 B03 第一批已新增獨立 `WordNoteSchemaV3` 的十一個模型及離線遷移/快照 adapter；V1/V2 歷史類型未改。普通 App 仍為 V1，QA App 仍為 V2；共用備份/恢復/啟動路由暫時拒絕 V3，待 B03 下一批與 B04 寫入切換完成後才開通。這不是正式詞庫升級，也不表示復習頁已使用卡片。
+
+V3 完整快照的 content 復用 V2 字段值定義，另存一對一 termHistories/eventStates、cards、sessions、sessionItems；不能單獨導出 content 作為完整 V3。SwiftData 存儲 scope/cloze/排程歷史時用排序鍵 JSON，adapter 嚴格解碼，損壞內容不能回退為空值。卡片/會話的業務唯一鍵、單一可恢復會話、跨表引用、actionID、事件前後摘要及會話作答數均由完整快照校驗。
+
+本批遷移細則：
+
+- 主卡 UUID 為 `wordnote/v2-to-v3/1|primary-card|<小寫 Term UUID>` 的 SHA-256 前 16 bytes，設 version 8/variant bits；只用於舊資料，新建卡使用新 UUID。相同 reviewedAt 的事件按 UUID 字串較大者取最後，不依賴 fetch 順序。
+- 每個舊 Term 恰好一張主卡，原排程非 nil 為 review，nil 為 suspended；舊排程/掌握/連續次數逐值複製，lapseCount=0，introducedAt/優先請求/重學日桶不補造。即使舊 mastery=new，有排程的歷史待辦也不重新分類為受新卡配額限制的新卡。
+- Term 的舊計數與排程仍是兼容快照，legacy 三計數與其原值一致；歷史 ReviewEvent ID/mode/時間/原有字段完全不改。同主卡方向的舊事件可綁 cardID，其他方向不造卡；全部 semantics=1、scheduler=legacy-v1，沒有新 action/session/dayKey 或完整前後排程快照。
+- 舊枚舉包含 contextCloze，但原版 UI 未提供此模式，也未存穩定填空範圍。若它是最後有效事件，回傳帶 termID/eventID 的 `legacyClozeNeedsTarget` 並阻止自動遷移；不偷偷改為識別方向。較早的 cloze 歷史仍原樣保存且不綁主卡。
+- clozeTarget 使用原文 UTF-8 hash 與 Swift Character 起點/長度，不是 UTF-16/byte 偏移；保存時必須精確匹配原文答案和所屬 occurrence。B06 的可用題目選擇及原文變更策略仍需實作。
+- 卡片增加 relearningTimeZoneID，與 relearningDayKey 成對保存，為 B04 日桶判斷保留明確時區。新事件 originalCardID 必填；刪除卡片後可清 cardID，但事件/會話項保留原 ID，會話項轉 unavailable，不在恢復時補建卡。
+
+證據與剩餘啟用門檻見 [B03 隔離基礎](qa/2026-10-08-b03-isolated-foundation.md)。
 
 ### V4：義項與版本
 

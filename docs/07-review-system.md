@@ -277,6 +277,8 @@ easy:
 
 舊 Term 排程遷到一張主卡，方向取最後有效 ReviewEvent，無事件則英文識別；無排程保持停用。不複製成多張到期卡，不由舊總計數猜測其他方向能力。舊事件和計數保留 legacy 標記；新版「實際答錯」只計新語義 Again。詳細字段及外鍵見 [05](05-data-model.md)。
 
+2026-10-08 已完成這一轉換的隔離模型/快照基礎，尚未啟用 B04 排程。遷移後主卡標記 legacy-v1，lapseCount 從 0 開始，保留原 nextReviewAt；舊事件不補造新語義歷史或 introducedAt。較晚事件為原型 contextCloze、但無穩定填空目標的庫會阻止自動遷移並報告，不猜測新題型。新模型通過測試不等於真實詞庫已切換，詳見 [B03 第一批](qa/2026-10-08-b03-isolated-foundation.md)。
+
 ### 反饋語義與排程（B04）
 
 所有正式反饋都新增一個 version=2 ReviewEvent；僅 Again 增加 lapseCount。本項目 lapseCount 指正式回憶失敗次數（包括新卡），不等同其他軟件限定成熟卡的 lapse 統計。Hard 仍可標「不熟」，但不是答錯。confidentStreak 只累積 Good/Easy，不再命名為所有答對次數。

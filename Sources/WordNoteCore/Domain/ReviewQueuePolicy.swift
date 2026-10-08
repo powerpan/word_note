@@ -1,6 +1,6 @@
 import Foundation
 
-public enum ReviewQueueScope: String, CaseIterable, Identifiable, Hashable, Sendable {
+public enum ReviewQueueScope: String, Codable, CaseIterable, Identifiable, Hashable, Sendable {
     case dueToday
     case weakTerms
 
