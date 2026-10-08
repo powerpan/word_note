@@ -11,6 +11,8 @@ struct TermDetailEditor: View {
 
     let term: TermModel
     let courses: [CourseModel]
+    var onSaved: (() -> Void)? = nil
+    var onClose: (() -> Void)? = nil
 
     @State private var values = WordNoteEditDraft(TermEditorValues())
     @State private var draftID = UUID()
@@ -28,9 +30,13 @@ struct TermDetailEditor: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 PageHeader(
-                    title: "Term Detail",
-                    subtitle: "Edit definitions, context, metadata, and review state."
+                    title: onClose == nil ? "Term Detail" : "Edit Term",
+                    subtitle: onClose == nil ? "Edit definitions, context, metadata, and review state." : term.term
                 ) {
+                    if let onClose {
+                        Button("Return to Reading", systemImage: "arrow.left", action: onClose)
+                            .labelStyle(.iconOnly).help("Return to reading")
+                    }
                     Button("Save", action: save)
                     Button("Delete", role: .destructive) {
                         isDeleteConfirmationPresented = true
@@ -215,6 +221,7 @@ struct TermDetailEditor: View {
     private func save() {
         do {
             try capturedSave()
+            onSaved?()
         } catch {
             statusMessage = nil
             errorMessage = error.localizedDescription

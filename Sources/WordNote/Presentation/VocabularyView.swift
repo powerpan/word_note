@@ -2,6 +2,11 @@ import SwiftData
 import SwiftUI
 import WordNoteCore
 
+#if WORDNOTE_V2_VALIDATION
+struct VocabularyView: View {
+    var body: some View { V2VocabularyView() }
+}
+#else
 struct VocabularyView: View {
     @Environment(\.editProtection) private var editProtection
     private var memberships = AppCourseMemberships()
@@ -220,3 +225,4 @@ private struct VocabularyRow: View {
         .padding(.vertical, 7)
     }
 }
+#endif

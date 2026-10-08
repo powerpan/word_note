@@ -475,6 +475,14 @@ A04 編輯保護：每個主窗口持有 `WordNoteEditProtection`，表單使用
 
 工具列和 Edit 菜單使用相同 `operationID` 校驗；若離開確認中的 Save 或另一窗口保存替換了 receipt，舊 Undo 動作會拒絕，不誤撤新保存。無 redo、跨重啟歷史、永久刪除或復習撤銷，也不取代輸入框的 Command-Z。新增可撤銷操作時必須同時擴充 scope、還原字段和依賴測試，不能直接套用到關係字段編輯。詳見 [安全撤銷記錄](qa/2026-10-08-a04-safe-undo.md)。
 
+### 詞庫閱讀與批量整理
+
+A06 的 `VocabularyBrowseIndex` 僅持有不可變 DTO 和預計算的中英文搜索鍵、標籤鍵及真實再次查詢日期，不捕獲 SwiftData 模型。V2 頁面在詞 ID/revision、membership 或 LookupEvent 改動時重建索引；查詢/篩選/排序變化時集中計算可見結果，不在每個行或按鈕重繪時重複整庫排序。60 秒時計刷新活動篩選；ID 選擇由純值 `VocabularySelection` 管理。全文仍交給閱讀投影，列表摘要只影響展示，不寫回資料。索引建構和讀取仍在 MainActor；10,000 詞的核心數值測量不是包含 SwiftData/渲染的 200 ms UI 驗收。
+
+`WordNoteV2OrganizationPlan` 凍結選中 Term 的完整內容/revision、現有 membership 和所用課程內容/revision。預覽計算課程與標籤的實際增減；提交先批量讀取並建立 ID/關係索引，校驗全部依賴後才一次保存，避免逐詞重掃全庫。相關字段即使漏加 revision 也阻止舊預覽，無關詞條修改不阻塞。只增減 `TermCourseLink`、`tags` 並 touch 實際改動的詞，不改原 courseID/來源/釋義/排程；失敗全回滾，支持 A04 相同安全邊界的撤銷。
+
+此方案不新增持久 token；成功後重送原方案會因版本不符而拒絕，重新預覽相同增減得到 no-op，零保存且不替換既有 undo receipt。取消只丟棄值草稿；不提供恢復後自動重放整理操作。詳見 [A06 閱讀與批量整理證據](qa/2026-10-08-a06-vocabulary-reading.md)。
+
 ### 備份、恢復與啟動
 
 備份取得一致、不可變的 DTO 後才序列化及原子寫文件，不跨 executor 共用可變 ModelContext/model。A01 大庫測量發現 MainActor 全量捕獲會阻塞，因此日常/手動備份改用樂觀一致性讀取：V1 先保存當前已修改 context；V2 若存在直接模型的未提交修改則拒絕捕獲，不代替 revision 交易提交或丟棄表單。后台 worker 建自己的唯讀 context，讀取前後同步比較同容器的 willSave/didSave 計數；有任何保存或主 context 待保存修改就丟棄整次讀取並重試，最多三次，仍不穩定則保留舊備份並明確報錯。V2 重試時仍檢查未提交修改。不能把混合版本或只截取部分實體的結果當成成功快照。

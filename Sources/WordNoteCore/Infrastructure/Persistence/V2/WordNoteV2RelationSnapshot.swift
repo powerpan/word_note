@@ -38,7 +38,7 @@ public extension WordNoteSnapshotV2Payload {
 }
 
 extension WordNoteSnapshotV2Payload.Occurrence {
-    init(_ model: WordNoteSchemaV2.TermOccurrenceModel) {
+    public init(_ model: WordNoteSchemaV2.TermOccurrenceModel) {
         id = model.id
         termID = model.termID
         captureID = model.captureID
@@ -68,7 +68,7 @@ extension WordNoteSnapshotV2Payload.Occurrence {
 }
 
 extension WordNoteSnapshotV2Payload.CourseLink {
-    init(_ model: WordNoteSchemaV2.TermCourseLinkModel) {
+    public init(_ model: WordNoteSchemaV2.TermCourseLinkModel) {
         id = model.id
         termID = model.termID
         courseID = model.courseID
@@ -81,7 +81,7 @@ extension WordNoteSnapshotV2Payload.CourseLink {
 }
 
 extension WordNoteSnapshotV2Payload.LookupEvent {
-    init(_ model: WordNoteSchemaV2.LookupEventModel) {
+    public init(_ model: WordNoteSchemaV2.LookupEventModel) {
         id = model.id
         termID = model.termID
         captureID = model.captureID

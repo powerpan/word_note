@@ -15,7 +15,8 @@ let package = Package(
         .executableTarget(
             name: "WordNote",
             dependencies: ["WordNoteCore"],
-            path: "Sources/WordNote"
+            path: "Sources/WordNote",
+            swiftSettings: [.enableUpcomingFeature("InferSendableFromCaptures")]
         ),
         .target(
             name: "WordNoteCore",

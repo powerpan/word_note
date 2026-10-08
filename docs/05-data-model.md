@@ -374,6 +374,10 @@ fill 只支持中文、英文、技術釋義和例句；每字段選一個非空
 
 A04 [運行期撤銷](qa/2026-10-08-a04-safe-undo.md) 不新增持久表或改 schema：receipt 只留受影響實體的局部 DTO、操作 ID 和前後引用狀態。只可刪本次新建且之後未改/未被引用的 Term/Course/關係；舊詞和原始輸入不因撤銷確認被級聯刪除。還原值時 revision 繼續增加，lookup/review 事件不得反向清除；重啟後不保留 receipt，亦不能把局部 DTO 當完整快照恢復。
 
+A06 的批量整理沿用 V2 schema，不新增表或快照字段。課程關係以 `(termID, courseID)` 唯一，當前 membership 與 `Term.courseID` 的捕獲來源快照分開；解除課程不清除 occurrence 或來源歷史。標籤匹配鍵只做去首尾、合併空白和大小寫不敏感；既有拼寫、順序及未改的重複值不被整批規範化重寫。新增標籤合併空白、保留大小寫，每個 1 至 80 個 Swift Character，不含非空白控制字符；逗號是標籤內容，不自動拆分。既有較長標籤仍可讀取/移除；結果陣列不超過既有快照的 10,000 項上限。
+
+預覽的 changedTerms 計唯一實際改動詞，課程增減按 membership 數，標籤增減按每詞的規範鍵數，不能把 legacy 同鍵重複陣列元素算多次。移除同鍵時清掉該鍵的所有拼寫，加入已存在鍵不重寫舊值；同一鍵同批增減拒絕。一次提交每個實際改動詞只增一次 revision，no-op 不改 updatedAt。近期/反復活動只由有效 exactRepeat LookupEvent 投影，對同詞同 captureID 去重，不借用 legacyWrongCount/duplicateHitCount 偽造事件。見 [A06](qa/2026-10-08-a06-vocabulary-reading.md)。
+
 隔離 V2 分析交易已新增：running 必須有 attemptID；nextAttemptAt 只允許 queued/failed/cancelled，cancelled 中的值只約束下一次人工重試，不代表仍有自動工作。完成清除 attemptID/deadline，queueState 回到 none，整理 status 按候選是否尚待處理設 analyzed/completed；失敗不抹除既有整理狀態。全部字段和候選同次保存，存儲失敗回滾。
 
 重新分析保留所有同 normalizedTerm 的既有候選，不覆寫人工內容、不改 savedTermID/confirmationOperationID，也不復活 targetDeleted；只有新主體新增候選。pending 候選在完成/失敗/取消/中斷恢復後帶到當前 analysisGeneration 並增加 revision，避免保留的候選無法再確認。這是 C02 差異採納前的保守行為，不沿用上文 V1「刪除其餘舊候選」策略。資料證據見 [V2 分析隊列](qa/2026-10-08-a02-analysis-queue.md)。
