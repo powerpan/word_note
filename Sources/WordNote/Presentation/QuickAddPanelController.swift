@@ -11,7 +11,7 @@ final class QuickAddPanelController: NSObject {
     private let dataProtection: WordNoteDataProtection?
     private let captureContext: CaptureContextController?
     private let captureNavigator: CaptureResultNavigator?
-    #if WORDNOTE_V2_VALIDATION
+    #if WORDNOTE_V2_VALIDATION || WORDNOTE_V3_VALIDATION
     private let resultPresentation: CaptureResultPresentation
     private let resultActions: CaptureResultActions
     private let layout = FloatingQuickAddLayout()
@@ -28,13 +28,13 @@ final class QuickAddPanelController: NSObject {
         self.dataProtection = dataProtection
         self.captureContext = captureContext
         self.captureNavigator = captureNavigator
-        #if WORDNOTE_V2_VALIDATION
+        #if WORDNOTE_V2_VALIDATION || WORDNOTE_V3_VALIDATION
         let actions = CaptureResultActions()
         resultActions = actions
         resultPresentation = CaptureResultPresentation(mode: .floating, onResultChange: { [weak actions] in actions?.reset() })
         #endif
         super.init()
-        #if WORDNOTE_V2_VALIDATION
+        #if WORDNOTE_V2_VALIDATION || WORDNOTE_V3_VALIDATION
         NotificationCenter.default.addObserver(self, selector: #selector(screenChanged), name: NSWindow.didChangeScreenNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(screenChanged), name: NSApplication.didChangeScreenParametersNotification, object: nil)
         #endif
@@ -52,7 +52,7 @@ final class QuickAddPanelController: NSObject {
         NSApp.activate(ignoringOtherApps: true)
         panel.makeKeyAndOrderFront(nil)
         CompletionEditorContainerView.focusCaptureInput(in: panel)
-        #if WORDNOTE_V2_VALIDATION
+        #if WORDNOTE_V2_VALIDATION || WORDNOTE_V3_VALIDATION
         resultPresentation.setVisible(true)
         #endif
         NotificationCenter.default.post(name: .quickAddPanelDidShow, object: nil)
@@ -67,7 +67,7 @@ final class QuickAddPanelController: NSObject {
     }
 
     func close() {
-        #if WORDNOTE_V2_VALIDATION
+        #if WORDNOTE_V2_VALIDATION || WORDNOTE_V3_VALIDATION
         resultPresentation.setVisible(false)
         #endif
         panel?.orderOut(nil)
@@ -118,7 +118,7 @@ final class QuickAddPanelController: NSObject {
     }
 
     private var captureResultPresentation: CaptureResultPresentation? {
-        #if WORDNOTE_V2_VALIDATION
+        #if WORDNOTE_V2_VALIDATION || WORDNOTE_V3_VALIDATION
         resultPresentation
         #else
         nil
@@ -126,7 +126,7 @@ final class QuickAddPanelController: NSObject {
     }
 
     private var captureLayout: FloatingQuickAddLayout? {
-        #if WORDNOTE_V2_VALIDATION
+        #if WORDNOTE_V2_VALIDATION || WORDNOTE_V3_VALIDATION
         layout
         #else
         nil
@@ -134,7 +134,7 @@ final class QuickAddPanelController: NSObject {
     }
 
     private var captureResultActions: CaptureResultActions? {
-        #if WORDNOTE_V2_VALIDATION
+        #if WORDNOTE_V2_VALIDATION || WORDNOTE_V3_VALIDATION
         resultActions
         #else
         nil
@@ -145,7 +145,7 @@ final class QuickAddPanelController: NSObject {
         let visibleFrame = (NSScreen.main ?? NSScreen.screens.first)?.visibleFrame
             ?? NSRect(x: 0, y: 0, width: 1280, height: 800)
         let margin: CGFloat = 18
-        #if WORDNOTE_V2_VALIDATION
+        #if WORDNOTE_V2_VALIDATION || WORDNOTE_V3_VALIDATION
         layout.maximumHeight = FloatingQuickAddMetrics.maximumHeight(in: visibleFrame)
         #endif
         panel.setFrameOrigin(
@@ -160,7 +160,7 @@ final class QuickAddPanelController: NSObject {
         guard let panel else { return }
 
         let topRight = NSPoint(x: panel.frame.maxX, y: panel.frame.maxY)
-        #if WORDNOTE_V2_VALIDATION
+        #if WORDNOTE_V2_VALIDATION || WORDNOTE_V3_VALIDATION
         let visibleFrame = panel.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? panel.frame
         layout.maximumHeight = FloatingQuickAddMetrics.maximumHeight(in: visibleFrame)
         let frame = FloatingQuickAddMetrics.fittedFrame(topRight: topRight, height: height, visibleFrame: visibleFrame)
@@ -180,7 +180,7 @@ final class QuickAddPanelController: NSObject {
         #endif
     }
 
-    #if WORDNOTE_V2_VALIDATION
+    #if WORDNOTE_V2_VALIDATION || WORDNOTE_V3_VALIDATION
     @objc private func screenChanged(_ notification: Notification) {
         guard let panel else { return }
         if notification.name == NSWindow.didChangeScreenNotification, notification.object as? NSWindow !== panel { return }

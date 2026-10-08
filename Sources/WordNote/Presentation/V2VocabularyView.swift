@@ -1,4 +1,4 @@
-#if WORDNOTE_V2_VALIDATION
+#if WORDNOTE_V2_VALIDATION || WORDNOTE_V3_VALIDATION
 import SwiftData
 import SwiftUI
 import WordNoteCore
@@ -9,8 +9,8 @@ struct V2VocabularyView: View {
     @Environment(WordNoteDataProtection.self) private var dataProtection
     @Query private var terms: [TermModel]
     @Query private var courses: [CourseModel]
-    @Query private var links: [WordNoteSchemaV2.TermCourseLinkModel]
-    @Query private var lookups: [WordNoteSchemaV2.LookupEventModel]
+    @Query private var links: [AppSchema.TermCourseLinkModel]
+    @Query private var lookups: [AppSchema.LookupEventModel]
     @State private var index = VocabularyBrowseIndex()
     @State private var visible: [VocabularyBrowseItem] = []
     @State private var query = VocabularyBrowseQuery()
@@ -180,8 +180,13 @@ private struct V2VocabularyRow: View {
             Text(item.chineseSummary.isEmpty ? "No Chinese meaning" : item.chineseSummary)
                 .font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
             let names = courses.filter { item.courseIDs.contains($0.id) }.map(\.courseName).sorted()
+            #if WORDNOTE_V3_VALIDATION
+            Text(names.isEmpty ? "No course" : names.joined(separator: ", "))
+                .font(.caption).foregroundStyle(.tertiary).lineLimit(1)
+            #else
             Text(([MasteryLevel(rawValue: item.term.masteryLevelRaw)?.displayTitle ?? item.term.masteryLevelRaw] + names).joined(separator: ", "))
                 .font(.caption).foregroundStyle(.tertiary).lineLimit(1)
+            #endif
         }.frame(maxWidth: .infinity, alignment: .leading)
     }
 }

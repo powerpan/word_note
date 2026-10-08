@@ -1,4 +1,4 @@
-#if WORDNOTE_V2_VALIDATION
+#if WORDNOTE_V2_VALIDATION || WORDNOTE_V3_VALIDATION
 import SwiftData
 import SwiftUI
 import WordNoteCore
@@ -137,7 +137,7 @@ struct V2VocabularyOrganizationSheet: View {
     private func makePreview() {
         do {
             try includePendingTag()
-            preview = try WordNoteV2ContentService(container: modelContext.container).makeOrganizationPlan(termIDs: termIDs, changes: changes)
+            preview = try AppContentService(container: modelContext.container).makeOrganizationPlan(termIDs: termIDs, changes: changes)
             needsRefresh = false
             errorMessage = nil
         } catch {
@@ -149,7 +149,7 @@ struct V2VocabularyOrganizationSheet: View {
     private func commit() {
         guard let plan = activePreview else { return }
         do {
-            let result = try WordNoteV2ContentService(container: modelContext.container, undoHistory: undoHistory).commitOrganizationPlan(plan)
+            let result = try AppContentService(container: modelContext.container, undoHistory: undoHistory).commitOrganizationPlan(plan)
             dismiss()
             onCommitted(result)
         } catch {

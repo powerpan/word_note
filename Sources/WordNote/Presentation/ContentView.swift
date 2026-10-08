@@ -4,7 +4,7 @@ import WordNoteCore
 
 struct ContentView: View {
     @Environment(\.editProtection) private var editProtection
-    #if WORDNOTE_V2_VALIDATION
+    #if WORDNOTE_V2_VALIDATION || WORDNOTE_V3_VALIDATION
     @Environment(\.captureNavigator) private var captureNavigator
     @Environment(\.openWindow) private var openWindow
     @State private var captureNavigation = CaptureNavigationState()
@@ -41,7 +41,7 @@ struct ContentView: View {
         .frame(minWidth: AppLayoutMetrics.minWindowWidth, minHeight: AppLayoutMetrics.minWindowHeight)
         .background(WordNoteTheme.canvas)
         .tint(WordNoteTheme.brand)
-        #if WORDNOTE_V2_VALIDATION
+        #if WORDNOTE_V2_VALIDATION || WORDNOTE_V3_VALIDATION
         .environment(\.captureNavigation, captureNavigation)
         .background {
             if let captureNavigator { CaptureNavigationWindowBridge(navigator: captureNavigator, onOpen: openCapturedResult) }
@@ -53,7 +53,7 @@ struct ContentView: View {
         #endif
     }
 
-    #if WORDNOTE_V2_VALIDATION
+    #if WORDNOTE_V2_VALIDATION || WORDNOTE_V3_VALIDATION
     private func openCapturedResult(_ target: CaptureResultTarget) -> Bool {
         captureNavigation.request(target, protection: editProtection) {
             switch target {

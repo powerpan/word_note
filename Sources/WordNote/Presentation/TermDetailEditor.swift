@@ -58,7 +58,7 @@ struct TermDetailEditor: View {
                     StatusBanner(message: errorMessage, kind: .warning)
                 }
                 if hasConflict && isDirty {
-                    #if WORDNOTE_V2_VALIDATION
+                    #if WORDNOTE_V2_VALIDATION || WORDNOTE_V3_VALIDATION
                     DraftConflictView(draft: values, fields: TermEditorValues.comparisonFields(courseNames: courseNames),
                                       loadCurrent: { try storedVersion(id: term.id) }, onApplied: { errorMessage = nil; statusMessage = nil })
                     #else
@@ -124,7 +124,7 @@ struct TermDetailEditor: View {
         GroupBox("Metadata") {
             Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 10) {
                 formRow("Course") {
-                    #if WORDNOTE_V2_VALIDATION
+                    #if WORDNOTE_V2_VALIDATION || WORDNOTE_V3_VALIDATION
                     VStack(alignment: .leading, spacing: 6) {
                         ForEach(courses, id: \.id) { course in
                             Toggle(course.courseName, isOn: Binding(
@@ -164,6 +164,7 @@ struct TermDetailEditor: View {
                         }
                     }
                 }
+                #if !WORDNOTE_V3_VALIDATION
                 formRow("Mastery") {
                     Picker("Mastery", selection: $values.value.masteryLevel) {
                         ForEach(MasteryLevel.allCases) { masteryLevel in
@@ -171,6 +172,7 @@ struct TermDetailEditor: View {
                         }
                     }
                 }
+                #endif
             }
             .padding(.vertical, 4)
         }
@@ -201,11 +203,11 @@ struct TermDetailEditor: View {
     }
 
     private func storedVersion(id: UUID) throws -> WordNoteDraftVersion<TermEditorValues> {
-        #if WORDNOTE_V2_VALIDATION
-        return try WordNoteV2ContentService(container: modelContext.container).termDraftVersion(id)
+        #if WORDNOTE_V2_VALIDATION || WORDNOTE_V3_VALIDATION
+        return try AppContentService(container: modelContext.container).termDraftVersion(id)
         #else
         guard let current = try modelContext.fetch(FetchDescriptor<TermModel>()).first(where: { $0.id == id }) else {
-            throw WordNoteV2ContentError.missingEntity
+            throw AppContentError.missingEntity
         }
         let value = TermEditorValues(
             termText: current.term, termType: current.termType, chineseMeaning: current.chineseMeaning ?? "",
@@ -234,7 +236,7 @@ struct TermDetailEditor: View {
             let value = values.value
             let revision = values.revision
             guard let current = try modelContext.fetch(FetchDescriptor<TermModel>()).first(where: { $0.id == id }) else {
-                throw WordNoteV2ContentError.missingEntity
+                throw AppContentError.missingEntity
             }
             try VocabularyService(modelContext: modelContext, expectedRevision: revision, courseIDs: value.courseIDs, undoHistory: undoHistory).updateTerm(
                 current,

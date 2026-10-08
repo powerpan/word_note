@@ -19,7 +19,7 @@ struct FloatingQuickAddPanelView: View {
     @Query private var storedTerms: [TermModel]
     @State private var rawText = ""
     @State private var inputFocusRequestID = UUID()
-    #if !WORDNOTE_V2_VALIDATION
+    #if !WORDNOTE_V2_VALIDATION && !WORDNOTE_V3_VALIDATION
     @State private var displayedExplanation: AIExplanationPreview?
     @State private var explanationHideToken = UUID()
     @State private var explanationHideTask: Task<Void, Never>?
@@ -47,7 +47,7 @@ struct FloatingQuickAddPanelView: View {
         AppAppearancePreference.resolved(from: appearanceRawValue)
     }
 
-    #if !WORDNOTE_V2_VALIDATION
+    #if !WORDNOTE_V2_VALIDATION && !WORDNOTE_V3_VALIDATION
     private var latestExplanationKey: String {
         guard let latestAIExplanation = analysisQueue.latestAIExplanation else { return "none" }
         let candidateKey = latestAIExplanation.candidates
@@ -63,7 +63,7 @@ struct FloatingQuickAddPanelView: View {
     #endif
 
     private var visibleExplanation: AIExplanationPreview? {
-        #if WORDNOTE_V2_VALIDATION
+        #if WORDNOTE_V2_VALIDATION || WORDNOTE_V3_VALIDATION
         resultPresentation?.event?.preview
         #else
         displayedExplanation
@@ -123,20 +123,20 @@ struct FloatingQuickAddPanelView: View {
             if let resultPresentation { CaptureResultWindowBridge(presentation: resultPresentation) }
         }
         .onAppear {
-            #if WORDNOTE_V2_VALIDATION
+            #if WORDNOTE_V2_VALIDATION || WORDNOTE_V3_VALIDATION
             if let resultPresentation { analysisQueue.feedback.subscribe(resultPresentation) }
             #endif
             focusInput()
             onHeightChange(preferredPanelHeight)
         }
         .onReceive(NotificationCenter.default.publisher(for: .quickAddPanelDidShow)) { _ in
-            #if !WORDNOTE_V2_VALIDATION
+            #if !WORDNOTE_V2_VALIDATION && !WORDNOTE_V3_VALIDATION
             updatePanelFocus(true)
             #endif
             focusInput()
             onHeightChange(preferredPanelHeight)
         }
-        #if !WORDNOTE_V2_VALIDATION
+        #if !WORDNOTE_V2_VALIDATION && !WORDNOTE_V3_VALIDATION
         .onReceive(NotificationCenter.default.publisher(for: .quickAddPanelFocusDidChange)) { notification in
             let isFocused = notification.userInfo?[QuickAddPanelFocusUserInfoKey.isFocused] as? Bool ?? false
             updatePanelFocus(isFocused)
@@ -153,7 +153,7 @@ struct FloatingQuickAddPanelView: View {
             onHeightChange(preferredPanelHeight)
         }
         .onDisappear {
-            #if WORDNOTE_V2_VALIDATION
+            #if WORDNOTE_V2_VALIDATION || WORDNOTE_V3_VALIDATION
             if let resultPresentation { analysisQueue.feedback.unsubscribe(resultPresentation) }
             resultActions?.reset()
             #else
@@ -164,7 +164,7 @@ struct FloatingQuickAddPanelView: View {
     }
 
     private var openResultAction: (() -> Void)? {
-        #if WORDNOTE_V2_VALIDATION
+        #if WORDNOTE_V2_VALIDATION || WORDNOTE_V3_VALIDATION
         guard let target = resultPresentation?.event?.target, let captureNavigator else { return nil }
         return {
             do { try captureNavigator.open(target) }
@@ -209,7 +209,7 @@ struct FloatingQuickAddPanelView: View {
                     }
             }
 
-            #if WORDNOTE_V2_VALIDATION
+            #if WORDNOTE_V2_VALIDATION || WORDNOTE_V3_VALIDATION
             if !analysisQueue.jobs.isEmpty || analysisQueue.isSuspended { tasksButton }
             #endif
 
@@ -224,7 +224,7 @@ struct FloatingQuickAddPanelView: View {
         }
     }
 
-    #if WORDNOTE_V2_VALIDATION
+    #if WORDNOTE_V2_VALIDATION || WORDNOTE_V3_VALIDATION
     private var tasksButton: some View {
         let pending = analysisQueue.jobs.filter { $0.state == .queued || $0.state == .running }.count
         let failed = analysisQueue.failedCount
@@ -256,7 +256,7 @@ struct FloatingQuickAddPanelView: View {
         let text = rawText
 
         do {
-            #if WORDNOTE_V2_VALIDATION
+            #if WORDNOTE_V2_VALIDATION || WORDNOTE_V3_VALIDATION
             guard let captureContext else { throw CaptureContextError.unavailable }
             let request = try captureContext.request(rawText: text, capturedVia: .floatingQuickAdd, modelContext: modelContext)
             try analysisQueue.enqueue(request)
@@ -274,14 +274,14 @@ struct FloatingQuickAddPanelView: View {
             submissionError = nil
             focusInput()
         } catch {
-            #if WORDNOTE_V2_VALIDATION
+            #if WORDNOTE_V2_VALIDATION || WORDNOTE_V3_VALIDATION
             submissionError = error.localizedDescription
             #endif
             NSSound.beep()
         }
     }
 
-    #if !WORDNOTE_V2_VALIDATION
+    #if !WORDNOTE_V2_VALIDATION && !WORDNOTE_V3_VALIDATION
     private func showLatestExplanation() {
         guard let latestAIExplanation = analysisQueue.latestAIExplanation else {
             hideExplanation()

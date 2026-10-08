@@ -1,4 +1,4 @@
-#if WORDNOTE_V2_VALIDATION
+#if WORDNOTE_V2_VALIDATION || WORDNOTE_V3_VALIDATION
 import AppKit
 import SwiftUI
 import WordNoteCore

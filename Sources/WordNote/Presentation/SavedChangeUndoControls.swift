@@ -2,17 +2,17 @@ import SwiftUI
 import WordNoteCore
 
 private struct SavedChangeHistoryKey: EnvironmentKey {
-    static let defaultValue: WordNoteV2UndoHistory? = nil
+    static let defaultValue: AppUndoHistory? = nil
 }
 
 extension EnvironmentValues {
-    var savedChangeHistory: WordNoteV2UndoHistory? {
+    var savedChangeHistory: AppUndoHistory? {
         get { self[SavedChangeHistoryKey.self] }
         set { self[SavedChangeHistoryKey.self] = newValue }
     }
 }
 
-#if WORDNOTE_V2_VALIDATION
+#if WORDNOTE_V2_VALIDATION || WORDNOTE_V3_VALIDATION
 private struct SavedChangeUndoAction {
     let title: String
     let isEnabled: Bool
@@ -33,7 +33,7 @@ private extension FocusedValues {
 struct SavedChangeUndoControls: ViewModifier {
     @Environment(\.editProtection) private var editProtection
     @Environment(WordNoteDataProtection.self) private var dataProtection
-    let history: WordNoteV2UndoHistory
+    let history: AppUndoHistory
     @State private var errorMessage: String?
 
     private var title: String { history.title.map { "Undo \($0)" } ?? "Undo Saved Change" }

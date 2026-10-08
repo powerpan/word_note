@@ -10,6 +10,10 @@ struct SettingsView: View {
     @State private var apiKey = ""
     @State private var keyStatusMessage: String?
     @State private var keyErrorMessage: String?
+    #if WORDNOTE_V3_VALIDATION
+    @AppStorage("reviewTargetCards") private var reviewTarget = 20
+    @AppStorage("reviewDailyNewLimit") private var reviewNewLimit = 10
+    #endif
 
     private let environmentFileStore = DeepSeekEnvironmentFileStore(
         fileURL: AppRuntime.isUITest ? AppRuntime.fixtureCredentialURL : DeepSeekAPIKeyResolver.defaultEnvironmentFileURL
@@ -46,6 +50,15 @@ struct SettingsView: View {
                 .groupBoxStyle(WordNoteGroupBoxStyle())
 
                 if let captureShortcut { CaptureShortcutSettings(controller: captureShortcut) }
+
+                #if WORDNOTE_V3_VALIDATION
+                GroupBox("Learning") {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Stepper("Group size: \(reviewTarget)", value: $reviewTarget, in: 5...100, step: 5)
+                        Stepper("Daily new-card limit: \(reviewNewLimit)", value: $reviewNewLimit, in: 0...50)
+                    }.padding(.vertical, 4)
+                }.groupBoxStyle(WordNoteGroupBoxStyle())
+                #endif
 
                 GroupBox("Defaults") {
                     if let captureContext {

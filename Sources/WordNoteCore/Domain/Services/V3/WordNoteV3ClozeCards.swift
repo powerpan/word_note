@@ -68,6 +68,36 @@ extension WordNoteV3ContentService {
         }
     }
 
+    public func resumeClozeCard(_ id: UUID, expectedRevision: Int, studyTimeZoneID: String,
+                                at date: Date = Date()) throws -> WordNoteSnapshotV3Payload.Card {
+        try transaction {
+            try validateDate(date)
+            guard let model = try fetch(Card.self).first(where: { $0.id == id }) else { throw WordNoteV3ContentError.missingEntity }
+            try requireRevision(model.revision, expectedRevision)
+            var card = try WordNoteSnapshotV3Payload.Card(model)
+            guard card.mode == .contextCloze else { throw WordNoteV3ContentError.invalidValue }
+            let term = try term(card.termID)
+            let occurrence = try fetch(Occurrence.self).first { $0.id == card.clozeTarget?.occurrenceID }
+            if card.schedule.phase == .suspended {
+                let unlearned = card.schedulerVersion == ReviewSchedulerVersion.current && card.schedule.introducedAt == nil
+                    && card.schedule.lastReviewedAt == nil && card.schedule.masteryLevel == .new && card.schedule.intervalDays == 0
+                card.schedule.phase = unlearned ? .new : .review
+                card.schedule.nextReviewAt = unlearned ? nil : max(date, model.updatedAt)
+            }
+            // Existing targets retain their verified snapshot after an Inbox record is deleted.
+            // The renderer still rejects a changed/deleted occurrence or mismatched source hash.
+            _ = try ReviewQuestionContent.front(card: card, term: .init(term), occurrence: occurrence.map { .init($0) })
+            let burial = try reviewDirectionBurial(termID: term.id, at: date, studyTimeZoneID: studyTimeZoneID)
+            guard model.phaseRaw == ReviewCardPhase.suspended.rawValue else { return try .init(model) }
+            card.schedule.buriedUntil = burial
+            card.schedule.apply(to: model)
+            model.revision = try increment(model.revision)
+            model.updatedAt = max(model.updatedAt, date)
+            try touch(term, at: max(term.updatedAt, date))
+            return try .init(model)
+        }
+    }
+
     /// An edited snapshot is no longer a byte-for-byte verified copy of its capture.
     public func reviseOccurrenceText(_ expected: WordNoteSnapshotV2Payload.Occurrence, expectedTermRevision: Int,
                                      rawText: String, at date: Date = Date()) throws {

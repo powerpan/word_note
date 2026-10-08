@@ -1,14 +1,14 @@
-#if WORDNOTE_V2_VALIDATION
+#if WORDNOTE_V2_VALIDATION || WORDNOTE_V3_VALIDATION
 import SwiftUI
 import WordNoteCore
 
 struct V2AnalysisTasksView: View {
-    let queue: WordNoteV2AnalysisQueue
+    let queue: QuickAddAnalysisQueue
     @State private var expanded = false
     @State private var errorMessage: String?
-    @State private var pendingCancellation: WordNoteV2AnalysisJob?
+    @State private var pendingCancellation: AppAnalysisJob?
 
-    init(queue: WordNoteV2AnalysisQueue, startsExpanded: Bool = false) {
+    init(queue: QuickAddAnalysisQueue, startsExpanded: Bool = false) {
         self.queue = queue
         _expanded = State(initialValue: startsExpanded)
     }

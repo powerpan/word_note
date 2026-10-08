@@ -11,7 +11,7 @@ BUILD_FLAGS=(-Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency -X
 
 case "$MODE" in
   run|--debug|debug|--logs|logs|--telemetry|telemetry|--verify|verify) ;;
-  --ui-fixture|--ui-v2-fixture)
+  --ui-fixture|--ui-v2-fixture|--ui-v3-fixture)
     [[ "$FIXTURE" == "empty" || "$FIXTURE" == "populated" ]] || { echo "Invalid fixture" >&2; exit 2; }
     [[ "$APPEARANCE" == "light" || "$APPEARANCE" == "dark" ]] || { echo "Invalid appearance" >&2; exit 2; }
     QA_SESSION="${4:-$(uuidgen)}"
@@ -20,10 +20,12 @@ case "$MODE" in
     BUNDLE_ID="com.powerpan.WordNote.UITest"
     if [[ "$MODE" == "--ui-v2-fixture" ]]; then
       BUILD_FLAGS+=(--scratch-path .build-v2-qa -Xswiftc -DWORDNOTE_V2_VALIDATION)
+    elif [[ "$MODE" == "--ui-v3-fixture" ]]; then
+      BUILD_FLAGS+=(--scratch-path .build-v3-qa -Xswiftc -DWORDNOTE_V3_VALIDATION)
     fi
     ;;
   *)
-    echo "usage: $0 [run|--debug|--logs|--telemetry|--verify|--ui-fixture|--ui-v2-fixture [empty|populated] [light|dark] [session-UUID]]" >&2
+    echo "usage: $0 [run|--debug|--logs|--telemetry|--verify|--ui-fixture|--ui-v2-fixture|--ui-v3-fixture [empty|populated] [light|dark] [session-UUID]]" >&2
     exit 2
     ;;
 esac
@@ -108,7 +110,7 @@ case "$MODE" in
     sleep 1
     pgrep -x "$APP_NAME" >/dev/null
     ;;
-  --ui-fixture|--ui-v2-fixture)
+  --ui-fixture|--ui-v2-fixture|--ui-v3-fixture)
     echo "QA session: $QA_SESSION"
     /usr/bin/open -n "$APP_BUNDLE" --args --ui-fixture "$FIXTURE" --ui-appearance "$APPEARANCE" --ui-session "$QA_SESSION"
     ;;

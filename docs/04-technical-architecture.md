@@ -555,7 +555,7 @@ Skip 輪轉固定項順序，保持 presented 和所有卡片排程/配額，保
 
 `reviseOccurrenceText` 比對來源快照/Term revision，不改原 InputRecord；依賴目標保存 sourceChangedAt、清除舊 hash/答案/範圍、停用卡並標記 item unavailable。修改後 snapshot 不再是已驗證捕獲副本，不能直接重新建填空；需選擇或新增另一份有證據的原文。V3 備份與修復證據 format=4 保護曝光邊界及來源改動標記，1/2/3 僅在不含新字段時可讀。V1/V2 不變，未發布 V3 SQLite 跨模型直開仍未承諾。
 
-詳見 [B06 核心證據](qa/2026-10-08-b06-question-content.md)。當時尚未接入的內容 writer/queue 核心由下節補齊；runtime、Review/Settings/建卡 UI 仍未整合，不把核心通過視為 B 階段出口。
+詳見 [B06 核心證據](qa/2026-10-08-b06-question-content.md)。當時尚未接入的內容 writer/queue 核心由下節補齊；後續隔離 runtime、Review/Settings/建卡 UI 接入見「V3 隔離 App」，不把核心通過視為 B 階段出口。
 
 ### V3 內容與分析流水線（B03、B04）
 
@@ -570,6 +570,16 @@ Skip 輪轉固定項順序，保持 presented 和所有卡片排程/配額，保
 V3 撤銷收據除內容/關聯外還記錄範圍內 TermHistory、卡片、正式事件、會話與項。開始會話、揭示、作答、精確重查、新增方向/填空或新增來源引用後，舊撤銷拒絕而不刪除學習資料；新建課程的凍結 session 引用也算依賴。關聯會話內其他項的變動可能保守地阻止撤銷，並明確報錯。無關詞的獨立復習不阻止內容撤銷。撤銷只恢復內容、推進 revision；從不恢復 legacy 排程/計數。撤銷確切新詞時，一併刪除收據保護下尚未使用的新卡，不做一般級聯。
 
 實作和兩次合成 live 的完整鏈路證據見 [V3 內容流水線](qa/2026-10-08-b03-v3-content-pipeline.md)。普通 App/V2 QA 尚未改用 V3，沒有正式詞庫升級，性能和原生 UI 仍待驗收。
+
+### V3 隔離 App（B03-B06）
+
+`script/build_and_run.sh --ui-v3-fixture` 使用獨立 scratch path 和 `WORDNOTE_V3_VALIDATION`。普通/V2 入口不變，兩個 validation 標記同時存在會編譯報錯。App-only `VersionedAppConfiguration` 選擇 schema/內容服務/Undo/queue；共用純值 plan 保留既有名稱，不影響核心模型別名。`VersionedValidationRuntime` 只在 QA bundle/fixture 下啟動，透過共用受保護 coordinator 先建立完整 V3 session，再建立唯一 queue 和共享 capture、備份及 Undo 依賴。恢復/遷移的顯式分析暫停規則保持。
+
+每個 Review surface 自持 `V3ReviewController`，持久資料仍全部經 `WordNoteV3ReviewService`。主窗口只持有 lease、正面、揭示後背面、typed answer 和 feedback preview；離頁/失焦/關閉/恢復不可用時清掉並 release，不結束持久組或重新抽題。失焦回來明確 Continue，再揭示；服務共享 ownership 防止另一窗口搶答。等待時計只呈現本組已到時項。確認結束可以從 sheet 執行，仍須重新取得 lease，但不要求 host 當刻是 key window，避免把模態失焦誤當拒絕結束的理由。
+
+`V3ReviewWindowBridge` 是窄 AppKit local event/窗口通知適配器，不替換 delegate。非本窗口、文字 responder、sheet/modal、修飾鍵及 autorepeat 不攔截；空格揭示、1-4 自評，Return 不評分。事件在同步回調內，跨 MainActor 邊界僅返回 Bool。UI 正面只用 `ReviewQuestionFront`，背面要正式 reveal；答案比對不自動生成 feedback。
+
+V3 詞库撤下 Term mastery 編輯/篩選，改為獨立卡片閱讀、方向啟用/停用及原句填空預覽；歷史 mixed counters 單獨收合。Dashboard 用共同 `ReviewStatisticsBuilder` 的卡片工作量和新事件統計，不再呼叫舊 Term queue policy。Settings 組大小/新卡限額目前為本機偏好，建立會話時凍結；偏好備份和統一設定窗口仍是 B08，不冒充完成。首次原生端到端與工具限制见 [V3 UI 證據](qa/2026-10-08-b03-v3-app-review.md)。
 
 ### 備份、恢復與啟動
 
@@ -623,7 +633,7 @@ version 2 日誌的 pending.operation 區分 restore/migration，缺值兼容既
 
 ### 共享捕獲上下文（B02 第二批）
 
-`V2ValidationRuntime.Ready` 每個 runtime 僅建立一個 MainActor `CaptureContextController`，透過 Environment 注入所有主窗口、Settings 和 AppKit panel 的 hosting root。只保存 `CaptureContextSelection` 值和課程 ID 集合，不持有 SwiftData model。`CaptureContextFields` 復用同一套課程/來源/方向菜單；V1 不注入控制器，沿用既有選擇與提交行為。
+`VersionedValidationRuntime.Ready` 每個 runtime 僅建立一個 MainActor `CaptureContextController`，透過 Environment 注入所有主窗口、Settings 和 AppKit panel 的 hosting root。只保存 `CaptureContextSelection` 值和課程 ID 集合，不持有 SwiftData model。`CaptureContextFields` 復用同一套課程/來源/方向菜單；V1 不注入控制器，沿用既有選擇與提交行為。
 
 控制器區分 `defaultContext`、`current` 和按字段的手動覆寫集合；覆寫即使恰好等於預設，也不隱式重新跟隨。reset 才清空覆寫。預設來源仍以既有 `defaultSourceType` 為唯一持久化值，重啟時尊重恢復後的來源；新增課程/方向以帶 version 的 `captureContextDefaults.v1` 保存。非法類型/未知枚舉/未知版本顯示警告並使用安全回退，啟動不覆寫損壞原值，使用者明確更新 Settings 後才替換。
 

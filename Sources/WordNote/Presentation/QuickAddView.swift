@@ -16,7 +16,7 @@ struct QuickAddView: View {
     @State private var note = ""
     @State private var statusMessage: String?
     @State private var errorMessage: String?
-    #if WORDNOTE_V2_VALIDATION
+    #if WORDNOTE_V2_VALIDATION || WORDNOTE_V3_VALIDATION
     @State private var resultPresentation = CaptureResultPresentation(mode: .main)
     #endif
 
@@ -110,7 +110,7 @@ struct QuickAddView: View {
                         }
                         .controlSize(.large)
                         .buttonStyle(.borderedProminent)
-                        #if WORDNOTE_V2_VALIDATION
+                        #if WORDNOTE_V2_VALIDATION || WORDNOTE_V3_VALIDATION
                         .keyboardShortcut(.return, modifiers: [.command])
                         #endif
                         .disabled(!canSave)
@@ -121,7 +121,7 @@ struct QuickAddView: View {
                             Label("Save Draft", systemImage: "tray.and.arrow.down")
                                 .frame(maxWidth: .infinity)
                         }
-                        #if !WORDNOTE_V2_VALIDATION
+                        #if !WORDNOTE_V2_VALIDATION && !WORDNOTE_V3_VALIDATION
                         .keyboardShortcut(.return, modifiers: [.command])
                         #endif
                         .disabled(!canSave)
@@ -157,7 +157,7 @@ struct QuickAddView: View {
         .onChange(of: defaultSourceType) {
             applyDefaultSourceType()
         }
-        #if WORDNOTE_V2_VALIDATION
+        #if WORDNOTE_V2_VALIDATION || WORDNOTE_V3_VALIDATION
         .background(CaptureResultWindowBridge(presentation: resultPresentation))
         .onAppear { analysisQueue.feedback.subscribe(resultPresentation) }
         .onDisappear { analysisQueue.feedback.unsubscribe(resultPresentation) }
@@ -165,7 +165,7 @@ struct QuickAddView: View {
     }
 
     private func saveDraft(statusOverride: String? = nil) {
-        #if WORDNOTE_V2_VALIDATION
+        #if WORDNOTE_V2_VALIDATION || WORDNOTE_V3_VALIDATION
         do {
             guard let captureContext else { throw CaptureContextError.unavailable }
             let request = try captureContext.request(rawText: rawText, note: note, capturedVia: .mainQuickAdd, modelContext: modelContext)
@@ -205,7 +205,7 @@ struct QuickAddView: View {
         errorMessage = nil
 
         do {
-            #if WORDNOTE_V2_VALIDATION
+            #if WORDNOTE_V2_VALIDATION || WORDNOTE_V3_VALIDATION
             guard let captureContext else { throw CaptureContextError.unavailable }
             let request = try captureContext.request(rawText: rawText, note: note, capturedVia: .mainQuickAdd, modelContext: modelContext)
             try analysisQueue.enqueue(request)
@@ -229,7 +229,7 @@ struct QuickAddView: View {
     }
 
     private var commandSubmit: (() -> Void)? {
-        #if WORDNOTE_V2_VALIDATION
+        #if WORDNOTE_V2_VALIDATION || WORDNOTE_V3_VALIDATION
         saveAndAnalyze
         #else
         nil
@@ -241,7 +241,7 @@ struct QuickAddView: View {
     }
 
     private var displayedAIExplanation: AIExplanationPreview? {
-        #if WORDNOTE_V2_VALIDATION
+        #if WORDNOTE_V2_VALIDATION || WORDNOTE_V3_VALIDATION
         resultPresentation.event?.preview
         #else
         analysisQueue.latestAIExplanation

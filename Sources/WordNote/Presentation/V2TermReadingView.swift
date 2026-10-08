@@ -1,4 +1,4 @@
-#if WORDNOTE_V2_VALIDATION
+#if WORDNOTE_V2_VALIDATION || WORDNOTE_V3_VALIDATION
 import SwiftData
 import SwiftUI
 import WordNoteCore
@@ -27,7 +27,7 @@ private struct V2TermReadingView: View {
     let courses: [CourseModel]
     let onEdit: () -> Void
     let onOrganize: () -> Void
-    @Query private var occurrences: [WordNoteSchemaV2.TermOccurrenceModel]
+    @Query private var occurrences: [AppSchema.TermOccurrenceModel]
 
     init(term: TermModel, courses: [CourseModel], onEdit: @escaping () -> Void, onOrganize: @escaping () -> Void) {
         self.term = term
@@ -35,7 +35,7 @@ private struct V2TermReadingView: View {
         self.onEdit = onEdit
         self.onOrganize = onOrganize
         let id = term.id
-        _occurrences = Query(filter: #Predicate<WordNoteSchemaV2.TermOccurrenceModel> { $0.termID == id })
+        _occurrences = Query(filter: #Predicate<AppSchema.TermOccurrenceModel> { $0.termID == id })
     }
 
     var body: some View {
@@ -70,6 +70,9 @@ private struct V2TermReadingView: View {
                     }
                 }
                 Divider()
+                #if WORDNOTE_V3_VALIDATION
+                V3TermReviewCardsView(term: term)
+                #else
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Learning").font(.headline)
                     LabeledContent("Mastery", value: term.masteryLevel.displayTitle)
@@ -80,6 +83,7 @@ private struct V2TermReadingView: View {
                     LabeledContent("Legacy wrong / re-query count", value: String(term.wrongCount))
                         .help("This historical counter includes review ratings and repeated lookups.")
                 }.font(.subheadline)
+                #endif
             }.padding(24).frame(maxWidth: .infinity, alignment: .leading)
         }.background(WordNoteTheme.canvas)
     }

@@ -1,3 +1,4 @@
+#if !WORDNOTE_V3_VALIDATION
 import SwiftData
 import SwiftUI
 import WordNoteCore
@@ -437,3 +438,4 @@ private struct DashboardEmptyRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
+#endif

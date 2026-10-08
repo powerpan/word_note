@@ -15,7 +15,7 @@ struct CandidateReviewView: View {
     @State private var errorMessage: String?
     @State private var isManualEditorPresented = false
     @State private var editedCandidateIDs = Set<UUID>()
-    #if WORDNOTE_V2_VALIDATION
+    #if WORDNOTE_V2_VALIDATION || WORDNOTE_V3_VALIDATION
     @State private var confirmationPlan: WordNoteV2ConfirmationPlan?
     #endif
 
@@ -35,7 +35,7 @@ struct CandidateReviewView: View {
                     )
                         .foregroundStyle(.secondary)
                 } else {
-                    #if WORDNOTE_V2_VALIDATION
+                    #if WORDNOTE_V2_VALIDATION || WORDNOTE_V3_VALIDATION
                     V2CandidateDraftEditor(candidates: pendingCandidates, record: record,
                                            selectedIDs: $selectedCandidateIDs, editedIDs: $editedCandidateIDs)
                         .disabled(isManualEditorPresented)
@@ -123,7 +123,7 @@ struct CandidateReviewView: View {
         .onChange(of: candidates.map(\.id)) {
             selectDefaultCandidates()
         }
-        #if WORDNOTE_V2_VALIDATION
+        #if WORDNOTE_V2_VALIDATION || WORDNOTE_V3_VALIDATION
         .sheet(item: $confirmationPlan) { plan in
             V2ConfirmationPreview(plan: plan) { result in
                 selectedCandidateIDs.removeAll()
@@ -146,9 +146,9 @@ struct CandidateReviewView: View {
     private func saveSelected() {
         let selectedCandidates = pendingCandidates.filter { selectedCandidateIDs.contains($0.id) }
         guard !selectedCandidates.isEmpty else { return }
-        #if WORDNOTE_V2_VALIDATION
+        #if WORDNOTE_V2_VALIDATION || WORDNOTE_V3_VALIDATION
         do {
-            confirmationPlan = try WordNoteV2ContentService(container: modelContext.container).makeConfirmationPlan(
+            confirmationPlan = try AppContentService(container: modelContext.container).makeConfirmationPlan(
                 CandidateConfirmation(candidates: selectedCandidates, sourceRecord: record).selections
             )
             errorMessage = nil
@@ -196,7 +196,7 @@ struct CandidateReviewView: View {
     }
 }
 
-#if !WORDNOTE_V2_VALIDATION
+#if !WORDNOTE_V2_VALIDATION && !WORDNOTE_V3_VALIDATION
 private struct CandidateEditorRow: View {
     @Environment(\.modelContext) private var modelContext
     @Bindable var candidate: CandidateTermModel

@@ -55,6 +55,23 @@ public struct InboxBrowseItem: Identifiable, Sendable {
         }
     }
 
+    @MainActor
+    public init(record: WordNoteSchemaV3.InputRecordModel, candidates models: [WordNoteSchemaV3.CandidateTermModel]) {
+        self.record = .init(record)
+        state = .init(record)
+        let matching = models.filter { $0.inputRecordID == record.id }.sorted {
+            $0.createdAt == $1.createdAt ? $0.id.uuidString < $1.id.uuidString : $0.createdAt < $1.createdAt
+        }
+        candidates = matching.map(WordNoteSnapshotPayload.Candidate.init)
+        selections = matching.filter { $0.status == .pending && $0.analysisGeneration == record.analysisGeneration }.map {
+            .init(id: $0.id, revision: $0.revision, recordID: record.id, recordRevision: record.revision)
+        }
+        let sourceText = [record.rawText, record.note, record.sentenceMeaning].compactMap { $0 }
+        searchEntries = sourceText.map { .init(term: $0, chineseMeaning: $0, englishDefinition: nil) } + candidates.map {
+            .init(term: $0.term, chineseMeaning: $0.chineseMeaning, englishDefinition: $0.englishDefinition)
+        }
+    }
+
     public var preview: String {
         let ordered = pendingCandidates + candidates.filter { $0.statusRaw != "pending" }
         let values = ordered.map { state.resolvedLookupDirectionRaw == "chineseToEnglish" ? $0.term : $0.chineseMeaning }

@@ -2,7 +2,7 @@ import SwiftData
 import SwiftUI
 import WordNoteCore
 
-#if WORDNOTE_V2_VALIDATION
+#if WORDNOTE_V2_VALIDATION || WORDNOTE_V3_VALIDATION
 struct VocabularyView: View {
     var body: some View { V2VocabularyView() }
 }

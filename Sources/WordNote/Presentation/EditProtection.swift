@@ -49,7 +49,7 @@ private struct EditDraftRegistration<Value: Equatable>: ViewModifier {
     }
 }
 
-#if WORDNOTE_V2_VALIDATION
+#if WORDNOTE_V2_VALIDATION || WORDNOTE_V3_VALIDATION
 struct EditProtectionHost<Content: View>: View {
     @State private var protection = WordNoteEditProtection()
     @ViewBuilder let content: () -> Content

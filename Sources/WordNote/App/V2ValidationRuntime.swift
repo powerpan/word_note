@@ -1,4 +1,4 @@
-#if WORDNOTE_V2_VALIDATION
+#if WORDNOTE_V2_VALIDATION || WORDNOTE_V3_VALIDATION
 import Foundation
 import Observation
 import SwiftData
@@ -7,12 +7,12 @@ import WordNoteCore
 /// This build must never fall through to the user's production store or credentials.
 @MainActor
 @Observable
-final class V2ValidationRuntime {
+final class VersionedValidationRuntime {
     struct Ready {
         let session: WordNoteStoreSession
-        let queue: WordNoteV2AnalysisQueue
+        let queue: QuickAddAnalysisQueue
         let protection: WordNoteDataProtection
-        let undoHistory: WordNoteV2UndoHistory
+        let undoHistory: AppUndoHistory
         let panel: QuickAddPanelController
         let shortcut: CaptureShortcutController
         let captureContext: CaptureContextController
@@ -20,7 +20,7 @@ final class V2ValidationRuntime {
     }
 
     private(set) var ready: Ready?
-    private(set) var startup: WordNoteV2StartupCoordinator?
+    private(set) var startup: WordNoteStartupCoordinator?
     private(set) var errorMessage: String?
     private(set) var isLoading = false
     private var attempted = false
@@ -47,11 +47,11 @@ final class V2ValidationRuntime {
                     let original = try WordNoteRestoreStore(directoryURL: directory).open()
                     try fixture.populate(original.container.mainContext)
                 }
-                let store = WordNoteRestoreStore(directoryURL: directory, targetSchema: .v2)
-                let vault = WordNoteBackupVault(directoryURL: directory.appending(path: "Backups"), appVersion: "V2-QA")
+                let store = WordNoteRestoreStore(directoryURL: directory, targetSchema: VersionedAppConfiguration.schema)
+                let vault = WordNoteBackupVault(directoryURL: directory.appending(path: "Backups"), appVersion: VersionedAppConfiguration.version)
                 self.store = store
                 self.vault = vault
-                startup = WordNoteV2StartupCoordinator(store: store, vault: vault, preferences: Self.preferences)
+                startup = WordNoteStartupCoordinator(store: store, vault: vault, preferences: Self.preferences)
             }
             guard let startup else { throw ValidationError.qaBundleRequired }
             try install(await startup.open(retryMigration: retry))
@@ -62,7 +62,13 @@ final class V2ValidationRuntime {
         guard !isLoading, let startup else { return }
         isLoading = true
         defer { isLoading = false }
-        do { _ = try await startup.inspectRepair() }
+        do {
+            #if WORDNOTE_V3_VALIDATION
+            _ = try await startup.inspectV3Repair()
+            #else
+            _ = try await startup.inspectRepair()
+            #endif
+        }
         catch { errorMessage = error.localizedDescription }
     }
 
@@ -83,12 +89,12 @@ final class V2ValidationRuntime {
             guard UserDefaults.standard.synchronize() else { throw CocoaError(.fileWriteUnknown) }
             try store.acknowledgePreferences(for: session.generation)
         }
-        let queue = try WordNoteV2AnalysisQueue(session: session, store: store, analysisHandler: AppRuntime.analyze)
+        let queue = try QuickAddAnalysisQueue(session: session, store: store, analysisHandler: AppRuntime.analyze)
         _ = try queue.recoverPendingAnalyses()
         let protection = WordNoteDataProtection(session: session, store: store, vault: vault, queue: queue, preferences: Self.preferences)
         let captureContext = CaptureContextController(
             preferences: .standard,
-            availableCourseIDs: Set(try session.container.mainContext.fetch(FetchDescriptor<WordNoteSchemaV2.CourseModel>()).map(\.id))
+            availableCourseIDs: Set(try session.container.mainContext.fetch(FetchDescriptor<AppSchema.CourseModel>()).map(\.id))
         )
         let captureNavigator = CaptureResultNavigator { [weak protection] in protection?.isRestoring == false }
         let panel = QuickAddPanelController(
@@ -105,7 +111,7 @@ final class V2ValidationRuntime {
         ready?.panel.close()
         ready = Ready(
             session: session, queue: queue, protection: protection,
-            undoHistory: try WordNoteV2UndoHistory(container: session.container),
+            undoHistory: try AppUndoHistory(container: session.container),
             panel: panel, shortcut: shortcut, captureContext: captureContext, captureNavigator: captureNavigator
         )
         shortcut.start()
@@ -121,7 +127,7 @@ final class V2ValidationRuntime {
 
     private enum ValidationError: LocalizedError {
         case qaBundleRequired
-        var errorDescription: String? { "This validation build only opens an isolated QA fixture. Use script/build_and_run.sh --ui-v2-fixture." }
+        var errorDescription: String? { "This validation build only opens an isolated QA fixture. Use script/build_and_run.sh \(VersionedAppConfiguration.launchFlag)." }
     }
 }
 #endif

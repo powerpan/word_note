@@ -1,4 +1,4 @@
-#if WORDNOTE_V2_VALIDATION
+#if WORDNOTE_V2_VALIDATION || WORDNOTE_V3_VALIDATION
 import SwiftData
 import SwiftUI
 import WordNoteCore
@@ -175,7 +175,7 @@ struct V2InboxView: View {
     }
 
     private func presentConfirmation(_ selected: [WordNoteV2CandidateSelection]) throws {
-        confirmationPlan = try WordNoteV2ContentService(container: context.container).makeConfirmationPlan(selected)
+        confirmationPlan = try AppContentService(container: context.container).makeConfirmationPlan(selected)
         statusMessage = nil
     }
 
@@ -183,7 +183,7 @@ struct V2InboxView: View {
         rebuildIndex()
         let items: [InboxBrowseItem]
         if let openedRecordID {
-            guard let record = records.first(where: { $0.id == openedRecordID }) else { throw WordNoteV2ContentError.missingEntity }
+            guard let record = records.first(where: { $0.id == openedRecordID }) else { throw AppContentError.missingEntity }
             items = [InboxBrowseItem(record: record, candidates: candidates.filter { $0.inputRecordID == openedRecordID })]
         } else { items = visible.active }
         let values = items.flatMap(\.selections).filter { ids.contains($0.id) }
@@ -194,7 +194,7 @@ struct V2InboxView: View {
     private func ignoreCandidates(_ ids: Set<UUID>) {
         protectingEdits(editProtection) {
             perform {
-                try WordNoteV2ContentService(container: context.container, undoHistory: undoHistory).ignoreCandidates(currentSelections(ids))
+                try AppContentService(container: context.container, undoHistory: undoHistory).ignoreCandidates(currentSelections(ids))
                 showSuccess("Ignored \(ids.count) candidates.")
             }
         }
@@ -203,8 +203,8 @@ struct V2InboxView: View {
     private func ignoreRecord(_ id: UUID) {
         protectingEdits(editProtection) {
             perform {
-                guard let value = records.first(where: { $0.id == id }) else { throw WordNoteV2ContentError.missingEntity }
-                try WordNoteV2ContentService(container: context.container, undoHistory: undoHistory).ignoreInputRecord(id, expectedRevision: value.revision)
+                guard let value = records.first(where: { $0.id == id }) else { throw AppContentError.missingEntity }
+                try AppContentService(container: context.container, undoHistory: undoHistory).ignoreInputRecord(id, expectedRevision: value.revision)
                 showSuccess("Input record ignored.")
             }
         }
@@ -213,8 +213,8 @@ struct V2InboxView: View {
     private func deleteRecord(_ id: UUID) {
         protectingEdits(editProtection) {
             perform {
-                guard let value = records.first(where: { $0.id == id }) else { throw WordNoteV2ContentError.missingEntity }
-                try WordNoteV2ContentService(container: context.container).deleteInputRecord(id, expectedRevision: value.revision)
+                guard let value = records.first(where: { $0.id == id }) else { throw AppContentError.missingEntity }
+                try AppContentService(container: context.container).deleteInputRecord(id, expectedRevision: value.revision)
                 showSuccess("Input record deleted.")
             }
         }
@@ -223,7 +223,7 @@ struct V2InboxView: View {
     private func analyze(_ id: UUID) {
         protectingEdits(editProtection) {
             perform {
-                guard let value = records.first(where: { $0.id == id }) else { throw WordNoteV2ContentError.missingEntity }
+                guard let value = records.first(where: { $0.id == id }) else { throw AppContentError.missingEntity }
                 try queue.retry(id, expectedRevision: value.revision)
                 showSuccess("Added to analysis tasks.")
             }

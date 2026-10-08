@@ -1,3 +1,4 @@
+#if !WORDNOTE_V3_VALIDATION
 import SwiftData
 import SwiftUI
 import WordNoteCore
@@ -390,3 +391,4 @@ private struct ReviewCompletionView: View {
         .wordNoteSurface(elevated: true)
     }
 }
+#endif

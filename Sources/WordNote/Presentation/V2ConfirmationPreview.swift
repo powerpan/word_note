@@ -1,4 +1,4 @@
-#if WORDNOTE_V2_VALIDATION
+#if WORDNOTE_V2_VALIDATION || WORDNOTE_V3_VALIDATION
 import SwiftData
 import SwiftUI
 import WordNoteCore
@@ -85,7 +85,7 @@ struct V2ConfirmationPreview: View {
 
     private func refresh() {
         do {
-            plan = try WordNoteV2ContentService(container: modelContext.container).refreshConfirmationPlan(plan)
+            plan = try AppContentService(container: modelContext.container).refreshConfirmationPlan(plan)
             choices = .init()
             needsRefresh = false
             errorMessage = nil
@@ -99,7 +99,7 @@ struct V2ConfirmationPreview: View {
 
     private func commit() {
         do {
-            let result = try WordNoteV2ContentService(container: modelContext.container, undoHistory: undoHistory)
+            let result = try AppContentService(container: modelContext.container, undoHistory: undoHistory)
                 .commitConfirmationPlan(plan, choices: choices)
             dismiss()
             onCommitted(result)

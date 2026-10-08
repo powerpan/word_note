@@ -1,4 +1,4 @@
-#if WORDNOTE_V2_VALIDATION
+#if WORDNOTE_V2_VALIDATION || WORDNOTE_V3_VALIDATION
 import SwiftUI
 import WordNoteCore
 
@@ -23,6 +23,7 @@ struct V2VocabularyFilters: View {
                     Button("Export Filtered (\(visibleCount))", systemImage: "square.and.arrow.up") { onExport(false) }
                     Button("Export Selected", systemImage: "doc") { onExport(true) }
                 } label: { Image(systemName: "square.and.arrow.up") }
+                .menuStyle(.borderlessButton).fixedSize().frame(width: 28)
                 .help("Export vocabulary as CSV").accessibilityLabel("Export vocabulary as CSV").disabled(visibleCount == 0)
             }
             Text("\(visibleCount) / \(totalCount) terms").font(.caption).foregroundStyle(.secondary)
@@ -35,10 +36,12 @@ struct V2VocabularyFilters: View {
                         Text("Unavailable course").tag(Optional(id))
                     }
                 }.labelsHidden().help("Course filter")
+                #if !WORDNOTE_V3_VALIDATION
                 Picker("Mastery", selection: $query.mastery) {
                     Text("All mastery").tag(MasteryLevel?.none)
                     ForEach(MasteryLevel.allCases) { Text($0.displayTitle).tag(Optional($0)) }
                 }.labelsHidden().help("Mastery filter")
+                #endif
             }
             HStack {
                 Picker("Tag", selection: $query.tag) {

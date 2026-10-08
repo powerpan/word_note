@@ -1,4 +1,4 @@
-#if WORDNOTE_V2_VALIDATION
+#if WORDNOTE_V2_VALIDATION || WORDNOTE_V3_VALIDATION
 import SwiftData
 import SwiftUI
 import WordNoteCore
@@ -79,7 +79,7 @@ struct V2CandidateDraftEditor: View {
                 }
                 if hasConflict {
                     DraftConflictView(draft: values, fields: WordNoteV2CandidateEdit.comparisonFields(for: original), loadCurrent: {
-                        try WordNoteV2ContentService(container: context.container)
+                        try AppContentService(container: context.container)
                             .candidateDraftVersion(original.map(\.id), sourceRecordID: record.id)
                     }, onApplied: { errorMessage = nil; editedIDs = Set(changed.map(\.id)) })
                 }
@@ -99,7 +99,7 @@ struct V2CandidateDraftEditor: View {
 
     private var capturedSave: () throws -> Void {
         return {
-            try WordNoteV2ContentService(container: context.container, undoHistory: undoHistory).updateCandidates(changed)
+            try AppContentService(container: context.container, undoHistory: undoHistory).updateCandidates(changed)
             reload()
         }
     }

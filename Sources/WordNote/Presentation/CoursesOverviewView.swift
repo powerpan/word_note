@@ -232,7 +232,7 @@ private struct CourseEditor: View {
                 }
                 if isDirty {
                     if let course, editRevision != course.editRevision {
-                        #if WORDNOTE_V2_VALIDATION
+                        #if WORDNOTE_V2_VALIDATION || WORDNOTE_V3_VALIDATION
                         DraftConflictView(draft: values, fields: CourseEditorValues.comparisonFields,
                                           loadCurrent: { try storedVersion(id: course.id) }, onApplied: { errorMessage = nil; statusMessage = nil })
                         #else
@@ -305,11 +305,11 @@ private struct CourseEditor: View {
     }
 
     private func storedVersion(id: UUID) throws -> WordNoteDraftVersion<CourseEditorValues> {
-        #if WORDNOTE_V2_VALIDATION
-        return try WordNoteV2ContentService(container: modelContext.container).courseDraftVersion(id)
+        #if WORDNOTE_V2_VALIDATION || WORDNOTE_V3_VALIDATION
+        return try AppContentService(container: modelContext.container).courseDraftVersion(id)
         #else
         guard let current = try modelContext.fetch(FetchDescriptor<CourseModel>()).first(where: { $0.id == id }) else {
-            throw WordNoteV2ContentError.missingEntity
+            throw AppContentError.missingEntity
         }
         return WordNoteDraftVersion(CourseEditorValues(courseName: current.courseName, courseCode: current.courseCode ?? "",
                                                        instructor: current.instructor ?? "", semester: current.semester ?? "",
@@ -335,7 +335,7 @@ private struct CourseEditor: View {
             let savedCourse: CourseModel
             if let id {
                 guard let course = try modelContext.fetch(FetchDescriptor<CourseModel>()).first(where: { $0.id == id }) else {
-                    throw WordNoteV2ContentError.missingEntity
+                    throw AppContentError.missingEntity
                 }
                 try service.update(
                     course,

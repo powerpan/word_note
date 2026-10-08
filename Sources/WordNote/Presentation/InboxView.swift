@@ -2,7 +2,7 @@ import SwiftData
 import SwiftUI
 import WordNoteCore
 
-#if WORDNOTE_V2_VALIDATION
+#if WORDNOTE_V2_VALIDATION || WORDNOTE_V3_VALIDATION
 struct InboxView: View {
     var body: some View { V2InboxView() }
 }
@@ -20,7 +20,7 @@ struct InboxView: View {
     @State private var selectedBatchRecordIDs = Set<UUID>()
     @State private var errorMessage: String?
     @State private var analyzingRecordID: UUID?
-    #if WORDNOTE_V2_VALIDATION
+    #if WORDNOTE_V2_VALIDATION || WORDNOTE_V3_VALIDATION
     @State private var confirmationPlan: WordNoteV2ConfirmationPlan?
     @State private var confirmationMessage: String?
     #endif
@@ -112,7 +112,7 @@ struct InboxView: View {
         .onChange(of: confirmableRecordIDs) {
             pruneBatchSelection()
         }
-        #if WORDNOTE_V2_VALIDATION
+        #if WORDNOTE_V2_VALIDATION || WORDNOTE_V3_VALIDATION
         .sheet(item: $confirmationPlan) { plan in
             V2ConfirmationPreview(plan: plan) { result in
                 selectedBatchRecordIDs.removeAll()
@@ -206,7 +206,7 @@ struct InboxView: View {
                 }
                 .padding(18)
                 .background(WordNoteTheme.surface)
-                #if WORDNOTE_V2_VALIDATION
+                #if WORDNOTE_V2_VALIDATION || WORDNOTE_V3_VALIDATION
                 if !selectedBatchRecordIDs.isEmpty {
                     let selected = confirmableRecords.filter { selectedBatchRecordIDs.contains($0.id) }
                     Text("\(selected.count) records, \(selected.reduce(0) { $0 + pendingCandidates(for: $1).count }) candidates selected")
@@ -334,9 +334,9 @@ struct InboxView: View {
 
         guard !recordsToConfirm.isEmpty else { return }
 
-        #if WORDNOTE_V2_VALIDATION
+        #if WORDNOTE_V2_VALIDATION || WORDNOTE_V3_VALIDATION
         do {
-            confirmationPlan = try WordNoteV2ContentService(container: modelContext.container).makeConfirmationPlan(
+            confirmationPlan = try AppContentService(container: modelContext.container).makeConfirmationPlan(
                 recordsToConfirm.flatMap { CandidateConfirmation(candidates: $0.candidates, sourceRecord: $0.record).selections }
             )
             confirmationMessage = nil
@@ -389,7 +389,7 @@ struct InboxView: View {
     }
 
     private func analyze(_ record: InputRecordModel) {
-        #if WORDNOTE_V2_VALIDATION
+        #if WORDNOTE_V2_VALIDATION || WORDNOTE_V3_VALIDATION
         do {
             try analysisQueue.retry(record.id, expectedRevision: record.revision)
             errorMessage = nil

@@ -1,16 +1,16 @@
-#if WORDNOTE_V2_VALIDATION
+#if WORDNOTE_V2_VALIDATION || WORDNOTE_V3_VALIDATION
 import SwiftUI
 import WordNoteCore
 
 @main
 @MainActor
-struct WordNoteV2ValidationApp: App {
+struct WordNoteValidationApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @AppStorage(AppAppearancePreference.storageKey) private var appearance = "system"
-    @State private var runtime = V2ValidationRuntime()
+    @State private var runtime = VersionedValidationRuntime()
 
     var body: some Scene {
-        WindowGroup("Word Note V2 QA", id: "main") {
+        WindowGroup(VersionedAppConfiguration.title, id: "main") {
             Group {
                 if let ready = runtime.ready {
                     EditProtectionHost { ContentView().modifier(SavedChangeUndoControls(history: ready.undoHistory)) }
@@ -28,7 +28,7 @@ struct WordNoteV2ValidationApp: App {
                             appDelegate.captureShortcut = ready.shortcut
                         }
                 } else {
-                    V2ValidationStartupView(runtime: runtime)
+                    VersionedValidationStartupView(runtime: runtime)
                 }
             }
             .preferredColorScheme(AppAppearancePreference.resolved(from: appearance).preferredColorScheme)
@@ -65,7 +65,7 @@ struct WordNoteV2ValidationApp: App {
                         .environment(\.captureShortcut, ready.shortcut)
                         .environment(\.captureContext, ready.captureContext)
                         .modifier(DataProtectionOverlay(protection: ready.protection))
-                } else { V2ValidationStartupView(runtime: runtime) }
+                } else { VersionedValidationStartupView(runtime: runtime) }
             }
             .preferredColorScheme(AppAppearancePreference.resolved(from: appearance).preferredColorScheme)
         }
@@ -74,13 +74,13 @@ struct WordNoteV2ValidationApp: App {
     }
 }
 
-private struct V2ValidationStartupView: View {
-    let runtime: V2ValidationRuntime
+private struct VersionedValidationStartupView: View {
+    let runtime: VersionedValidationRuntime
     @State private var confirmRepair = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text("Word Note V2 QA").font(.title2.bold())
+            Text(VersionedAppConfiguration.title).font(.title2.bold())
             if runtime.isLoading { ProgressView("Preparing isolated data...") }
             if let message = runtime.errorMessage {
                 Text(message).foregroundStyle(.secondary).textSelection(.enabled)
@@ -90,12 +90,21 @@ private struct V2ValidationStartupView: View {
                 }
                 .disabled(runtime.isLoading)
             }
+            #if WORDNOTE_V3_VALIDATION
+            if let report = runtime.startup?.v3RepairReport {
+                Text("\(report.detachableReferenceCount) missing optional references; \(report.issues.count) findings")
+                if report.requiresManualResolution { Text("Manual resolution required. No data was changed.") }
+                Button("Repair References", systemImage: "wrench.and.screwdriver") { confirmRepair = true }
+                    .disabled(!report.canPrepareRepair || runtime.isLoading)
+            }
+            #else
             if let report = runtime.startup?.repairReport {
                 Text("\(report.detachableReferenceCount) missing optional references; \(report.issues.count) findings")
                 if report.requiresManualResolution { Text("Manual resolution required. No data was changed.") }
                 Button("Repair References", systemImage: "wrench.and.screwdriver") { confirmRepair = true }
                     .disabled(!report.canPrepareRepair || runtime.isLoading)
             }
+            #endif
         }
         .padding(32)
         .frame(minWidth: 600, minHeight: 300)
