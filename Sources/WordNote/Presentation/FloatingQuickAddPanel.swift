@@ -8,6 +8,8 @@ struct FloatingQuickAddPanelView: View {
     let onHeightChange: (CGFloat) -> Void
     let onClose: () -> Void
 
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.captureContext) private var captureContext
     @AppStorage(AppAppearancePreference.storageKey) private var appearanceRawValue = AppAppearancePreference.system.rawValue
     @AppStorage("defaultSourceType") private var defaultSourceType = SourceType.other.rawValue
     @Query private var storedTerms: [TermModel]
@@ -20,6 +22,9 @@ struct FloatingQuickAddPanelView: View {
     @State private var explanationRemainingHideTime = FloatingQuickAddMetrics.explanationDisplayDurationSeconds
     @State private var explanationContentHeight: CGFloat = 0
     @State private var panelIsFocused = false
+    @State private var showsContext = false
+    @State private var submissionError: String?
+    @State private var errorContentHeight: CGFloat = 0
 
     private var canSubmit: Bool {
         !TextNormalizer.isBlank(rawText)
@@ -47,16 +52,30 @@ struct FloatingQuickAddPanelView: View {
     }
 
     private var preferredPanelHeight: CGFloat {
-        if displayedExplanation != nil {
-            return FloatingQuickAddMetrics.expandedHeight(for: explanationContentHeight)
-        }
-
-        return FloatingQuickAddMetrics.collapsedHeight
+        let base = displayedExplanation == nil ? FloatingQuickAddMetrics.collapsedHeight
+            : FloatingQuickAddMetrics.expandedHeight(for: explanationContentHeight)
+        return base + (submissionError == nil ? 0 : errorHeight + 11)
     }
+
+    private var errorHeight: CGFloat { min(max(errorContentHeight, 24), 100) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 11) {
             inputRow
+
+            if let submissionError {
+                ScrollView {
+                    HStack(alignment: .top, spacing: 8) {
+                        Label(submissionError, systemImage: "exclamationmark.triangle")
+                            .font(.caption).fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Button("Dismiss Error", systemImage: "xmark") { self.submissionError = nil }
+                            .labelStyle(.iconOnly).buttonStyle(.plain).help("Dismiss capture error")
+                    }
+                    .measureHeight($errorContentHeight)
+                }
+                .frame(height: errorHeight)
+            }
 
             if let displayedExplanation {
                 Divider()
@@ -122,6 +141,18 @@ struct FloatingQuickAddPanelView: View {
                         .stroke(WordNoteTheme.line, lineWidth: 1)
                 }
 
+            if let captureContext {
+                Button("Capture Context", systemImage: "slider.horizontal.3") { showsContext.toggle() }
+                    .labelStyle(.iconOnly).buttonStyle(.plain)
+                    .frame(width: 24, height: 32)
+                    .foregroundStyle(captureContext.courseWarning == nil && captureContext.preferenceWarning == nil ? WordNoteTheme.mutedInk : WordNoteTheme.amber)
+                    .help(captureContext.courseWarning ?? captureContext.preferenceWarning ?? "Course, source and lookup direction")
+                    .popover(isPresented: $showsContext, arrowEdge: .bottom) {
+                        CaptureContextFields(controller: captureContext)
+                            .padding(16).frame(width: 300)
+                    }
+            }
+
             Button(action: submit) {
                 Image(systemName: "arrow.up.circle.fill")
                     .font(.system(size: 26, weight: .semibold))
@@ -138,6 +169,11 @@ struct FloatingQuickAddPanelView: View {
         let text = rawText
 
         do {
+            #if WORDNOTE_V2_VALIDATION
+            guard let captureContext else { throw CaptureContextError.unavailable }
+            let request = try captureContext.request(rawText: text, capturedVia: .floatingQuickAdd, modelContext: modelContext)
+            try analysisQueue.enqueue(request)
+            #else
             try analysisQueue.enqueue(
                 rawText: text,
                 courseID: nil,
@@ -146,9 +182,14 @@ struct FloatingQuickAddPanelView: View {
                 note: nil,
                 capturedVia: .floatingQuickAdd
             )
+            #endif
             rawText = ""
+            submissionError = nil
             focusInput()
         } catch {
+            #if WORDNOTE_V2_VALIDATION
+            submissionError = error.localizedDescription
+            #endif
             NSSound.beep()
         }
     }

@@ -531,4 +531,16 @@ version 2 日誌的 pending.operation 區分 restore/migration，缺值兼容既
 
 `VocabularyCompletionEditor` 新增可選 Command-Return 回調。僅活動編輯框攔截，先把已提交文字同步 binding，再保存並分析；marked text 交回原生 text system，同次事件不執行應用提交。普通 Return 的多行換行/單行提交、Tab 本地補全及未配置回調的 V1 路徑保留。`WordNoteAppTests` 對 AppKit 控件及原生註冊作組件測試，不能當成跨 App 焦點/中文 IME 的完整 UI 驗收。見 [B02 測試記錄](qa/2026-10-08-b02-capture-shortcut.md)。
 
+### 共享捕獲上下文（B02 第二批）
+
+`V2ValidationRuntime.Ready` 每個 runtime 僅建立一個 MainActor `CaptureContextController`，透過 Environment 注入所有主窗口、Settings 和 AppKit panel 的 hosting root。只保存 `CaptureContextSelection` 值和課程 ID 集合，不持有 SwiftData model。`CaptureContextFields` 復用同一套課程/來源/方向菜單；V1 不注入控制器，沿用既有選擇與提交行為。
+
+控制器區分 `defaultContext`、`current` 和按字段的手動覆寫集合；覆寫即使恰好等於預設，也不隱式重新跟隨。reset 才清空覆寫。預設來源仍以既有 `defaultSourceType` 為唯一持久化值，重啟時尊重恢復後的來源；新增課程/方向以帶 version 的 `captureContextDefaults.v1` 保存。非法類型/未知枚舉/未知版本顯示警告並使用安全回退，啟動不覆寫損壞原值，使用者明確更新 Settings 後才替換。
+
+可見表單按課程 ID 集合變更 reconcile；保存前再次從當前 ModelContext 取得課程 ID，不依賴 popover 是否開啟。消失的引用清為 nil 並保留可見警告，不選第一個同名或相鄰課程。保存前才發現 current 課程刪除則拋錯，不在使用者不知情時改成另一份上下文提交。Domain 交易仍作最終課程存在性與寫入屏障校驗。
+
+`request` 同步複製原文、note、courseID、sourceType、LookupIntent 和 CaptureSurface，產生新的 captureID；主/浮窗都把不可變 request 交給唯一 queue。解析方向由 `LookupIntent.resolvedDirection` 集中路由到凍結的 `LookupDirectionDetectorV1` 或顯式方向，畫面提示與保存不使用兩套規則。既有記錄/草稿、解析嘗試和備份均沿用 A02 的持久化捕獲字段；修改當前值或預設不能回寫排隊內容。
+
+這批不修改 V1/V2 快照 bytes/checksum 契約。新增 defaultCourse/intent 尚不隨邏輯備份恢復，current 永不備份；B08 要用顯式版本化 adapter 擴充偏好白名單並驗證舊快照，未完成前禁止宣称最終偏好恢復驗收。細節和測試見 [B02 共享上下文證據](qa/2026-10-08-b02-capture-context.md)。
+
 搜索 matcher、補全與精確去重仍分開；列表按穩定 ID 更新，不因篩選改變錯配選中項。性能先測現有查詢與生成資料，再決定索引/分頁/搜索快取；不能為預估大資料量先引入向量庫。時計、Calendar、網絡、store 路徑和偏好可注入，測試不用 sleep 等待真實 10 分鐘。

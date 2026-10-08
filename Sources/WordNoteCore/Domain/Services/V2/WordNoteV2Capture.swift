@@ -46,7 +46,7 @@ extension WordNoteV2ContentService {
             guard request.capturedVia != .legacy else { throw WordNoteV2ContentError.invalidValue }
             let text = request.rawText.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !text.isEmpty else { throw InputRecordValidationError.blankRawText }
-            let direction = resolvedDirection(for: request)
+            let direction = request.intent.resolvedDirection(for: request.rawText)
             let note = optionalText(request.note)
             let records = try fetch(Record.self).filter { $0.captureID == request.captureID }
             let events = try fetch(LookupEvent.self).filter { $0.captureID == request.captureID }
@@ -113,14 +113,6 @@ extension WordNoteV2ContentService {
             return WordNoteCaptureResult(
                 captureID: request.captureID, destination: .inputRecord(id: record.id, queueState: analyze ? .queued : .none), isReplay: false
             )
-        }
-    }
-
-    private func resolvedDirection(for request: WordNoteCaptureRequest) -> LookupDirection {
-        switch request.intent {
-        case .auto: LookupDirectionDetectorV1.detect(request.rawText)
-        case .englishToChinese: .englishToChinese
-        case .chineseToEnglish: .chineseToEnglish
         }
     }
 

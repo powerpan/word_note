@@ -4,6 +4,7 @@ import WordNoteCore
 struct SettingsView: View {
     @Environment(WordNoteDataProtection.self) private var dataProtection
     @Environment(\.captureShortcut) private var captureShortcut
+    @Environment(\.captureContext) private var captureContext
     @AppStorage(AppAppearancePreference.storageKey) private var appearanceRawValue = AppAppearancePreference.system.rawValue
     @AppStorage("defaultSourceType") private var defaultSourceType = "other"
     @State private var apiKey = ""
@@ -47,17 +48,23 @@ struct SettingsView: View {
                 if let captureShortcut { CaptureShortcutSettings(controller: captureShortcut) }
 
                 GroupBox("Defaults") {
-                    Picker("Default source", selection: $defaultSourceType) {
-                        Text("Class").tag("class")
-                        Text("Paper").tag("paper")
-                        Text("Slides").tag("slides")
-                        Text("Assignment").tag("assignment")
-                        Text("Book").tag("book")
-                        Text("Other").tag("other")
+                    if let captureContext {
+                        CaptureContextFields(controller: captureContext, scope: .defaults)
+                            .frame(maxWidth: 420, alignment: .leading)
+                            .padding(.vertical, 4)
+                    } else {
+                        Picker("Default source", selection: $defaultSourceType) {
+                            Text("Class").tag("class")
+                            Text("Paper").tag("paper")
+                            Text("Slides").tag("slides")
+                            Text("Assignment").tag("assignment")
+                            Text("Book").tag("book")
+                            Text("Other").tag("other")
+                        }
+                        .pickerStyle(.menu)
+                        .frame(maxWidth: 420, alignment: .leading)
+                        .padding(.vertical, 4)
                     }
-                    .pickerStyle(.menu)
-                    .frame(maxWidth: 420, alignment: .leading)
-                    .padding(.vertical, 4)
                 }
                 .groupBoxStyle(WordNoteGroupBoxStyle())
 

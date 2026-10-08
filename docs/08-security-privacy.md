@@ -159,7 +159,9 @@ P1 如果做全局快捷鍵或剪貼板增強，需要單獨評估權限。
 
 完整 JSON envelope 包括 formatVersion、sourceSchemaVersion、appVersion、snapshotID、createdAt、各實體數量、payload checksum 和模型 DTO。formatVersion 首版為 1，與資料 schema 分開。payload 使用 JSON 字符串承載序列化 DTO，checksum 對解碼該字符串後的原始 UTF-8 bytes 計算並驗證，再解析其中模型資料，不對任意重排的 JSON 對象求 hash；採標準序列化/雜湊實作。校驗碼只檢測損壞，不宣稱文件經簽名或已加密。
 
-目標契約：V1-V4 各階段提供對應 reader/upgrader；最新版本可恢復受支持舊快照，舊 App 拒絕較新快照。最終包含原文、候選、詞義、課程、來源、卡片、事件和持久化會話；非機密偏好只用明確白名單（外觀、課程/來源預設、學習限額）。現行 App 捕獲/恢復仍為 V1 五類模型；隔離核心的版本化捕獲、vault、JSON 導出、共用恢復日誌及啟動遷移另支援 V2 八實體及完整元資料，但尚未接入正式 App。兩版偏好仍僅 appearance/defaultSource，不虛構尚未實施字段。排除 env、API Key、任意 UserDefaults、SSH 文件、日誌、網絡原始 response 及系統快捷鍵權限狀態。
+目標契約：V1-V4 各階段提供對應 reader/upgrader；最新版本可恢復受支持舊快照，舊 App 拒絕較新快照。最終包含原文、候選、詞義、課程、來源、卡片、事件和持久化會話；非機密偏好只用明確白名單（外觀、課程/來源/查詢方向預設、學習限額）。現行 App 捕獲/恢復仍為 V1 五類模型；隔離核心的版本化捕獲、vault、JSON 導出、共用恢復日誌及啟動遷移另支援 V2 八實體及完整元資料，但尚未接入正式 App。兩版偏好仍僅 appearance/defaultSource，不虛構尚未實施字段。排除 env、API Key、任意 UserDefaults、SSH 文件、日誌、網絡原始 response 及系統快捷鍵權限狀態。
+
+B02 第二批的 defaultCourse/lookupIntent 暫存隔離 V2 本機 `captureContextDefaults.v1`，不代表已納入上述白名單。當前值只在記憶體共享；已提交記錄的課程/來源/方向則已在 V2 快照內。B08 必須完成預設偏好的版本化導出/恢復、缺字段升級和課程引用校驗；不能直接擴寫凍結的 V1 payload 或用全量 UserDefaults dump 代替。此項是正式切換前的驗收門檻。
 
 混合 V1/V2 vault 按完整版本內容檢測變更，輪替不丟棄新關係。未知 schema、損壞數量或文件名/內嵌 ID 不一致的文件不列為有效備份，也不自動清除；舊 V1 恢復入口在修改日誌或原庫前拒絕 V2。V2 未提交的直接模型編輯不能由備份順帶保存。上述是 [備份回歸](qa/2026-10-08-a02-versioned-backups.md) 的邊界，不是全倉敏感資訊審核或 V2 實機恢復驗收。
 

@@ -2,6 +2,14 @@ public enum LookupIntent: String, Codable, CaseIterable, Sendable {
     case auto
     case englishToChinese
     case chineseToEnglish
+
+    public func resolvedDirection(for text: String) -> LookupDirection {
+        switch self {
+        case .auto: LookupDirectionDetectorV1.detect(text)
+        case .englishToChinese: .englishToChinese
+        case .chineseToEnglish: .chineseToEnglish
+        }
+    }
 }
 
 public enum AnalysisQueueState: String, Codable, CaseIterable, Sendable {

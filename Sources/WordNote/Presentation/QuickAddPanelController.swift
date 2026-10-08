@@ -8,12 +8,17 @@ final class QuickAddPanelController {
     private let modelContainer: ModelContainer
     private let analysisQueue: QuickAddAnalysisQueue
     private let dataProtection: WordNoteDataProtection?
+    private let captureContext: CaptureContextController?
     private var panel: QuickAddFloatingPanel?
 
-    init(modelContainer: ModelContainer, analysisQueue: QuickAddAnalysisQueue, dataProtection: WordNoteDataProtection? = nil) {
+    init(
+        modelContainer: ModelContainer, analysisQueue: QuickAddAnalysisQueue,
+        dataProtection: WordNoteDataProtection? = nil, captureContext: CaptureContextController? = nil
+    ) {
         self.modelContainer = modelContainer
         self.analysisQueue = analysisQueue
         self.dataProtection = dataProtection
+        self.captureContext = captureContext
     }
 
     func show() {
@@ -71,6 +76,7 @@ final class QuickAddPanelController {
             onClose: { [weak self] in self?.close() }
         )
         .modelContainer(modelContainer)
+        .environment(\.captureContext, captureContext)
         .modifier(CaptureProtectionModifier(protection: dataProtection))
 
         let hostingView = NSHostingView(rootView: rootView)

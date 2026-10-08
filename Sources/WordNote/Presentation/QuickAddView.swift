@@ -5,6 +5,7 @@ import WordNoteCore
 struct QuickAddView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(QuickAddAnalysisQueue.self) private var analysisQueue
+    @Environment(\.captureContext) private var captureContext
     @AppStorage("defaultSourceType") private var defaultSourceType = SourceType.other.rawValue
     @Query private var storedCourses: [CourseModel]
     @Query private var storedTerms: [TermModel]
@@ -25,7 +26,9 @@ struct QuickAddView: View {
     }
 
     private var detectedLookupDirection: LookupDirection? {
-        canSave ? LookupDirectionDetector.detect(rawText) : nil
+        guard canSave else { return nil }
+        if let captureContext { return captureContext.current.intent.resolvedDirection(for: rawText) }
+        return LookupDirectionDetector.detect(rawText)
     }
 
     var body: some View {
@@ -78,16 +81,19 @@ struct QuickAddView: View {
                         Text("Context")
                             .font(.headline)
 
-                        Picker("Course", selection: $selectedCourseID) {
-                            Text("No Course").tag(UUID?.none)
-                            ForEach(courses, id: \.id) { course in
-                                Text(course.courseName).tag(Optional(course.id))
+                        if let captureContext {
+                            CaptureContextFields(controller: captureContext)
+                        } else {
+                            Picker("Course", selection: $selectedCourseID) {
+                                Text("No Course").tag(UUID?.none)
+                                ForEach(courses, id: \.id) { course in
+                                    Text(course.courseName).tag(Optional(course.id))
+                                }
                             }
-                        }
-
-                        Picker("Source", selection: $selectedSourceType) {
-                            ForEach(SourceType.allCases) { sourceType in
-                                Text(sourceType.displayTitle).tag(sourceType)
+                            Picker("Source", selection: $selectedSourceType) {
+                                ForEach(SourceType.allCases) { sourceType in
+                                    Text(sourceType.displayTitle).tag(sourceType)
+                                }
                             }
                         }
 
@@ -153,9 +159,9 @@ struct QuickAddView: View {
     private func saveDraft(statusOverride: String? = nil) {
         #if WORDNOTE_V2_VALIDATION
         do {
-            _ = try analysisQueue.enqueue(WordNoteCaptureRequest(
-                rawText: rawText, courseID: selectedCourseID, sourceType: selectedSourceType, note: note, capturedVia: .mainQuickAdd
-            ), analyze: false)
+            guard let captureContext else { throw CaptureContextError.unavailable }
+            let request = try captureContext.request(rawText: rawText, note: note, capturedVia: .mainQuickAdd, modelContext: modelContext)
+            try analysisQueue.enqueue(request, analyze: false)
             rawText = ""
             note = ""
             errorMessage = nil
@@ -191,6 +197,11 @@ struct QuickAddView: View {
         errorMessage = nil
 
         do {
+            #if WORDNOTE_V2_VALIDATION
+            guard let captureContext else { throw CaptureContextError.unavailable }
+            let request = try captureContext.request(rawText: rawText, note: note, capturedVia: .mainQuickAdd, modelContext: modelContext)
+            try analysisQueue.enqueue(request)
+            #else
             let courseName = courses.first { $0.id == selectedCourseID }?.courseName
             try analysisQueue.enqueue(
                 rawText: rawText,
@@ -199,6 +210,7 @@ struct QuickAddView: View {
                 sourceType: selectedSourceType,
                 note: note
             )
+            #endif
 
             rawText = ""
             note = ""

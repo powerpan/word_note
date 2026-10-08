@@ -19,6 +19,7 @@ struct WordNoteV2ValidationApp: App {
                         .environment(ready.protection)
                         .environment(\.savedChangeHistory, ready.undoHistory)
                         .environment(\.captureShortcut, ready.shortcut)
+                        .environment(\.captureContext, ready.captureContext)
                         .modifier(DataProtectionOverlay(protection: ready.protection))
                         .task {
                             ready.protection.startAutomaticBackups()
@@ -61,6 +62,7 @@ struct WordNoteV2ValidationApp: App {
                         .modelContainer(ready.session.container)
                         .environment(ready.protection)
                         .environment(\.captureShortcut, ready.shortcut)
+                        .environment(\.captureContext, ready.captureContext)
                         .modifier(DataProtectionOverlay(protection: ready.protection))
                 } else { V2ValidationStartupView(runtime: runtime) }
             }
