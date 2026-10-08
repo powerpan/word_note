@@ -2,6 +2,7 @@ import Foundation
 
 extension WordNoteSnapshotV3Payload {
     var minimumRequiredFormatVersion: Int {
+        if learningPreferences != nil { return 5 }
         if cards.contains(where: { $0.clozeTarget?.sourceChangedAt != nil }) || termHistories.contains(where: { $0.reviewExposedUntil != nil }) { return 4 }
         if sessions.contains(where: { $0.controls != nil }) || eventStates.contains(where: { $0.recordedOrder != nil }) { return 3 }
         if sessions.contains(where: { $0.introductions != nil }) { return 2 }

@@ -161,7 +161,9 @@ P1 如果做全局快捷鍵或剪貼板增強，需要單獨評估權限。
 
 目標契約：V1-V4 各階段提供對應 reader/upgrader；最新版本可恢復受支持舊快照，舊 App 拒絕較新快照。最終包含原文、候選、詞義、課程、來源、卡片、事件和持久化會話；非機密偏好只用明確白名單（外觀、課程/來源/查詢方向預設、學習限額）。現行 App 捕獲/恢復仍為 V1 五類模型；隔離核心的版本化捕獲、vault、JSON 導出、共用恢復日誌及啟動遷移另支援 V2 八實體及完整元資料，但尚未接入正式 App。兩版偏好仍僅 appearance/defaultSource，不虛構尚未實施字段。排除 env、API Key、任意 UserDefaults、SSH 文件、日誌、網絡原始 response 及系統快捷鍵權限狀態。
 
-B02 第二批的 defaultCourse/lookupIntent 暫存隔離 V2 本機 `captureContextDefaults.v1`，不代表已納入上述白名單。當前值只在記憶體共享；已提交記錄的課程/來源/方向則已在 V2 快照內。B08 必須完成預設偏好的版本化導出/恢復、缺字段升級和課程引用校驗；不能直接擴寫凍結的 V1 payload 或用全量 UserDefaults dump 代替。此項是正式切換前的驗收門檻。
+B02 第二批交付時 defaultCourse/lookupIntent 暫存隔離 V2 本機 `captureContextDefaults.v1`，未納入當時快照。B08 第一批已在隔離 V3 增加版本為 1 的 learningPreferences 白名單：defaultCourseID、defaultLookupIntent、reviewTargetCards、reviewDailyNewLimit。新普通快照/修復證據 format=5、帶新增偏好的切庫日誌 version=4；不得降標讓舊 writer 忽略字段。未知偏好版本、非法限額或不存在的課程引用拒絕正常導出/恢復；原始修復證據仍完整保留壞引用供診斷。
+
+舊快照沒有新增偏好時明確恢復為 No Course/Automatic/20/10，普通重開不改本機預設。套用並同步成功後才清除待套用回執，失敗留待重試；UserDefaults 多 key 更新不是資料庫原子交易。備份前後偏好不一致則拒絕該次捕獲，僅改偏好也改變 checksum。當前值只在記憶體共享，設備快捷鍵、任意 UserDefaults、API 配置和窗口布局不納入白名單；V1/V2 payload/codec 不變。已提交記錄的凍結課程/來源/方向仍屬學習內容，不因恢復預設被改寫。此批不是全倉敏感資訊審核，統一 Settings 和原生出口仍待後續驗證，見 [B08](qa/2026-10-08-b08-portable-preferences.md)。
 
 混合 V1/V2 vault 按完整版本內容檢測變更，輪替不丟棄新關係。未知 schema、損壞數量或文件名/內嵌 ID 不一致的文件不列為有效備份，也不自動清除；舊 V1 恢復入口在修改日誌或原庫前拒絕 V2。V2 未提交的直接模型編輯不能由備份順帶保存。上述是 [備份回歸](qa/2026-10-08-a02-versioned-backups.md) 的邊界，不是全倉敏感資訊審核或 V2 實機恢復驗收。
 

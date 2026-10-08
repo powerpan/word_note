@@ -42,12 +42,12 @@ final class WordNoteV3DataProtectionTests: XCTestCase {
         var continuation: CheckedContinuation<AIAnalysisResult, Error>?
         var calls = 0
         var handlerReturned = false
-        let h = try await harness { _ in
+        let h = try await harness(handler: { _ in
             calls += 1
             let result = try await withCheckedThrowingContinuation { continuation = $0 }
             handlerReturned = true
             return result
-        }
+        })
         defer { continuation?.resume(throwing: CancellationError()) }
         try h.queue.pause()
         let id = try S.inputID(h.queue.enqueue(.init(rawText: "precision", capturedVia: .floatingQuickAdd)))
@@ -94,7 +94,7 @@ final class WordNoteV3DataProtectionTests: XCTestCase {
 
     func testCancellingPreparedRestoreRetainsPauseUntilExplicitResume() async throws {
         var calls = 0
-        let h = try await harness { _ in calls += 1; return AnalysisTestValues.result() }
+        let h = try await harness(handler: { _ in calls += 1; return AnalysisTestValues.result() })
         try h.queue.pause()
         _ = try h.queue.enqueue(.init(rawText: "precision"))
         try await h.protection.createBackup()
@@ -175,6 +175,61 @@ final class WordNoteV3DataProtectionTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: h.session.storeURL.path))
     }
 
+    func testPortableDefaultsSurviveManualBackupPreviewAndExport() async throws {
+        let settings = WordNoteLearningPreferences(defaultLookupIntent: .chineseToEnglish, reviewTargetCards: 35, reviewDailyNewLimit: 7)
+        let h = try await harness(learningPreferences: { settings })
+        let before = try payload(h.session)
+        try await h.protection.createBackup()
+        let preview = try await h.protection.previewVersionedRestore(id: XCTUnwrap(h.protection.snapshots.first { $0.kind == .manual }?.id))
+        XCTAssertEqual(preview.snapshot.payload.learningPreferences, settings)
+        let url = root.appending(path: "portable-export.json")
+        try await h.protection.exportBackup(to: url)
+        XCTAssertEqual(try WordNoteSnapshotReader.decode(Data(contentsOf: url)).payload.learningPreferences, settings)
+        XCTAssertEqual(try payload(h.session), before)
+    }
+
+    func testOnlyChangingPortableDefaultsCreatesADifferentAutomaticBackup() async throws {
+        var settings = WordNoteLearningPreferences()
+        let h = try await harness(learningPreferences: { settings })
+        let now = Date().addingTimeInterval(WordNoteBackupVault.automaticInterval + 1)
+        await h.protection.checkAutomaticBackup(now: now)
+        XCTAssertNil(h.protection.errorMessage)
+        let original = try XCTUnwrap(h.protection.snapshots.first { $0.kind == .automatic })
+        settings.reviewTargetCards = 40
+        h.protection.noteDataChanged()
+        await h.protection.checkAutomaticBackup(now: now.addingTimeInterval(WordNoteBackupVault.automaticInterval + 1))
+        let next = try XCTUnwrap(h.protection.snapshots.first { $0.kind == .automatic })
+        XCTAssertNotEqual(next.id, original.id)
+        let saved = try await h.vault.readVersionedSnapshot(id: next.id)
+        let old = try await h.vault.readVersionedSnapshot(id: original.id)
+        XCTAssertEqual(saved.payload.learningPreferences, settings)
+        XCTAssertEqual(saved.payload.counts, old.payload.counts)
+    }
+
+    func testPreferenceChangeDuringCaptureRejectsStaleSnapshot() async throws {
+        var reads = 0
+        let h = try await harness(learningPreferences: {
+            reads += 1
+            return .init(reviewTargetCards: reads == 1 ? 20 : 25)
+        })
+        do { try await h.protection.createBackup(); XCTFail("Changed preferences must not be silently backed up") }
+        catch { XCTAssertEqual(error as? WordNoteSnapshotCaptureError, .dataKeptChanging) }
+        XCTAssertEqual(reads, 2)
+        let inventory = try await h.vault.inventory()
+        XCTAssertTrue(inventory.snapshots.allSatisfy { $0.kind != .manual })
+        XCTAssertNotNil(h.protection.errorMessage)
+    }
+
+    func testInvalidLocalPortableDefaultsDoNotCreateBackupOrAlterData() async throws {
+        let h = try await harness(learningPreferences: { throw WordNoteLearningPreferencesError.invalidStoredDefaults })
+        let before = try payload(h.session)
+        do { try await h.protection.createBackup(); XCTFail("Invalid local defaults must not disappear from a backup") }
+        catch { XCTAssertTrue(error is WordNoteLearningPreferencesError) }
+        XCTAssertEqual(try payload(h.session), before)
+        XCTAssertFalse(h.protection.isWorking)
+        XCTAssertNotNil(h.protection.errorMessage)
+    }
+
     private struct Harness {
         let store: WordNoteRestoreStore
         let vault: WordNoteBackupVault
@@ -183,7 +238,8 @@ final class WordNoteV3DataProtectionTests: XCTestCase {
         let protection: WordNoteDataProtection
     }
 
-    private func harness(handler: @escaping WordNoteV3AnalysisQueue.AnalysisHandler = WordNoteTestFixture.analysisResult) async throws -> Harness {
+    private func harness(learningPreferences: @escaping @MainActor () throws -> WordNoteLearningPreferences? = { nil },
+                         handler: @escaping WordNoteV3AnalysisQueue.AnalysisHandler = WordNoteTestFixture.analysisResult) async throws -> Harness {
         let store = WordNoteRestoreStore(directoryURL: root.appending(path: "Data"), targetSchema: .v3)
         let vault = WordNoteBackupVault(directoryURL: store.directoryURL.appending(path: "Backups"))
         let session = try await WordNoteStartupCoordinator(store: store, vault: vault, preferences: { Self.preferences }).open()
@@ -191,7 +247,8 @@ final class WordNoteV3DataProtectionTests: XCTestCase {
         try V3TestSupport.reviewedPayload().populateEmptyStore(session.container.mainContext)
         let queue = try WordNoteV3AnalysisQueue(session: session, store: store, analysisHandler: handler)
         queues.append(queue)
-        let protection = WordNoteDataProtection(session: session, store: store, vault: vault, queue: queue, preferences: { Self.preferences })
+        let protection = WordNoteDataProtection(session: session, store: store, vault: vault, queue: queue,
+            learningPreferences: learningPreferences, preferences: { Self.preferences })
         controllers.append(protection)
         return Harness(store: store, vault: vault, session: session, queue: queue, protection: protection)
     }

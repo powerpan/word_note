@@ -51,7 +51,8 @@ final class VersionedValidationRuntime {
                 let vault = WordNoteBackupVault(directoryURL: directory.appending(path: "Backups"), appVersion: VersionedAppConfiguration.version)
                 self.store = store
                 self.vault = vault
-                startup = WordNoteStartupCoordinator(store: store, vault: vault, preferences: Self.preferences)
+                startup = WordNoteStartupCoordinator(store: store, vault: vault, preferences: Self.preferences,
+                    learningPreferences: Self.learningPreferences)
             }
             guard let startup else { throw ValidationError.qaBundleRequired }
             try install(await startup.open(retryMigration: retry))
@@ -82,8 +83,12 @@ final class VersionedValidationRuntime {
 
     private func install(_ session: WordNoteStoreSession) throws {
         guard let store, let vault else { throw ValidationError.qaBundleRequired }
+        let courseIDs = Set(try session.container.mainContext.fetch(FetchDescriptor<AppSchema.CourseModel>()).map(\.id))
         UserDefaults.standard.set(AppRuntime.fixtureAppearance.rawValue, forKey: AppAppearancePreference.storageKey)
         if let preferences = session.preferencesToApply {
+            #if WORDNOTE_V3_VALIDATION
+            try session.effectiveLearningPreferencesToApply?.apply(to: .standard, courseIDs: courseIDs)
+            #endif
             UserDefaults.standard.set(preferences.appearance, forKey: AppAppearancePreference.storageKey)
             UserDefaults.standard.set(preferences.defaultSource, forKey: "defaultSourceType")
             guard UserDefaults.standard.synchronize() else { throw CocoaError(.fileWriteUnknown) }
@@ -91,11 +96,16 @@ final class VersionedValidationRuntime {
         }
         let queue = try QuickAddAnalysisQueue(session: session, store: store, analysisHandler: AppRuntime.analyze)
         _ = try queue.recoverPendingAnalyses()
+        let captureContext = CaptureContextController(preferences: .standard, availableCourseIDs: courseIDs)
+        #if WORDNOTE_V3_VALIDATION
+        let protection = WordNoteDataProtection(session: session, store: store, vault: vault, queue: queue,
+            learningPreferences: {
+                captureContext.reconcileCourses(Set(try session.container.mainContext.fetch(FetchDescriptor<AppSchema.CourseModel>()).map(\.id)))
+                return try Self.learningPreferences()
+            }, preferences: Self.preferences)
+        #else
         let protection = WordNoteDataProtection(session: session, store: store, vault: vault, queue: queue, preferences: Self.preferences)
-        let captureContext = CaptureContextController(
-            preferences: .standard,
-            availableCourseIDs: Set(try session.container.mainContext.fetch(FetchDescriptor<AppSchema.CourseModel>()).map(\.id))
-        )
+        #endif
         let captureNavigator = CaptureResultNavigator { [weak protection] in protection?.isRestoring == false }
         let panel = QuickAddPanelController(
             modelContainer: session.container, analysisQueue: queue,
@@ -123,6 +133,14 @@ final class VersionedValidationRuntime {
             appearance: AppAppearancePreference.resolved(from: UserDefaults.standard.string(forKey: AppAppearancePreference.storageKey) ?? "system").rawValue,
             defaultSource: SourceType(rawValue: UserDefaults.standard.string(forKey: "defaultSourceType") ?? "other")?.rawValue ?? "other"
         )
+    }
+
+    private static func learningPreferences() throws -> WordNoteLearningPreferences? {
+        #if WORDNOTE_V3_VALIDATION
+        try .capture(from: .standard)
+        #else
+        nil
+        #endif
     }
 
     private enum ValidationError: LocalizedError {

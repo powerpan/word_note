@@ -408,6 +408,8 @@ B05 第二批新增 controlsJSON，保存 Skip/Later 收據與 skippedItemIDs，
 
 B06 新增 V3 Term 可選 `reviewExposedUntil`，由 V3 TermHistory DTO 保存，不修改嵌套的凍結 V1/V2 payload。正式揭示時持久化最晚答案曝光日界；即使最後一張卡被刪除，新方向仍受當日保護。缺省 nil 不補造歷史，單獨刪卡保留、刪詞移除。clozeTarget JSON 新增可選 `sourceChangedAt`，與 `sourceDeletedAt` 互斥。這兩種新字段由普通備份和修復證據 format=4 保護，含任一字段而降標 1/2/3 必須拒絕；舊無字段資料仍可讀。此為未發布 V3 原型變更，不保證舊原型 SQLite 直接跨模型開啟。
 
+B08 第一批新增 payload 層可空 `learningPreferences`，不是 SwiftData 實體。其 version=1，包含 defaultCourseID（可空且必須指向備份內課程）、defaultLookupIntent、reviewTargetCards（整數 5-100）和 reviewDailyNewLimit（整數 0-50）。普通備份和修復證據新寫出 format=5；新 reader 讀取 1-5，但有此字段而降標 1-4 必須拒絕。缺省 nil 保持舊 payload/checksum 契約；V3 恢復舊快照後套用 No Course/Automatic/20/10，不繼承恢復前的本機預設。外觀/來源仍在原 Preferences，V1/V2 定義不變。
+
 揭示答案時將已啟用 sibling 的 buriedUntil 保存為次日本地日開始，並把本組相應項標為 siblingDeferred；此為防洩題狀態，不寫作答事件。重學中的同一卡不視為自己的 sibling。暫時埋藏不改原間隔，次日自動恢復資格。
 
 V1/V2 -> V3：每個 Term 的舊排程只複製至一張主卡，方向取最後有效事件，無事件則 englishToChinese。nextReviewAt 為 nil 的主卡保持 suspended；不要自動激活。其他方向歷史事件保留原 mode/ID，cardID 可為 nil 並標 legacy；不為補齊外鍵建立一批到期卡。未見過的方向按新卡啟用，不借用另一方向 streak 或掌握程度。
@@ -423,6 +425,8 @@ V3 新詞的三種入口（手動、單候選、批量）只建立一張獨立 n
 V3 完整快照的 content 復用 V2 字段值定義，另存一對一 termHistories/eventStates、cards、sessions、sessionItems；不能單獨導出 content 作為完整 V3。SwiftData 存儲 scope/cloze/排程歷史時用排序鍵 JSON，adapter 嚴格解碼，損壞內容不能回退為空值。卡片/會話的業務唯一鍵、單一可恢復會話、跨表引用、actionID、事件前後摘要及會話作答數均由完整快照校驗。
 
 V3 的 `WordNoteBackupCounts` 包含 cards/sessions/sessionItems；舊版摘要這三欄為 0，但 V1/V2 持久快照和恢復日誌仍使用各自五/八類 counts，不藉新增可選字段放寬舊文件。V3 日誌為 version 3，十一欄必填，staging 建庫/重開與正式啟用皆核對完整 payload/checksum。遷移時間固定為此次驗證通過的 beforeMigration/beforeRestore.createdAt；原卡 ID、會話游標、已刪卡 tombstone、cloze 範圍均逐值保留。
+
+B08 在上述日誌加入偏好傳遞能力：pending.learningPreferences 和 learningPreferencesToApply 存在時要求 version=4，counts/SQLite schema 不變。取消或回退保留日誌能力版本，不降回 3。新版 V3 可讀 1-4；V1/V2 reader 在修改前拒絕高版本。待套用偏好與原 Preferences 回執共同確認清除，重啟未確認時繼續套用；新偏好亦参与 staging/checksum、完整性預覽和受保護修復的過期檢查。見 [B08 第一批](qa/2026-10-08-b08-portable-preferences.md)。
 
 本批遷移細則：
 

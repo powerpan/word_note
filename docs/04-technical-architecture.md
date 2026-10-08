@@ -589,6 +589,14 @@ V3 詞库撤下 Term mastery 編輯/篩選，改為獨立卡片閱讀、方向�
 
 卡片深鏈只在詞庫閱讀指定 term/card，失效 ID 顯示不可用，不替換成鄰近項、不作答。課程復習僅預選新組參數，已有持久組保持原範圍；加詞在保護通過後只更改當前 capture course，不改持久預設、source/intent 或已排隊請求。`RememberingList`/`RememberingScrollView` 記錄最上方可見行，窗口各自恢復。V3 詞庫的方向/mastery/state 必須同時匹配同一張卡；無卡片條件時仍可閱讀無卡詞條，不能以 Term 的 legacy mastery 代替卡片能力。新增 `learning` 合成 fixture 供長列表驗證，原 `populated` fixture 不變。證據及原生限制見 [B07](qa/2026-10-08-b07-learning-navigation.md)。
 
+### 可攜式偏好（B08 第一批）
+
+`WordNoteLearningPreferences` 是版本為 1 的白名單值型，只含預設課程、查詢方向、組大小和每日新卡限額。它復用既有本機 storage keys，但不讀取當前捕獲上下文、窗口狀態、快捷鍵或 API 設定。V3 runtime 注入捕獲 provider；V1/V2 不附加此值，也不擴寫其凍結的 Preferences/codec。
+
+V3 快照/修復證據新寫出 format=5，payload 的可空 learningPreferences 缺省 nil，舊無字段 payload 的形狀不變。備份先固定兩組偏好，再做后台一致捕獲；返回後重讀比較，期間變動即拒絕，不把過期設定標成當前備份。Settings 中只改捕獲預設或學習限額亦觸發既有自動備份節流，checksum 包含新增值。
+
+新增偏好隨 staging/checksum 和切庫日誌 version=4 傳遞；SQLite schema 仍為 V3。切換完成後保留待套用回執，runtime 驗證課程引用、寫入/同步偏好後才一次確認清除兩組回執。部分偏好寫入失敗時不清回執，重啟可以重試；不承諾 UserDefaults 多 key 寫入具備資料庫交易原子性。恢復舊快照使用 No Course/Automatic/20/10，普通重開則不重套預設。正常啟動不因本機偏好損壞而封鎖 Settings，備份仍嚴格拒絕無效值；匯入的錯誤課程引用不可静默回退。受保護修復前後亦比較新增偏好，過期預覽不能提交。證據及尚未通過的原生出口見 [B08 偏好備份](qa/2026-10-08-b08-portable-preferences.md)。
+
 ### 備份、恢復與啟動
 
 備份取得一致、不可變的 DTO 後才序列化及原子寫文件，不跨 executor 共用可變 ModelContext/model。A01 大庫測量發現 MainActor 全量捕獲會阻塞，因此日常/手動備份改用樂觀一致性讀取：V1 先保存當前已修改 context；V2 若存在直接模型的未提交修改則拒絕捕獲，不代替 revision 交易提交或丟棄表單。后台 worker 建自己的唯讀 context，讀取前後同步比較同容器的 willSave/didSave 計數；有任何保存或主 context 待保存修改就丟棄整次讀取並重試，最多三次，仍不穩定則保留舊備份並明確報錯。V2 重試時仍檢查未提交修改。不能把混合版本或只截取部分實體的結果當成成功快照。
@@ -649,7 +657,7 @@ version 2 日誌的 pending.operation 區分 restore/migration，缺值兼容既
 
 `request` 同步複製原文、note、courseID、sourceType、LookupIntent 和 CaptureSurface，產生新的 captureID；主/浮窗都把不可變 request 交給唯一 queue。解析方向由 `LookupIntent.resolvedDirection` 集中路由到凍結的 `LookupDirectionDetectorV1` 或顯式方向，畫面提示與保存不使用兩套規則。既有記錄/草稿、解析嘗試和備份均沿用 A02 的持久化捕獲字段；修改當前值或預設不能回寫排隊內容。
 
-這批不修改 V1/V2 快照 bytes/checksum 契約。新增 defaultCourse/intent 尚不隨邏輯備份恢復，current 永不備份；B08 要用顯式版本化 adapter 擴充偏好白名單並驗證舊快照，未完成前禁止宣称最終偏好恢復驗收。細節和測試見 [B02 共享上下文證據](qa/2026-10-08-b02-capture-context.md)。
+這批不修改 V1/V2 快照 bytes/checksum 契約。B02 交付時 defaultCourse/intent 尚不隨邏輯備份恢復，current 永不備份；後續 B08 第一批已在隔離 V3 補版本化偏好 adapter 和舊快照缺省，統一 Settings/原生驗收仍未完成。B02 原始細節和測試見 [共享上下文證據](qa/2026-10-08-b02-capture-context.md)。
 
 ### 捕獲結果與窗口路由（B02 第三批）
 

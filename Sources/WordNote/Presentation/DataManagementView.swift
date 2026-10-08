@@ -168,26 +168,37 @@ private struct RestorePreviewView: View {
         let document = preview.snapshot.summary
         VStack(alignment: .leading, spacing: 16) {
             Text("Restore Backup").font(.title2.weight(.semibold))
-            Grid(alignment: .leading, horizontalSpacing: 20, verticalSpacing: 8) {
-                GridRow { Text("Created"); Text(document.createdAt, format: .dateTime.year().month().day().hour().minute()) }
-                GridRow { Text("Schema / Format"); Text("\(document.schemaVersion.rawValue) / \(formatVersion)") }
-                GridRow { Text("App Version"); Text(document.appVersion) }
-                GridRow { Text("Vocabulary"); Text("\(document.counts.terms)") }
-                GridRow { Text("Input Records"); Text("\(document.counts.inputRecords)") }
-                GridRow { Text("Candidates"); Text("\(document.counts.candidates)") }
-                GridRow { Text("Courses"); Text("\(document.counts.courses)") }
-                GridRow { Text("Review Events"); Text("\(document.counts.reviewEvents)") }
-                if document.schemaVersion != .v1 {
-                    GridRow { Text("Sources"); Text("\(document.counts.occurrences)") }
-                    GridRow { Text("Course Links"); Text("\(document.counts.courseLinks)") }
-                    GridRow { Text("Lookup Events"); Text("\(document.counts.lookupEvents)") }
+            ScrollView {
+                Grid(alignment: .leading, horizontalSpacing: 20, verticalSpacing: 8) {
+                    GridRow { Text("Created"); Text(document.createdAt, format: .dateTime.year().month().day().hour().minute()) }
+                    GridRow { Text("Schema / Format"); Text("\(document.schemaVersion.rawValue) / \(formatVersion)") }
+                    GridRow { Text("App Version"); Text(document.appVersion) }
+                    GridRow { Text("Vocabulary"); Text("\(document.counts.terms)") }
+                    GridRow { Text("Input Records"); Text("\(document.counts.inputRecords)") }
+                    GridRow { Text("Candidates"); Text("\(document.counts.candidates)") }
+                    GridRow { Text("Courses"); Text("\(document.counts.courses)") }
+                    GridRow { Text("Review Events"); Text("\(document.counts.reviewEvents)") }
+                    if document.schemaVersion != .v1 {
+                        GridRow { Text("Sources"); Text("\(document.counts.occurrences)") }
+                        GridRow { Text("Course Links"); Text("\(document.counts.courseLinks)") }
+                        GridRow { Text("Lookup Events"); Text("\(document.counts.lookupEvents)") }
+                    }
+                    if document.schemaVersion == .v3 {
+                        GridRow { Text("Review Cards"); Text("\(document.counts.cards)") }
+                        GridRow { Text("Review Sessions"); Text("\(document.counts.sessions)") }
+                        GridRow { Text("Session Items"); Text("\(document.counts.sessionItems)") }
+                    }
+                    #if WORDNOTE_V3_VALIDATION
+                    let learning = preview.snapshot.payload.learningPreferences ?? .init()
+                    GridRow { Text("Default course"); Text(defaultCourseName(learning.defaultCourseID)).fixedSize(horizontal: false, vertical: true) }
+                    GridRow { Text("Default direction"); Text(learning.defaultLookupIntent.displayTitle) }
+                    GridRow { Text("Group size"); Text(String(learning.reviewTargetCards)) }
+                    GridRow { Text("Daily new-card limit"); Text(String(learning.reviewDailyNewLimit)) }
+                    #endif
                 }
-                if document.schemaVersion == .v3 {
-                    GridRow { Text("Review Cards"); Text("\(document.counts.cards)") }
-                    GridRow { Text("Review Sessions"); Text("\(document.counts.sessions)") }
-                    GridRow { Text("Session Items"); Text("\(document.counts.sessionItems)") }
-                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .frame(maxHeight: 360)
             Text("This replaces all learning data, not a merge. A safety backup is required first. Word Note will quit; the replacement opens on its next launch. Unfinished AI requests will remain paused.")
                 .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             Toggle("Replace current data and discard unsaved forms in all windows", isOn: $replacementAcknowledged)
@@ -209,5 +220,11 @@ private struct RestorePreviewView: View {
         }
         .padding(24)
         .frame(width: 500)
+    }
+
+    private func defaultCourseName(_ id: UUID?) -> String {
+        guard let id else { return "No Course" }
+        guard case .v3(let payload) = preview.snapshot.payload else { return "No Course" }
+        return payload.content.content.courses.first { $0.id == id }?.courseName ?? "Unavailable course"
     }
 }

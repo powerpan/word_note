@@ -41,13 +41,6 @@ public final class CaptureContextController {
     @ObservationIgnored private var availableCourseIDs: Set<UUID>
 
     private enum Field { case course, source, intent }
-    // The source stays in the existing backup-whitelisted preference. B08 will version
-    // backup support for these additional defaults; current selections are never backed up.
-    private struct AdditionalDefaults: Codable {
-        var version = 1
-        var courseID: UUID?
-        var intent: LookupIntent
-    }
 
     public init(preferences: UserDefaults, availableCourseIDs: Set<UUID>) {
         self.preferences = preferences
@@ -62,7 +55,7 @@ public final class CaptureContextController {
         }
         if preferences.object(forKey: Self.storageKey) != nil {
             if let data = preferences.data(forKey: Self.storageKey),
-               let saved = try? JSONDecoder().decode(AdditionalDefaults.self, from: data), saved.version == 1 {
+               let saved = try? JSONDecoder().decode(StoredCaptureDefaults.self, from: data), saved.version == 1 {
                 selection.courseID = saved.courseID
                 selection.intent = saved.intent
             } else {
@@ -146,7 +139,7 @@ public final class CaptureContextController {
     }
 
     private func persistAdditionalDefaults(_ selection: CaptureContextSelection) throws {
-        let data = try JSONEncoder().encode(AdditionalDefaults(courseID: selection.courseID, intent: selection.intent))
+        let data = try JSONEncoder().encode(StoredCaptureDefaults(courseID: selection.courseID, intent: selection.intent))
         preferences.set(data, forKey: Self.storageKey)
     }
 }

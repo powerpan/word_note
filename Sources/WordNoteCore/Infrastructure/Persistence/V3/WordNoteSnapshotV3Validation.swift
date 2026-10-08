@@ -4,6 +4,7 @@ import Foundation
 extension WordNoteSnapshotV3Payload {
     public func validate() throws {
         try content.validate()
+        try learningPreferences?.validate(courseIDs: Set(content.content.courses.map(\.id)))
         guard counts.total <= WordNoteSnapshotPayload.maximumEntityCount else { throw WordNoteSnapshotError.sizeLimit }
         let terms = try indexed(content.content.terms, by: \.id)
         let historyByID = try indexed(termHistories, by: \.id)

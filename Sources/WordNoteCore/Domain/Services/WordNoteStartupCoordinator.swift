@@ -40,6 +40,7 @@ public final class WordNoteStartupCoordinator {
     @ObservationIgnored private let store: WordNoteRestoreStore
     @ObservationIgnored private let vault: WordNoteBackupVault
     @ObservationIgnored private let preferences: @MainActor () -> WordNoteSnapshotPayload.Preferences
+    @ObservationIgnored private let learningPreferences: @MainActor () throws -> WordNoteLearningPreferences?
     @ObservationIgnored private let evidenceVault: WordNoteRepairEvidenceVault
     @ObservationIgnored private let v3EvidenceVault: WordNoteV3RepairEvidenceVault
     @ObservationIgnored private var repairPlan: RepairPlan?
@@ -50,11 +51,13 @@ public final class WordNoteStartupCoordinator {
         store: WordNoteRestoreStore, vault: WordNoteBackupVault,
         preferences: @escaping @MainActor () -> WordNoteSnapshotPayload.Preferences,
         evidenceVault: WordNoteRepairEvidenceVault? = nil,
-        v3EvidenceVault: WordNoteV3RepairEvidenceVault? = nil
+        v3EvidenceVault: WordNoteV3RepairEvidenceVault? = nil,
+        learningPreferences: @escaping @MainActor () throws -> WordNoteLearningPreferences? = { nil }
     ) {
         self.store = store
         self.vault = vault
         self.preferences = preferences
+        self.learningPreferences = learningPreferences
         self.evidenceVault = evidenceVault ?? WordNoteRepairEvidenceVault(directoryURL: vault.directoryURL.appending(path: "RepairEvidence"))
         self.v3EvidenceVault = v3EvidenceVault ?? WordNoteV3RepairEvidenceVault(directoryURL: vault.directoryURL.appending(path: "RepairEvidenceV3"))
     }
@@ -85,7 +88,8 @@ public final class WordNoteStartupCoordinator {
             sourceSession = opened
             let frozenPreferences = opened.preferencesToApply ?? preferences()
             if opened.schemaVersion == store.targetSchema {
-                _ = try await capture(opened, preferences: frozenPreferences)
+                // Local preference errors must remain fixable in Settings. Pending restored values are still validated.
+                _ = try await capture(opened, preferences: frozenPreferences, includeLocalLearningPreferences: false)
                 session = opened
                 sourceSession = nil
                 phase = .ready
@@ -292,10 +296,11 @@ public final class WordNoteStartupCoordinator {
 
     private func captureForRepair(_ source: WordNoteStoreSession) async throws -> WordNoteVersionedPayload {
         let frozenPreferences = source.preferencesToApply ?? preferences()
+        let learning = try sourceLearningPreferences(source)
         let payload = try await WordNoteSnapshotCapture.captureVersionedForIntegrityInspection(
-            container: source.container, preferences: frozenPreferences
+            container: source.container, preferences: frozenPreferences, learningPreferences: learning
         )
-        guard frozenPreferences == (source.preferencesToApply ?? preferences()) else {
+        guard frozenPreferences == (source.preferencesToApply ?? preferences()), learning == (try sourceLearningPreferences(source)) else {
             if source.schemaVersion == .v3 { throw WordNoteV3IntegrityError.staleRepairPlan }
             throw WordNoteV2IntegrityError.staleRepairPlan
         }
@@ -303,10 +308,23 @@ public final class WordNoteStartupCoordinator {
     }
 
     private func capture(
-        _ source: WordNoteStoreSession, preferences: WordNoteSnapshotPayload.Preferences
+        _ source: WordNoteStoreSession, preferences: WordNoteSnapshotPayload.Preferences,
+        includeLocalLearningPreferences: Bool = true
     ) async throws -> WordNoteVersionedPayload {
-        try await WordNoteSnapshotCapture(container: source.container)
-            .captureVersioned(preferences: preferences, requireCleanContext: true)
+        let learning = try sourceLearningPreferences(source, includeLocal: includeLocalLearningPreferences)
+        let payload = try await WordNoteSnapshotCapture(container: source.container)
+            .captureVersioned(preferences: preferences, requireCleanContext: true, learningPreferences: learning)
+        guard preferences == (source.preferencesToApply ?? self.preferences()),
+              learning == (try sourceLearningPreferences(source, includeLocal: includeLocalLearningPreferences)) else {
+            throw WordNoteStartupMigrationError.sourceChanged
+        }
+        return payload
+    }
+
+    private func sourceLearningPreferences(_ source: WordNoteStoreSession, includeLocal: Bool = true) throws -> WordNoteLearningPreferences? {
+        guard source.schemaVersion == .v3 else { return nil }
+        if source.preferencesToApply != nil { return source.learningPreferencesToApply }
+        return includeLocal ? try learningPreferences() : nil
     }
 
     private func validateSource(

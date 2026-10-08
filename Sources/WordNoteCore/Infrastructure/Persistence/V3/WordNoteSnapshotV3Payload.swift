@@ -8,6 +8,7 @@ public struct WordNoteSnapshotV3Payload: Codable, Equatable, Sendable {
     public var sessions: [Session]
     public var sessionItems: [SessionItem]
     public var eventStates: [EventState]
+    public var learningPreferences: WordNoteLearningPreferences? = nil
 
     public var canonicalized: Self {
         var result = self
@@ -27,8 +28,10 @@ public struct WordNoteSnapshotV3Payload: Codable, Equatable, Sendable {
 
     /// This method must run on the context's owning executor. V1/V2 readers reject V3 stores.
     public static func capture(from context: ModelContext,
-                               preferences: WordNoteSnapshotPayload.Preferences = .init()) throws -> Self {
-        let result = try captureForIntegrityInspection(from: context, preferences: preferences)
+                               preferences: WordNoteSnapshotPayload.Preferences = .init(),
+                               learningPreferences: WordNoteLearningPreferences? = nil) throws -> Self {
+        var result = try captureForIntegrityInspection(from: context, preferences: preferences)
+        result.learningPreferences = learningPreferences
         try result.validate()
         return result
     }

@@ -43,7 +43,8 @@ public struct WordNoteSnapshotCapture {
     }
 
     public func captureVersioned(
-        preferences: WordNoteSnapshotPayload.Preferences = .init(), requireCleanContext: Bool = false
+        preferences: WordNoteSnapshotPayload.Preferences = .init(), requireCleanContext: Bool = false,
+        learningPreferences: WordNoteLearningPreferences? = nil
     ) async throws -> WordNoteVersionedPayload {
         let schema: WordNoteDataSchemaVersion
         switch container.schema.version {
@@ -65,7 +66,9 @@ public struct WordNoteSnapshotCapture {
                 let payload = try await reader(container, preferences)
                 try Task.checkCancellation()
                 guard payload.schemaVersion == schema else { throw WordNoteSnapshotError.unsupportedSchema }
-                if changes.revision == revision, !container.mainContext.hasChanges { return payload }
+                if changes.revision == revision, !container.mainContext.hasChanges {
+                    return try payload.includingLearningPreferences(learningPreferences, validatingReferences: true)
+                }
             } catch {
                 try Task.checkCancellation()
                 // A concurrent save may temporarily invalidate cross-entity references; retry the whole read.
@@ -86,7 +89,8 @@ public struct WordNoteSnapshotCapture {
     }
 
     static func captureVersionedForIntegrityInspection(
-        container: ModelContainer, preferences: WordNoteSnapshotPayload.Preferences
+        container: ModelContainer, preferences: WordNoteSnapshotPayload.Preferences,
+        learningPreferences: WordNoteLearningPreferences? = nil
     ) async throws -> WordNoteVersionedPayload {
         guard [WordNoteSchemaV2.versionIdentifier, WordNoteSchemaV3.versionIdentifier].contains(container.schema.version) else {
             throw WordNoteSnapshotError.unsupportedSchema
@@ -95,6 +99,7 @@ public struct WordNoteSnapshotCapture {
             try await readVersionedOnBackgroundExecutor(container: container, preferences: preferences, integrityInspection: true)
         }
         return try await reader.captureVersioned(preferences: preferences, requireCleanContext: true)
+            .includingLearningPreferences(learningPreferences)
     }
 
     nonisolated static func readOnBackgroundExecutor(

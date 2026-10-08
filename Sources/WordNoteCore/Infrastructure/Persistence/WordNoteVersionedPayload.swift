@@ -105,6 +105,19 @@ public enum WordNoteVersionedPayload: Equatable, Sendable {
         }
     }
 
+    public var learningPreferences: WordNoteLearningPreferences? {
+        guard case .v3(let payload) = self else { return nil }
+        return payload.learningPreferences
+    }
+
+    func includingLearningPreferences(_ preferences: WordNoteLearningPreferences?, validatingReferences: Bool = false) throws -> Self {
+        guard let preferences else { return self }
+        guard case .v3(var payload) = self else { throw WordNoteSnapshotError.unsupportedSchema }
+        if validatingReferences { try preferences.validate(courseIDs: Set(payload.content.content.courses.map(\.id))) }
+        payload.learningPreferences = preferences
+        return .v3(payload)
+    }
+
     public func validate() throws {
         switch self {
         case .v1(let payload): try payload.validate()
@@ -162,12 +175,17 @@ public enum WordNoteVersionedPayload: Equatable, Sendable {
 
     /// Access must stay on the context's owning executor, including on a background reader.
     public static func capture(
-        from context: ModelContext, preferences: WordNoteSnapshotPayload.Preferences = .init()
+        from context: ModelContext, preferences: WordNoteSnapshotPayload.Preferences = .init(),
+        learningPreferences: WordNoteLearningPreferences? = nil
     ) throws -> Self {
+        guard learningPreferences == nil || context.container.schema.version == WordNoteSchemaV3.versionIdentifier else {
+            throw WordNoteSnapshotError.unsupportedSchema
+        }
         switch context.container.schema.version {
         case WordNoteSchemaV1.versionIdentifier: return .v1(try WordNoteSnapshotPayload.capture(from: context, preferences: preferences))
         case WordNoteSchemaV2.versionIdentifier: return .v2(try WordNoteSnapshotV2Payload.capture(from: context, preferences: preferences))
-        case WordNoteSchemaV3.versionIdentifier: return .v3(try WordNoteSnapshotV3Payload.capture(from: context, preferences: preferences))
+        case WordNoteSchemaV3.versionIdentifier:
+            return .v3(try WordNoteSnapshotV3Payload.capture(from: context, preferences: preferences, learningPreferences: learningPreferences))
         default: throw WordNoteSnapshotError.unsupportedSchema
         }
     }

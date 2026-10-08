@@ -192,7 +192,7 @@ final class WordNoteV3NewCardQuotaTests: XCTestCase {
             XCTAssertEqual(read.payload, source.canonicalized)
             let url = await vault.fileURL(saved.summary.id)
             var document = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
-            XCTAssertEqual(document["evidenceFormatVersion"] as? Int, 4)
+            XCTAssertEqual(document["evidenceFormatVersion"] as? Int, 5)
             document["evidenceFormatVersion"] = 1
             try PrivateFileIO.write(JSONSerialization.data(withJSONObject: document), to: url)
             do {

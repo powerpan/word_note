@@ -294,7 +294,8 @@ final class V3RecoveryHarness {
     var preferences: WordNoteSnapshotPayload.Preferences { .init(appearance: "dark", defaultSource: "book") }
 
     func capture(_ session: WordNoteStoreSession) throws -> WordNoteVersionedPayload {
-        try WordNoteVersionedPayload.capture(from: session.container.mainContext, preferences: session.preferencesToApply ?? preferences)
+        try WordNoteVersionedPayload.capture(from: session.container.mainContext, preferences: session.preferencesToApply ?? preferences,
+            learningPreferences: session.learningPreferencesToApply)
     }
 
     func seed(_ payload: WordNoteVersionedPayload) async throws -> WordNoteStoreSession {

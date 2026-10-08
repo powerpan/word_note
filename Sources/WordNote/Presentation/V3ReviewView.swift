@@ -17,8 +17,8 @@ struct ReviewView: View {
         })
     }
     @State private var confirmEnd = false
-    @AppStorage("reviewTargetCards") private var target = 20
-    @AppStorage("reviewDailyNewLimit") private var newLimit = 10
+    @AppStorage(WordNoteLearningPreferences.targetStorageKey) private var target = 20
+    @AppStorage(WordNoteLearningPreferences.newLimitStorageKey) private var newLimit = 10
 
     var body: some View {
         ScrollView {

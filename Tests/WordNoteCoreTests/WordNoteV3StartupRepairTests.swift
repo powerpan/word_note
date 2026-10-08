@@ -320,6 +320,52 @@ final class WordNoteV3StartupRepairTests: XCTestCase {
         XCTAssertEqual(opened.generation, original.generation)
     }
 
+    func testPortablePreferencesInvalidateOldRepairPreviewAndSurviveConfirmedRepair() async throws {
+        let original = try await corruptedStore(), source = try raw(original)
+        var learning = WordNoteLearningPreferences(defaultCourseID: source.content.content.courses[0].id,
+            defaultLookupIntent: .chineseToEnglish, reviewTargetCards: 35, reviewDailyNewLimit: 7)
+        let base = h.preferences
+        let coordinator = WordNoteStartupCoordinator(store: h.store, vault: h.vault, preferences: { base },
+            learningPreferences: { learning })
+        await expectFailure { try await coordinator.open() }
+        try await coordinator.inspectV3Repair(at: now)
+        learning.reviewTargetCards = 40
+        await expectFailure({ try await coordinator.repair() }) { XCTAssertEqual($0 as? WordNoteV3IntegrityError, .staleRepairPlan) }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: evidenceURL.path))
+        try await coordinator.inspectV3Repair(at: now)
+        let repaired = try await coordinator.repair()
+        let evidence = try await evidenceVault.read(id: XCTUnwrap(coordinator.v3RepairEvidence).id)
+        XCTAssertEqual(evidence.payload.learningPreferences, learning)
+        XCTAssertEqual(repaired.effectiveLearningPreferencesToApply, learning)
+        guard case .v3(let payload) = try h.capture(repaired) else { return XCTFail("Expected V3") }
+        XCTAssertEqual(payload.learningPreferences, learning)
+        XCTAssertEqual(payload.cards, source.cards)
+        XCTAssertEqual(payload.sessions, source.sessions)
+        XCTAssertEqual(try h.journal()["version"] as? Int, 4)
+    }
+
+    func testPortablePreferenceChangeDuringRepairStagingCancelsOnlyOwnCopy() async throws {
+        let original = try await corruptedStore()
+        var learning = WordNoteLearningPreferences(reviewTargetCards: 35)
+        let checkpoint = BlockingRestoreCheckpoint()
+        defer { checkpoint.release() }
+        let base = h.preferences
+        let coordinator = WordNoteStartupCoordinator(store: h.blockingStore(checkpoint), vault: h.vault,
+            preferences: { base }, learningPreferences: { learning })
+        await expectFailure { try await coordinator.open() }
+        try await coordinator.inspectV3Repair(at: now)
+        let task = Task { try await coordinator.repair() }
+        await h.waitForCheckpoint(checkpoint)
+        learning.reviewTargetCards = 40
+        checkpoint.release()
+        await expectFailure({ try await task.value }) { XCTAssertEqual($0 as? WordNoteV3IntegrityError, .staleRepairPlan) }
+        XCTAssertNil(try h.store.preparedGeneration(for: original.generation))
+        XCTAssertEqual(try h.store.open().generation, original.generation)
+        XCTAssertEqual(learning.reviewTargetCards, 40)
+        let evidence = try await evidenceVault.read(id: XCTUnwrap(coordinator.v3RepairEvidence).id)
+        XCTAssertEqual(evidence.payload.learningPreferences?.reviewTargetCards, 35)
+    }
+
     private var evidenceURL: URL { h.vault.directoryURL.appending(path: "RepairEvidenceV3") }
     private var evidenceVault: WordNoteV3RepairEvidenceVault { .init(directoryURL: evidenceURL) }
 

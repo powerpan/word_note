@@ -209,7 +209,7 @@ final class WordNoteV3ClozeCardTests: XCTestCase {
         payload = try V3SessionTestSupport.snapshot(container)
         let encoded = try WordNoteSnapshotV3Codec.encode(payload, kind: .manual)
         let decoded = try WordNoteSnapshotV3Codec.decode(encoded)
-        XCTAssertEqual(decoded.document.formatVersion, 4)
+        XCTAssertEqual(decoded.document.formatVersion, 5)
         XCTAssertEqual(decoded.payload, payload)
         let harness = V3RecoveryHarness(directory: try V3TestSupport.directory())
         defer { try? FileManager.default.removeItem(at: harness.directory) }

@@ -57,6 +57,7 @@ public final class WordNoteDataProtection {
     @ObservationIgnored private let queue: DataProtectionAnalysisQueue
     @ObservationIgnored private let schemaVersion: WordNoteDataSchemaVersion
     @ObservationIgnored private let preferences: @MainActor () -> WordNoteSnapshotPayload.Preferences
+    @ObservationIgnored private let learningPreferences: @MainActor () throws -> WordNoteLearningPreferences?
     @ObservationIgnored private var restoreTicket: WordNoteWriteGate.Ticket?
     @ObservationIgnored private var autosaveBeforeRestore = true
     @ObservationIgnored private var automaticTask: Task<Void, Never>?
@@ -85,15 +86,18 @@ public final class WordNoteDataProtection {
     public convenience init(
         session: WordNoteStoreSession, store: WordNoteRestoreStore, vault: WordNoteBackupVault,
         queue: WordNoteV3AnalysisQueue,
+        learningPreferences: @escaping @MainActor () throws -> WordNoteLearningPreferences? = { nil },
         preferences: @escaping @MainActor () -> WordNoteSnapshotPayload.Preferences
     ) {
-        self.init(session: session, store: store, vault: vault, queue: .v3(queue), preferences: preferences)
+        self.init(session: session, store: store, vault: vault, queue: .v3(queue), preferences: preferences,
+                  learningPreferences: learningPreferences)
     }
 
     private init(
         session: WordNoteStoreSession, store: WordNoteRestoreStore, vault: WordNoteBackupVault,
         queue: DataProtectionAnalysisQueue,
-        preferences: @escaping @MainActor () -> WordNoteSnapshotPayload.Preferences
+        preferences: @escaping @MainActor () -> WordNoteSnapshotPayload.Preferences,
+        learningPreferences: @escaping @MainActor () throws -> WordNoteLearningPreferences? = { nil }
     ) {
         container = session.container
         schemaVersion = session.schemaVersion
@@ -103,6 +107,7 @@ public final class WordNoteDataProtection {
         backupDirectoryURL = vault.directoryURL
         self.queue = queue
         self.preferences = preferences
+        self.learningPreferences = learningPreferences
         if session.analysisRequiresResume { queue.suspendForRestore() }
         switch session.restoreOutcome {
         case .restored: statusMessage = "Backup restored. The previous data store was retained."
@@ -351,7 +356,13 @@ public final class WordNoteDataProtection {
     }
 
     private func currentSnapshot() async throws -> WordNoteVersionedPayload {
-        try await WordNoteSnapshotCapture(container: container).captureVersioned(preferences: preferences())
+        let base = preferences(), learning = try learningPreferences()
+        let payload = try await WordNoteSnapshotCapture(container: container)
+            .captureVersioned(preferences: base, learningPreferences: learning)
+        guard base == preferences(), learning == (try learningPreferences()) else {
+            throw WordNoteSnapshotCaptureError.dataKeptChanging
+        }
+        return payload
     }
 
     private func updateInventory() async throws {

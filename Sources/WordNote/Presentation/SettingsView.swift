@@ -11,8 +11,8 @@ struct SettingsView: View {
     @State private var keyStatusMessage: String?
     @State private var keyErrorMessage: String?
     #if WORDNOTE_V3_VALIDATION
-    @AppStorage("reviewTargetCards") private var reviewTarget = 20
-    @AppStorage("reviewDailyNewLimit") private var reviewNewLimit = 10
+    @AppStorage(WordNoteLearningPreferences.targetStorageKey) private var reviewTarget = 20
+    @AppStorage(WordNoteLearningPreferences.newLimitStorageKey) private var reviewNewLimit = 10
     #endif
 
     private let environmentFileStore = DeepSeekEnvironmentFileStore(
@@ -131,6 +131,11 @@ struct SettingsView: View {
         .onAppear(perform: loadKeyStatus)
         .onChange(of: appearanceRawValue) { dataProtection.noteDataChanged() }
         .onChange(of: defaultSourceType) { dataProtection.noteDataChanged() }
+        #if WORDNOTE_V3_VALIDATION
+        .onChange(of: reviewTarget) { dataProtection.noteDataChanged() }
+        .onChange(of: reviewNewLimit) { dataProtection.noteDataChanged() }
+        .onChange(of: captureContext?.defaultContext) { dataProtection.noteDataChanged() }
+        #endif
     }
 
     private func loadKeyStatus() {
