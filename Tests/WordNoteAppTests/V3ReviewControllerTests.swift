@@ -93,6 +93,90 @@ final class V3ReviewControllerTests: XCTestCase {
         XCTAssertEqual(try snapshot(container).eventStates.count, 1)
     }
 
+    func testReactivationRefreshesOtherWindowScoresWithoutTakingItsLease() throws {
+        let container = try fixture(count: 2)
+        let returning = try started(container)
+        returning.reveal(at: now)
+        returning.setWindowActive(false)
+
+        let answering = try V3ReviewController(container: container)
+        answering.setWindowActive(true)
+        answering.resume(at: now)
+        answering.reveal(at: now)
+        answering.answer(.good, at: now)
+        XCTAssertEqual(answering.statistics?.reviewed, 1)
+        let saved = try snapshot(container)
+
+        returning.setWindowActive(true)
+        XCTAssertEqual(returning.statistics?.reviewed, 1)
+        XCTAssertEqual(returning.statistics?.answers.answerCount, 1)
+        XCTAssertEqual(returning.session?.session.revision, saved.sessions.first?.revision)
+        XCTAssertNil(returning.front)
+        XCTAssertNil(returning.back)
+        XCTAssertFalse(returning.ownsSession)
+        XCTAssertTrue(answering.ownsSession)
+        XCTAssertTrue(answering.canReveal)
+        XCTAssertEqual(try snapshot(container), saved)
+    }
+
+    func testReactivationRefreshesGroupEndedByAnotherWindowWithoutWriting() throws {
+        let container = try fixture()
+        let returning = try started(container)
+        returning.setWindowActive(false)
+        let ending = try V3ReviewController(container: container)
+        ending.setWindowActive(true)
+        ending.load(at: now)
+        ending.end(at: now)
+        XCTAssertEqual(ending.session?.session.status, .ended)
+        let saved = try snapshot(container)
+
+        returning.setWindowActive(true)
+        XCTAssertEqual(returning.session?.session.status, .ended)
+        XCTAssertFalse(returning.ownsSession)
+        XCTAssertNil(returning.front)
+        XCTAssertNil(returning.back)
+        XCTAssertEqual(try snapshot(container), saved)
+    }
+
+    func testFocusRefreshWaitsForMaintenanceAndDoesNotPresentACard() throws {
+        let container = try fixture(count: 2)
+        let returning = try started(container)
+        returning.setWindowActive(false)
+        returning.setAvailable(false)
+        let answering = try V3ReviewController(container: container)
+        answering.setWindowActive(true)
+        answering.resume(at: now)
+        answering.reveal(at: now)
+        answering.answer(.good, at: now)
+        answering.setWindowActive(false)
+        let saved = try snapshot(container)
+
+        returning.setWindowActive(true)
+        XCTAssertEqual(returning.statistics?.reviewed, 0)
+        returning.setAvailable(true)
+        XCTAssertEqual(returning.statistics?.reviewed, 1)
+        XCTAssertFalse(returning.ownsSession)
+        XCTAssertNil(returning.front)
+        XCTAssertNil(returning.back)
+        XCTAssertEqual(try snapshot(container), saved)
+    }
+
+    func testRepeatedActiveNotificationsPreserveRevealedAnswerAndLease() throws {
+        let container = try fixture()
+        let controller = try started(container)
+        controller.typedAnswer = "my answer"
+        controller.reveal(at: now)
+        let saved = try snapshot(container)
+        let revealed = controller.back
+        controller.setWindowActive(true)
+        controller.setAvailable(true)
+        XCTAssertEqual(controller.back, revealed)
+        XCTAssertEqual(controller.typedAnswer, "my answer")
+        XCTAssertTrue(controller.canAnswer)
+        XCTAssertTrue(controller.ownsSession)
+        XCTAssertEqual(try snapshot(container), saved)
+    }
+
     func testReturnAndTypingKeysAreNeverCaptured() throws {
         let container = try fixture()
         let controller = try started(container)

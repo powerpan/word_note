@@ -38,13 +38,17 @@ final class V3ReviewController {
     }
 
     func setWindowActive(_ active: Bool) {
+        guard active != isWindowActive else { return }
         isWindowActive = active
         if !active { release() }
+        else if isAvailable { load() }
     }
 
     func setAvailable(_ available: Bool) {
+        guard available != isAvailable else { return }
         isAvailable = available
         if !available { release() }
+        else if isWindowActive { load() }
     }
 
     func release() {
