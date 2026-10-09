@@ -48,6 +48,11 @@ struct SettingsView: View {
                 }
                 .groupBoxStyle(WordNoteGroupBoxStyle())
 
+                GroupBox("Keyboard Shortcuts") {
+                    CommandShortcutToggle().padding(.vertical, 4)
+                }
+                .groupBoxStyle(WordNoteGroupBoxStyle())
+
                 if let captureShortcut { CaptureShortcutSettings(controller: captureShortcut) }
 
                 GroupBox("Defaults") {

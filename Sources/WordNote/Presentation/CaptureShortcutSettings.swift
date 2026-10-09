@@ -48,7 +48,9 @@ struct CaptureShortcutSettings: View {
                     }
                 }
                 if !draft.isValid { Text(AppLocalization.shortcutError(CaptureShortcutError.invalidCombination)).foregroundStyle(.secondary) }
-                if !controller.isAvailable {
+                if !controller.commandShortcutsEnabled {
+                    Label("Command Shortcuts Disabled", systemImage: "keyboard")
+                } else if !controller.isAvailable {
                     Label("Unavailable during data maintenance", systemImage: "pause.circle")
                 } else if let active = controller.activeShortcut {
                     Label("Registered: \(active.title)", systemImage: "keyboard")

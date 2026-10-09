@@ -135,7 +135,7 @@ struct WordNoteApp: App {
                 } label: {
                     Label("Quick Add", systemImage: "plus.circle")
                 }
-                .keyboardShortcut("n", modifiers: [.command, .shift])
+                .commandShortcut("n", modifiers: [.command, .shift])
                 .disabled(startupIssue != nil || dataProtection?.isRestoring == true)
             }
         }

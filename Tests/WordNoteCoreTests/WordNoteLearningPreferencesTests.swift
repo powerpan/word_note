@@ -29,6 +29,7 @@ final class WordNoteLearningPreferencesTests: XCTestCase {
         defaults.set(35, forKey: WordNoteLearningPreferences.targetStorageKey)
         defaults.set(7, forKey: WordNoteLearningPreferences.newLimitStorageKey)
         defaults.set("device-only-test-value", forKey: "captureShortcut")
+        defaults.set(true, forKey: CommandShortcutPreference.storageKey)
         defaults.set("synthetic-placeholder", forKey: "DEEPSEEK_API_KEY")
         let captured = try WordNoteLearningPreferences.capture(from: defaults)
         XCTAssertEqual(captured, .init(defaultCourseID: first, defaultLookupIntent: .chineseToEnglish,
@@ -45,12 +46,14 @@ final class WordNoteLearningPreferencesTests: XCTestCase {
             reviewTargetCards: 100, reviewDailyNewLimit: 0)
         defaults.set("paper", forKey: CaptureContextController.sourceStorageKey)
         defaults.set("device-shortcut", forKey: "captureShortcut")
+        defaults.set(false, forKey: CommandShortcutPreference.storageKey)
         try value.apply(to: defaults, courseIDs: [course])
         let reopened = try XCTUnwrap(UserDefaults(suiteName: suite))
         XCTAssertEqual(try WordNoteLearningPreferences.capture(from: reopened), value)
         let context = CaptureContextController(preferences: reopened, availableCourseIDs: [course])
         XCTAssertEqual(context.current, .init(courseID: course, sourceType: .paper, intent: .englishToChinese))
         XCTAssertEqual(reopened.string(forKey: "captureShortcut"), "device-shortcut")
+        XCTAssertFalse(CommandShortcutPreference.isEnabled(in: reopened))
     }
 
     func testInvalidVersionLimitsAndCourseReferenceFailBeforeWritingDefaults() throws {

@@ -29,6 +29,7 @@ struct VocabularyCompletionEditor: NSViewRepresentable {
     }
 
     @Binding var text: String
+    @AppStorage(CommandShortcutPreference.storageKey) private var commandShortcutsEnabled = CommandShortcutPreference.defaultValue
     let vocabulary: [String]
     let placeholder: String
     let style: Style
@@ -78,6 +79,7 @@ struct VocabularyCompletionEditor: NSViewRepresentable {
         textView.submitHandler = onSubmit
         textView.escapeHandler = onEscape
         textView.commandSubmitHandler = onCommandSubmit
+        textView.commandShortcutsEnabled = commandShortcutsEnabled
         textView.bindingUpdateHandler = { [weak coordinator] updatedText in
             coordinator?.updateBinding(with: updatedText)
         }
@@ -264,6 +266,7 @@ final class CompletionTextView: NSTextView {
     var submitHandler: (() -> Void)?
     var escapeHandler: (() -> Void)?
     var commandSubmitHandler: (() -> Void)?
+    var commandShortcutsEnabled = false
     var bindingUpdateHandler: ((String) -> Void)?
 
     private var completion: VocabularyCompletion?
@@ -288,7 +291,7 @@ final class CompletionTextView: NSTextView {
 
     override func keyDown(with event: NSEvent) {
         let startedWithMarkedText = hasMarkedText()
-        if !startedWithMarkedText, isCommandReturn(event), commandSubmitHandler != nil {
+        if commandShortcutsEnabled, !startedWithMarkedText, isCommandReturn(event), commandSubmitHandler != nil {
             submitCommandReturn()
             return
         }
@@ -306,7 +309,7 @@ final class CompletionTextView: NSTextView {
     }
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        guard (window == nil || window?.firstResponder === self),
+        guard commandShortcutsEnabled, (window == nil || window?.firstResponder === self),
               isCommandReturn(event), commandSubmitHandler != nil else {
             return super.performKeyEquivalent(with: event)
         }

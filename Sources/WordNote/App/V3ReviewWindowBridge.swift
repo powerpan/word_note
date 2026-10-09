@@ -1,16 +1,22 @@
 import AppKit
 import SwiftUI
+import WordNoteCore
 
 struct V3ReviewWindowBridge: NSViewRepresentable {
     let controller: V3ReviewController
+    @AppStorage(CommandShortcutPreference.storageKey) private var commandShortcutsEnabled = CommandShortcutPreference.defaultValue
 
     func makeCoordinator() -> Coordinator { Coordinator(controller) }
     func makeNSView(context: Context) -> CaptureResultWindowBridge.Probe {
         let view = CaptureResultWindowBridge.Probe()
+        context.coordinator.commandShortcutsEnabled = commandShortcutsEnabled
         view.windowChanged = { [weak coordinator = context.coordinator] in coordinator?.attach($0) }
         return view
     }
-    func updateNSView(_ view: CaptureResultWindowBridge.Probe, context: Context) { context.coordinator.attach(view.window) }
+    func updateNSView(_ view: CaptureResultWindowBridge.Probe, context: Context) {
+        context.coordinator.commandShortcutsEnabled = commandShortcutsEnabled
+        context.coordinator.attach(view.window)
+    }
     static func dismantleNSView(_ view: CaptureResultWindowBridge.Probe, coordinator: Coordinator) {
         view.windowChanged = nil
         coordinator.detach()
@@ -21,6 +27,7 @@ struct V3ReviewWindowBridge: NSViewRepresentable {
         private let controller: V3ReviewController
         private weak var window: NSWindow?
         private var monitor: Any?
+        var commandShortcutsEnabled = false
 
         init(_ controller: V3ReviewController) { self.controller = controller }
 
@@ -71,7 +78,8 @@ struct V3ReviewWindowBridge: NSViewRepresentable {
             let editing = window.firstResponder is NSText || window.firstResponder is NSTextField
             let modifiers = event.modifierFlags.intersection([.command, .control, .option, .shift])
             return controller.handleKey(event.characters ?? "", isRepeat: event.isARepeat,
-                hasModifiers: !modifiers.isEmpty, isTextEditing: editing) ? nil : event
+                hasModifiers: !modifiers.isEmpty, isTextEditing: editing,
+                commandShortcutsEnabled: commandShortcutsEnabled) ? nil : event
         }
     }
 }

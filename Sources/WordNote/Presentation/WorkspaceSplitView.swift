@@ -109,7 +109,7 @@ struct WorkspaceSidebarCommands: Commands {
     var body: some Commands {
         CommandGroup(replacing: .sidebar) {
             Button(sidebar?.isHidden == true ? "Show Sidebar" : "Hide Sidebar", systemImage: "sidebar.left") { sidebar?.toggle() }
-                .keyboardShortcut("s", modifiers: [.command, .control])
+                .commandShortcut("s", modifiers: [.command, .control])
                 .disabled(sidebar == nil)
         }
     }

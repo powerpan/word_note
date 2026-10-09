@@ -21,7 +21,7 @@ public struct CaptureShortcut: Codable, Equatable, Sendable {
 
     public var key: Key
     public var modifiers: Modifiers
-    public init(key: Key = .space, modifiers: Modifiers = [.control, .option]) {
+    public init(key: Key = .space, modifiers: Modifiers = [.control, .shift]) {
         self.key = key
         self.modifiers = modifiers
     }

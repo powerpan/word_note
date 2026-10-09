@@ -34,4 +34,14 @@ final class CarbonCaptureShortcutTests: XCTestCase {
         XCTAssertNoThrow(try first.register(shortcut, id: 2) { _ in })
         try first.unregister(2)
     }
+
+    func testNativeDefaultRegistrationAndRelease() throws {
+        guard ProcessInfo.processInfo.environment["RUN_NATIVE_HOTKEY_TESTS"] == "1" else {
+            throw XCTSkip("Opt in with RUN_NATIVE_HOTKEY_TESTS=1 while the QA app is not using the default shortcut.")
+        }
+        let backend = CarbonCaptureShortcutBackend()
+        defer { try? backend.unregister(1) }
+        try backend.register(.init(), id: 1) { _ in }
+        try backend.unregister(1)
+    }
 }

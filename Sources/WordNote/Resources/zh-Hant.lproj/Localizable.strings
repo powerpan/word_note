@@ -729,3 +729,6 @@
 "The previous shortcut could not be released (macOS error %d). Retry or restart Word Note." = "無法釋放原快捷鍵（macOS 錯誤 %d），請重試或重新啟動 Word Note。";
 "AI / CS Context" = "AI / 計算機語境";
 "Revision" = "修訂版本";
+"Keyboard Shortcuts" = "快捷鍵";
+"Enable Command Shortcuts" = "啟用命令快捷鍵";
+"Command Shortcuts Disabled" = "命令快捷鍵已關閉";

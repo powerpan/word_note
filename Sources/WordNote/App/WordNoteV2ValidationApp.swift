@@ -21,6 +21,7 @@ struct WordNoteValidationApp: App {
                         .environment(\.captureShortcut, ready.shortcut)
                         .environment(\.captureContext, ready.captureContext)
                         .environment(\.captureNavigator, ready.captureNavigator)
+                        .modifier(CaptureShortcutPreferenceSync(controller: ready.shortcut))
                         .modifier(DataProtectionOverlay(protection: ready.protection))
                         .task {
                             ready.protection.startAutomaticBackups()
@@ -44,7 +45,7 @@ struct WordNoteValidationApp: App {
             CommandGroup(after: .undoRedo) { SavedChangeUndoCommand() }
             CommandMenu("Capture") {
                 Button("Quick Add", systemImage: "plus.circle") { runtime.ready?.panel.toggle() }
-                    .keyboardShortcut("n", modifiers: [.command, .shift])
+                    .commandShortcut("n", modifiers: [.command, .shift])
                     .disabled(runtime.ready == nil || runtime.ready?.protection.isRestoring == true)
             }
         }
@@ -67,6 +68,7 @@ struct WordNoteValidationApp: App {
                         .environment(ready.protection)
                         .environment(\.captureShortcut, ready.shortcut)
                         .environment(\.captureContext, ready.captureContext)
+                        .modifier(CaptureShortcutPreferenceSync(controller: ready.shortcut))
                         .modifier(DataProtectionOverlay(protection: ready.protection))
                 } else { VersionedValidationStartupView(runtime: runtime) }
             }

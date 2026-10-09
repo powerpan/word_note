@@ -96,16 +96,42 @@ final class V3ReviewControllerTests: XCTestCase {
     func testReturnAndTypingKeysAreNeverCaptured() throws {
         let container = try fixture()
         let controller = try started(container)
-        XCTAssertFalse(controller.handleKey("\r", isRepeat: false, hasModifiers: false, isTextEditing: false))
-        XCTAssertFalse(controller.handleKey(" ", isRepeat: false, hasModifiers: false, isTextEditing: true))
-        XCTAssertFalse(controller.handleKey(" ", isRepeat: true, hasModifiers: false, isTextEditing: false))
-        XCTAssertFalse(controller.handleKey(" ", isRepeat: false, hasModifiers: true, isTextEditing: false))
+        XCTAssertFalse(controller.handleKey("\r", isRepeat: false, hasModifiers: false, isTextEditing: false, commandShortcutsEnabled: true))
+        XCTAssertFalse(controller.handleKey(" ", isRepeat: false, hasModifiers: false, isTextEditing: true, commandShortcutsEnabled: true))
+        XCTAssertFalse(controller.handleKey(" ", isRepeat: true, hasModifiers: false, isTextEditing: false, commandShortcutsEnabled: true))
+        XCTAssertFalse(controller.handleKey(" ", isRepeat: false, hasModifiers: true, isTextEditing: false, commandShortcutsEnabled: true))
         XCTAssertNil(controller.back)
-        XCTAssertTrue(controller.handleKey(" ", isRepeat: false, hasModifiers: false, isTextEditing: false))
-        XCTAssertFalse(controller.handleKey("3", isRepeat: false, hasModifiers: false, isTextEditing: true))
-        XCTAssertFalse(controller.handleKey("3", isRepeat: true, hasModifiers: false, isTextEditing: false))
+        XCTAssertTrue(controller.handleKey(" ", isRepeat: false, hasModifiers: false, isTextEditing: false, commandShortcutsEnabled: true))
+        XCTAssertFalse(controller.handleKey("3", isRepeat: false, hasModifiers: false, isTextEditing: true, commandShortcutsEnabled: true))
+        XCTAssertFalse(controller.handleKey("3", isRepeat: true, hasModifiers: false, isTextEditing: false, commandShortcutsEnabled: true))
         XCTAssertTrue(try snapshot(container).eventStates.isEmpty)
-        XCTAssertTrue(controller.handleKey("3", isRepeat: false, hasModifiers: false, isTextEditing: false))
+        XCTAssertTrue(controller.handleKey("3", isRepeat: false, hasModifiers: false, isTextEditing: false, commandShortcutsEnabled: true))
+        XCTAssertEqual(try snapshot(container).eventStates.count, 1)
+    }
+
+    func testCommandsDefaultOffDoesNotRevealOrScoreButButtonsStillWork() throws {
+        let container = try fixture()
+        let controller = try started(container)
+        XCTAssertFalse(controller.handleKey(" ", isRepeat: false, hasModifiers: false, isTextEditing: false))
+        XCTAssertNil(controller.back)
+        controller.reveal(at: now)
+        for key in ["1", "2", "3", "4"] {
+            XCTAssertFalse(controller.handleKey(key, isRepeat: false, hasModifiers: false, isTextEditing: false))
+        }
+        XCTAssertTrue(try snapshot(container).eventStates.isEmpty)
+        controller.answer(.good, at: now)
+        XCTAssertEqual(try snapshot(container).eventStates.count, 1)
+    }
+
+    func testDisablingCommandsAfterRevealDoesNotScoreOrResetSession() throws {
+        let container = try fixture()
+        let controller = try started(container)
+        XCTAssertTrue(controller.handleKey(" ", isRepeat: false, hasModifiers: false, isTextEditing: false, commandShortcutsEnabled: true))
+        let before = try snapshot(container)
+        XCTAssertFalse(controller.handleKey("3", isRepeat: false, hasModifiers: false, isTextEditing: false, commandShortcutsEnabled: false))
+        XCTAssertEqual(try snapshot(container), before)
+        XCTAssertNotNil(controller.back)
+        XCTAssertTrue(controller.handleKey("3", isRepeat: false, hasModifiers: false, isTextEditing: false, commandShortcutsEnabled: true))
         XCTAssertEqual(try snapshot(container).eventStates.count, 1)
     }
 

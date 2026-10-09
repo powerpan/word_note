@@ -23,7 +23,7 @@ struct WordNoteMenuBarMenu: View {
         } label: {
             Label("Quick Add", systemImage: "plus.circle")
         }
-        .keyboardShortcut("n", modifiers: [.command, .shift])
+        .commandShortcut("n", modifiers: [.command, .shift])
         .disabled(!captureAvailable)
 
         SettingsLink {

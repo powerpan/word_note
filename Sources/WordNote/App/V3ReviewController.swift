@@ -144,8 +144,9 @@ final class V3ReviewController {
     }
 
     @discardableResult
-    func handleKey(_ key: String, isRepeat: Bool, hasModifiers: Bool, isTextEditing: Bool) -> Bool {
-        guard ownsSession, !isRepeat, !hasModifiers, !isTextEditing else { return false }
+    func handleKey(_ key: String, isRepeat: Bool, hasModifiers: Bool, isTextEditing: Bool,
+                   commandShortcutsEnabled: Bool = false) -> Bool {
+        guard commandShortcutsEnabled, ownsSession, !isRepeat, !hasModifiers, !isTextEditing else { return false }
         if key == " ", canReveal { reveal(); return true }
         let feedback: [String: ReviewFeedback] = ["1": .again, "2": .hard, "3": .good, "4": .easy]
         if let value = feedback[key], canAnswer { answer(value); return true }

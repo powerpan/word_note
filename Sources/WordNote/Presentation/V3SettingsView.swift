@@ -43,6 +43,9 @@ struct V3SettingsView: View {
                     }
                 }.pickerStyle(.segmented)
             }
+            SwiftUI.Section("Keyboard Shortcuts") {
+                CommandShortcutToggle()
+            }
         }.formStyle(.grouped)
     }
 

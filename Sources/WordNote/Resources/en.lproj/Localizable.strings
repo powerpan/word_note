@@ -730,3 +730,6 @@
 "The previous shortcut could not be released (macOS error %d). Retry or restart Word Note." = "The previous shortcut could not be released (macOS error %d). Retry or restart Word Note.";
 "AI / CS Context" = "AI / CS Context";
 "Revision" = "Revision";
+"Keyboard Shortcuts" = "Keyboard Shortcuts";
+"Enable Command Shortcuts" = "Enable Command Shortcuts";
+"Command Shortcuts Disabled" = "Command Shortcuts Disabled";

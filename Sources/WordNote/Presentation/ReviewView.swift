@@ -223,6 +223,7 @@ struct ReviewView: View {
 }
 
 private struct ReviewCard: View {
+    @AppStorage(CommandShortcutPreference.storageKey) private var commandShortcutsEnabled = CommandShortcutPreference.defaultValue
     let term: TermModel
     let courseName: String?
     let mode: ReviewMode
@@ -321,7 +322,7 @@ private struct ReviewCard: View {
                 Button(action: onShowAnswer) {
                     Label("Show Answer", systemImage: "eye")
                 }
-                .keyboardShortcut(.space, modifiers: [])
+                .commandShortcut(.space, modifiers: [])
             }
         }
         .padding(22)
@@ -338,10 +339,10 @@ private struct ReviewCard: View {
         Button {
             onFeedback(feedback)
         } label: {
-            Text("\(keyLabel)  \(AppLocalization.text(feedback.displayTitle))")
+            Text(commandShortcutsEnabled ? "\(keyLabel)  \(AppLocalization.text(feedback.displayTitle))" : AppLocalization.text(feedback.displayTitle))
         }
-        .keyboardShortcut(key, modifiers: [])
-        .help("Record \(AppLocalization.text(feedback.displayTitle)) (\(keyLabel))")
+        .commandShortcut(key, modifiers: [])
+        .help(commandShortcutsEnabled ? "Record \(AppLocalization.text(feedback.displayTitle)) (\(keyLabel))" : AppLocalization.text(feedback.displayTitle))
     }
 
     @ViewBuilder

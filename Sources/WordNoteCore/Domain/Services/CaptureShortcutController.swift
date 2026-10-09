@@ -10,6 +10,7 @@ public final class CaptureShortcutController {
     public private(set) var error: (any Error)?
     public var errorMessage: String? { error?.localizedDescription }
     public private(set) var isAvailable = true
+    public private(set) var commandShortcutsEnabled: Bool
     @ObservationIgnored private let backend: any CaptureShortcutBackend
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let action: @MainActor () -> Void
@@ -22,6 +23,7 @@ public final class CaptureShortcutController {
         self.backend = backend
         self.defaults = defaults
         self.action = action
+        commandShortcutsEnabled = CommandShortcutPreference.isEnabled(in: defaults)
         if defaults.object(forKey: Self.storageKey) != nil {
             if let data = defaults.data(forKey: Self.storageKey),
                let saved = try? JSONDecoder().decode(CaptureShortcutConfiguration.self, from: data), saved.isValid {
@@ -34,11 +36,18 @@ public final class CaptureShortcutController {
     }
 
     public func start() {
-        guard configuration.enabled, isAvailable else { return }
+        guard commandShortcutsEnabled, configuration.enabled, isAvailable else { return }
         apply(configuration, persist: false)
     }
 
     public func apply(_ configuration: CaptureShortcutConfiguration) { apply(configuration, persist: true) }
+
+    public func setCommandShortcutsEnabled(_ enabled: Bool) {
+        guard enabled != commandShortcutsEnabled else { return }
+        commandShortcutsEnabled = enabled
+        isPressed = false
+        if enabled { start() } else { releaseRegistrations() }
+    }
 
     public func setAvailable(_ available: Bool) {
         guard available != isAvailable else { return }
@@ -58,7 +67,7 @@ public final class CaptureShortcutController {
             guard proposed.isValid else { throw CaptureShortcutError.invalidCombination }
             let data = try JSONEncoder().encode(proposed)
             try removeInactiveRegistrations()
-            if proposed.enabled && isAvailable {
+            if commandShortcutsEnabled && proposed.enabled && isAvailable {
                 if activeShortcut != proposed.shortcut {
                     guard nextID < UInt32.max else { throw CaptureShortcutError.identifierExhausted }
                     let id = nextID
@@ -89,7 +98,7 @@ public final class CaptureShortcutController {
     }
 
     private func handleKey(_ pressed: Bool, registrationID: UInt32) {
-        guard isAvailable, configuration.enabled, activeID == registrationID else { return }
+        guard commandShortcutsEnabled, isAvailable, configuration.enabled, activeID == registrationID else { return }
         if !pressed { isPressed = false; return }
         guard !isPressed else { return }
         isPressed = true

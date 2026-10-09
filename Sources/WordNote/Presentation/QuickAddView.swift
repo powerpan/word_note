@@ -111,7 +111,7 @@ struct QuickAddView: View {
                         .controlSize(.large)
                         .buttonStyle(.borderedProminent)
                         #if WORDNOTE_V2_VALIDATION || WORDNOTE_V3_VALIDATION
-                        .keyboardShortcut(.return, modifiers: [.command])
+                        .commandShortcut(.return)
                         #endif
                         .disabled(!canSave)
 
@@ -122,7 +122,7 @@ struct QuickAddView: View {
                                 .frame(maxWidth: .infinity)
                         }
                         #if !WORDNOTE_V2_VALIDATION && !WORDNOTE_V3_VALIDATION
-                        .keyboardShortcut(.return, modifiers: [.command])
+                        .commandShortcut(.return)
                         #endif
                         .disabled(!canSave)
 

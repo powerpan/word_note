@@ -9,6 +9,7 @@ final class CaptureShortcutControllerTests: XCTestCase {
     override func setUp() async throws {
         suite = "WordNote-Shortcut-Tests-\(UUID().uuidString)"
         defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defaults.set(true, forKey: CommandShortcutPreference.storageKey)
     }
 
     override func tearDown() async throws {
@@ -16,18 +17,127 @@ final class CaptureShortcutControllerTests: XCTestCase {
         defaults = nil
     }
 
-    func testDefaultRegistersOnceAndHeldKeyDoesNotRepeatedlyToggle() {
+    func testEnabledDefaultRegistersOnceAndHeldKeyDoesNotRepeatedlyToggle() {
         let backend = Backend()
         var calls = 0
         let controller = CaptureShortcutController(backend: backend, defaults: defaults) { calls += 1 }
         controller.start()
         controller.start()
         XCTAssertEqual(backend.events, ["register:1"])
-        XCTAssertEqual(controller.activeShortcut?.title, "Control + Option + Space")
+        XCTAssertEqual(controller.activeShortcut?.title, "Control + Shift + Space")
+        XCTAssertEqual(controller.activeShortcut?.modifiers, [.control, .shift])
         backend.send(1, true); backend.send(1, true); backend.send(1, true)
         XCTAssertEqual(calls, 1)
         backend.send(1, false); backend.send(1, true)
         XCTAssertEqual(calls, 2)
+    }
+
+    func testFreshPreferenceLeavesCommandsDisabledWithoutRegistering() {
+        defaults.removeObject(forKey: CommandShortcutPreference.storageKey)
+        XCTAssertFalse(CommandShortcutPreference.defaultValue)
+        XCTAssertFalse(CommandShortcutPreference.isEnabled(in: defaults))
+        let backend = Backend()
+        let controller = CaptureShortcutController(backend: backend, defaults: defaults) {}
+        controller.start()
+        controller.start()
+        XCTAssertFalse(controller.commandShortcutsEnabled)
+        XCTAssertNil(controller.activeShortcut)
+        XCTAssertTrue(backend.events.isEmpty)
+    }
+
+    func testOldGlobalPreferenceDoesNotOptInToNewMasterSwitch() throws {
+        defaults.removeObject(forKey: CommandShortcutPreference.storageKey)
+        let saved = CaptureShortcutConfiguration(shortcut: .init(key: .f12, modifiers: [.control, .command]))
+        let data = try JSONEncoder().encode(saved)
+        defaults.set(data, forKey: CaptureShortcutController.storageKey)
+        let backend = Backend()
+        let controller = CaptureShortcutController(backend: backend, defaults: defaults) {}
+        controller.start()
+        XCTAssertEqual(controller.configuration, saved)
+        XCTAssertEqual(defaults.data(forKey: CaptureShortcutController.storageKey), data)
+        XCTAssertFalse(controller.commandShortcutsEnabled)
+        XCTAssertTrue(backend.events.isEmpty)
+    }
+
+    func testMasterOffReleasesRegistrationAndOnRestoresSavedChoice() {
+        let backend = Backend()
+        var calls = 0
+        let controller = CaptureShortcutController(backend: backend, defaults: defaults) { calls += 1 }
+        controller.start()
+        backend.send(1, true)
+        controller.setCommandShortcutsEnabled(false)
+        backend.send(1, true)
+        controller.start()
+        XCTAssertEqual(calls, 1)
+        XCTAssertNil(controller.activeShortcut)
+        XCTAssertEqual(backend.events, ["register:1", "unregister:1"])
+        controller.setCommandShortcutsEnabled(true)
+        controller.setCommandShortcutsEnabled(true)
+        backend.send(1, true)
+        backend.send(2, true)
+        XCTAssertEqual(calls, 2)
+        XCTAssertEqual(backend.events, ["register:1", "unregister:1", "register:2"])
+    }
+
+    func testMaintenanceAndMasterSwitchCannotReenableEachOther() {
+        let backend = Backend()
+        let controller = CaptureShortcutController(backend: backend, defaults: defaults) {}
+        controller.start()
+        controller.setAvailable(false)
+        controller.setCommandShortcutsEnabled(false)
+        controller.setAvailable(true)
+        XCTAssertNil(controller.activeShortcut)
+        controller.setAvailable(false)
+        controller.setCommandShortcutsEnabled(true)
+        XCTAssertNil(controller.activeShortcut)
+        XCTAssertEqual(backend.events, ["register:1", "unregister:1"])
+        controller.setAvailable(true)
+        XCTAssertEqual(controller.activeShortcut, .init())
+    }
+
+    func testDraftCanBeSavedWithMasterOffAndEnableChecksConflicts() {
+        defaults.set(false, forKey: CommandShortcutPreference.storageKey)
+        let backend = Backend()
+        let controller = CaptureShortcutController(backend: backend, defaults: defaults) {}
+        let choice = CaptureShortcutConfiguration(shortcut: .init(key: .f12))
+        controller.apply(choice)
+        XCTAssertEqual(controller.configuration, choice)
+        XCTAssertNotNil(defaults.data(forKey: CaptureShortcutController.storageKey))
+        XCTAssertTrue(backend.events.isEmpty)
+        backend.registrationError = .systemReserved
+        controller.setCommandShortcutsEnabled(true)
+        XCTAssertNil(controller.activeShortcut)
+        XCTAssertEqual(controller.error as? CaptureShortcutError, .systemReserved)
+        XCTAssertEqual(controller.configuration, choice)
+    }
+
+    func testMasterPreferenceSurvivesRestartAndIndividualDisableIsPreserved() {
+        for enabled in [false, true] {
+            defaults.set(enabled, forKey: CommandShortcutPreference.storageKey)
+            let controller = CaptureShortcutController(backend: Backend(), defaults: defaults) {}
+            XCTAssertEqual(controller.commandShortcutsEnabled, enabled)
+        }
+        let backend = Backend()
+        let controller = CaptureShortcutController(backend: backend, defaults: defaults) {}
+        controller.apply(.init(enabled: false))
+        controller.setCommandShortcutsEnabled(false)
+        controller.setCommandShortcutsEnabled(true)
+        XCTAssertFalse(controller.configuration.enabled)
+        XCTAssertTrue(backend.events.isEmpty)
+    }
+
+    func testFailedReleaseStillStopsCommandCallbacksImmediately() {
+        let backend = Backend()
+        var calls = 0
+        let controller = CaptureShortcutController(backend: backend, defaults: defaults) { calls += 1 }
+        controller.start()
+        backend.failingRemovals = [1]
+        controller.setCommandShortcutsEnabled(false)
+        backend.send(1, true)
+        XCTAssertEqual(calls, 0)
+        XCTAssertNotNil(controller.error)
+        backend.failingRemovals = []
+        controller.stop()
     }
 
     func testRebindingRegistersNewBeforeReleasingOldAndIgnoresOldCallbacks() {
@@ -103,6 +213,26 @@ final class CaptureShortcutControllerTests: XCTestCase {
         XCTAssertEqual(next.configuration, choice)
         next.start()
         XCTAssertEqual(next.activeShortcut, choice.shortcut)
+    }
+
+    func testSavedOldDefaultIsNotSilentlyReplacedEvenWhenItConflicts() throws {
+        let oldChoice = CaptureShortcutConfiguration(shortcut: .init(key: .space, modifiers: [.control, .option]))
+        let encoded = try JSONEncoder().encode(oldChoice)
+        defaults.set(encoded, forKey: CaptureShortcutController.storageKey)
+        let backend = Backend()
+        backend.registrationError = .systemReserved
+        let controller = CaptureShortcutController(backend: backend, defaults: defaults) {}
+        controller.start()
+        XCTAssertEqual(controller.configuration, oldChoice)
+        XCTAssertEqual(defaults.data(forKey: CaptureShortcutController.storageKey), encoded)
+        XCTAssertEqual(controller.error as? CaptureShortcutError, .systemReserved)
+        XCTAssertNil(controller.activeShortcut)
+
+        backend.registrationError = nil
+        controller.apply(.init())
+        XCTAssertEqual(controller.activeShortcut, CaptureShortcut(key: .space, modifiers: [.control, .shift]))
+        XCTAssertEqual(try JSONDecoder().decode(CaptureShortcutConfiguration.self,
+                                               from: XCTUnwrap(defaults.data(forKey: CaptureShortcutController.storageKey))), .init())
     }
 
     func testCorruptOrUnknownStoredValueFailsClosedWithoutOverwritingIt() {

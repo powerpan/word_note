@@ -6,6 +6,7 @@ import XCTest
 final class CompletionTextViewTests: XCTestCase {
     func testCommandReturnSubmitsCommittedTextOnceAndUpdatesBindingFirst() throws {
         let view = CompletionTextView()
+        view.commandShortcutsEnabled = true
         view.string = "quick"
         var actions: [String] = []
         view.bindingUpdateHandler = { actions.append($0) }
@@ -16,6 +17,7 @@ final class CompletionTextViewTests: XCTestCase {
 
     func testKeypadCommandEnterAndDirectKeyDownUseSameSubmissionPath() throws {
         let view = CompletionTextView()
+        view.commandShortcutsEnabled = true
         var count = 0
         view.commandSubmitHandler = { count += 1 }
         XCTAssertTrue(view.performKeyEquivalent(with: try event(code: 76)))
@@ -25,6 +27,7 @@ final class CompletionTextViewTests: XCTestCase {
 
     func testOtherModifiersAndKeysAreNotCommandSubmit() throws {
         let view = CompletionTextView()
+        view.commandShortcutsEnabled = true
         var count = 0
         view.commandSubmitHandler = { count += 1 }
         for flags: NSEvent.ModifierFlags in [[], [.command, .shift], [.command, .option], [.control]] {
@@ -36,6 +39,7 @@ final class CompletionTextViewTests: XCTestCase {
 
     func testCapsLockDoesNotChangeCommandReturnMeaning() throws {
         let view = CompletionTextView()
+        view.commandShortcutsEnabled = true
         var count = 0
         view.commandSubmitHandler = { count += 1 }
         XCTAssertTrue(view.performKeyEquivalent(with: try event(code: 36, flags: [.command, .capsLock])))
@@ -44,6 +48,7 @@ final class CompletionTextViewTests: XCTestCase {
 
     func testMarkedCommandReturnIsConsumedWithoutSubmitting() throws {
         let view = CompletionTextView()
+        view.commandShortcutsEnabled = true
         view.setMarkedText("qui", selectedRange: NSRange(location: 3, length: 0),
                            replacementRange: NSRange(location: NSNotFound, length: 0))
         XCTAssertTrue(view.hasMarkedText())
@@ -59,6 +64,7 @@ final class CompletionTextViewTests: XCTestCase {
                               styleMask: .borderless, backing: .buffered, defer: true)
         let view = CompletionTextView()
         window.contentView = view
+        view.commandShortcutsEnabled = true
         var count = 0
         view.commandSubmitHandler = { count += 1 }
         window.makeFirstResponder(nil)
@@ -95,6 +101,7 @@ final class CompletionTextViewTests: XCTestCase {
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 200, height: 100),
                               styleMask: .borderless, backing: .buffered, defer: true)
         let view = CompletionTextView()
+        view.commandShortcutsEnabled = true
         window.contentView = view
         XCTAssertTrue(window.makeFirstResponder(view))
         view.vocabulary = ["quick"]
@@ -126,9 +133,59 @@ final class CompletionTextViewTests: XCTestCase {
 
     func testCommandReturnWithoutHandlerLeavesExistingWindowShortcutAvailable() throws {
         let view = CompletionTextView()
+        view.commandShortcutsEnabled = true
         view.string = "quick"
         XCTAssertFalse(view.performKeyEquivalent(with: try event(code: 36)))
         XCTAssertEqual(view.string, "quick")
+    }
+
+    func testCommandSubmitIsOffByDefaultAndCanToggleWithoutRecreatingEditor() throws {
+        let view = CompletionTextView()
+        var calls = 0
+        view.commandSubmitHandler = { calls += 1 }
+        XCTAssertFalse(view.commandShortcutsEnabled)
+        XCTAssertFalse(view.performKeyEquivalent(with: try event(code: 36)))
+        view.keyDown(with: try event(code: 36))
+        XCTAssertEqual(calls, 0)
+        view.commandShortcutsEnabled = true
+        XCTAssertTrue(view.performKeyEquivalent(with: try event(code: 36)))
+        XCTAssertEqual(calls, 1)
+        view.commandShortcutsEnabled = false
+        XCTAssertFalse(view.performKeyEquivalent(with: try event(code: 76)))
+        XCTAssertEqual(calls, 1)
+    }
+
+    func testTabCompletionAndEscapeKeepWorkingWithCommandsOff() {
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 360, height: 60),
+                              styleMask: .borderless, backing: .buffered, defer: true)
+        let view = CompletionTextView()
+        window.contentView = view
+        XCTAssertTrue(window.makeFirstResponder(view))
+        XCTAssertFalse(view.commandShortcutsEnabled)
+        view.vocabulary = ["quick"]
+        view.string = "qui"
+        view.setSelectedRange(NSRange(location: 3, length: 0))
+        view.refreshCompletion()
+        view.doCommand(by: #selector(NSTextView.insertTab(_:)))
+        XCTAssertEqual(view.string, "quick")
+        var closes = 0
+        view.escapeHandler = { closes += 1 }
+        view.doCommand(by: #selector(NSTextView.cancelOperation(_:)))
+        XCTAssertEqual(closes, 1)
+    }
+
+    func testStandardTabFocusNavigationKeepsWorkingWithCommandsOff() {
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 360, height: 120),
+                              styleMask: .borderless, backing: .buffered, defer: true)
+        let root = NSView(), view = CompletionTextView(), next = NSTextView()
+        root.addSubview(view)
+        root.addSubview(next)
+        window.contentView = root
+        view.nextKeyView = next
+        XCTAssertTrue(window.makeFirstResponder(view))
+        XCTAssertFalse(view.commandShortcutsEnabled)
+        view.doCommand(by: #selector(NSTextView.insertTab(_:)))
+        XCTAssertTrue(window.firstResponder === next)
     }
 
     func testFocusRequestedBeforeWindowAttachmentIsNotLost() {
