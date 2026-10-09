@@ -1,113 +1,164 @@
+<img src="Resources/AppIcon.iconset/icon_128x128@2x.png" alt="Word Note 应用图标" width="96" height="96">
+
 # Word Note
 
-Word Note is a native macOS app for AI / CS graduate students who study in English and want to capture, explain, organize, and review technical vocabulary.
+**把课堂和阅读中遇到的英文，留在自己的词本里。**
 
-The current implementation follows the engineering plan in [docs](docs/README.md). The original requirements file is retained as background reference only.
+Word Note 是一款原生 macOS 词汇学习工具，面向在英文环境中学习 AI、计算机科学及相关课程的中文使用者。遇到一个词、一段表达，或想不起某个中文概念的英文说法，都可以先记下来，再确认释义、归入课程、安排复习。
 
-## Current MVP Features
+它围绕你实际遇到的内容建立词库，不要求从一套预制词表开始。学习资料保存在本机，不需要注册账号；AI 查词由你自己的 DeepSeek API Key 提供。
 
-- Native macOS SwiftUI app shell.
-- Versioned local SwiftData persistence with one-time legacy-store backup and migration.
-- Quick Add for English analysis and Chinese-to-English lookup, with English retained as the vocabulary subject.
-- Local vocabulary prefix completion in the main and floating Quick Add inputs, with Tab acceptance.
-- Non-blocking, persistent AI analysis queue shared by the main window and menu bar panel.
-- DeepSeek-powered analysis through OpenAI-compatible chat completions.
-- Candidate review with editable AI-generated terms.
-- Manual term creation when AI returns no useful candidate.
-- Vocabulary list, English and normalized Chinese-meaning search, filters, detail editing, and deletion.
-- Course creation, editing, deletion guard, and course statistics.
-- Adaptive review queues, bidirectional cards, keyboard shortcuts, and session statistics.
-- Menu bar Quick Add panel with temporary Chinese explanation preview.
-- System, light, and neutral black-gray dark appearance modes shared by all app windows.
-- Environment-file storage for DeepSeek API key, with `DEEPSEEK_API_KEY` process environment fallback.
+> 当前仓库正在进行补充开发。普通启动入口仍使用 V1 数据结构；新版整理与复习功能在隔离的 WordNoteQA 中验证，尚未完成全部界面验收。下文将两者分开说明，开发进度以[补充开发计划](docs/13-supplemental-development-plan.md)为准。
 
-## Requirements
+## 从遇见一个词开始
 
-- macOS 14 or later.
-- Xcode 26.x command line tools or compatible Swift 5.9+ toolchain.
-- DeepSeek API key for live AI analysis.
+### 随手记，不必等这一条查完
 
-## Build And Run
+在主窗口的 Quick Add 输入单词、短语、句子或短段落，也可以从菜单栏打开一个置于其他 App 上方的小浮窗。点击 **Save & Analyze**，或在浮窗中按回车，内容便进入分析队列，可以继续输入下一条。
 
-Use the root app entrypoint:
+- 课程、来源和备注按需填写，不是保存的前提。
+- 输入 `qu` 时，如果词库里已有 `quick`，会以灰色后缀提示 `ick`，按 Tab 接受补全。
+- 再次查询本地已有的相同英文词条时，直接显示现有释义，不重复请求 DeepSeek，并将它提到待复习队列中。
+- 浮窗结果以“英文原文：中文释义”展示；停留阅读时暂停倒计时，焦点移开后继续计时，累计 10 秒后收起临时结果。
+
+### 英文查中文，也能中文找英文
+
+输入 `latent representation` 可以查释义；输入“过拟合”则查找对应的英文表达。中文查询生成的候选进入 Inbox，确认后的词条仍以英文为主体，中文保留为释义和查询上下文。
+
+释义生成遵循“本义在前，专业含义按需补充”的原则：有多个常用含义时尽量覆盖，但不为凑数量制造义项，也不把每个普通词都解释成“在 AI 语境中”。句子查询保留原文，并提取值得学习的表达。
+
+AI 结果是待确认的初稿，不是权威词典条目。尤其是专业术语和多义词，入库前仍需要核对。
+
+### 在 Inbox 确认，再放进词本
+
+分析完成后，在 Inbox 查看候选的中文释义、英文定义、专业语境和例句。可以修改、忽略，也可以批量确认。
+
+待处理记录与已确认记录分开，已确认内容可折叠。分析失败时保留原始输入，支持重试；没有合适候选时，也能手动创建词条。
+
+### 整理和复习围绕自己的课程
+
+Vocabulary 支持按英文词头、英文定义和中文释义搜索，中文搜索兼容简繁体。词条可以编辑，并按课程、来源、类型及掌握程度等条件筛选。
+
+Review 提供今日到期和薄弱词队列，可以按课程学习，切换“英文回忆中文”和“中文回忆英文”。先回忆、再揭晓答案，按 Again / Hard / Good / Easy 自评，更新下次复习时间，并查看本轮统计。
+
+Dashboard 汇总词库、待处理记录和复习情况；Courses 将同一门课的词条与学习进度放在一起。
+
+## 使用习惯
+
+- **外观**：跟随系统、浅色或黑灰色深色主题，主窗口和浮窗保持一致。
+- **命令快捷键**：默认关闭，在 Settings 中启用。浮窗回车保存、Tab 接受补全及系统复制粘贴不受该开关影响。
+- **离线使用**：已有词条的浏览、搜索和复习不依赖 AI 服务；生成新释义需要联网和有效 API Key。
+- **菜单栏入口**：Quick Add 可显示或隐藏浮窗，不必一直打开主窗口。
+
+## 本地运行
+
+这是从源码构建的 macOS 项目，目前不提供安装包分发流程。
+
+- 最低部署目标为 macOS 14；完整兼容性验收状态见开发计划。
+- 当前开发使用 Xcode 26.x 工具链，依赖 SwiftUI、AppKit 和 SwiftData。
+- `Package.swift` 声明 Swift tools 5.9，使用 Swift Package Manager 构建。
+
+在仓库根目录运行：
 
 ```bash
 ./WordNote.command
 ```
 
-It builds the SwiftPM target, stages `dist/WordNote.app`, and launches the app bundle.
+也可以在 Finder 中双击 `WordNote.command`。入口会定位仓库目录、构建应用、生成 `dist/WordNote.app` 并启动，不需要手动找到 Swift 可执行文件。重新运行会重启同名应用，请先保存尚未提交的内容。
 
-For lower-level launch modes, use the project-local run script directly:
-
-```bash
-./script/build_and_run.sh
-```
-
-Verification mode builds the app bundle, launches it, and checks the app process:
+构建并检查应用进程是否启动：
 
 ```bash
 ./script/build_and_run.sh --verify
 ```
 
-The selected 1024px app icon master is stored at `Resources/AppIcon-1024.png`; alternative concepts are retained under `design/app-icons/`. Regenerate the complete iconset and `AppIcon.icns` with `./script/generate_app_icon.sh`. The build-and-run script embeds the generated ICNS in the staged app bundle.
+这项检查只确认进程启动，不代表功能或界面已通过验收。
 
-The Codex desktop Run action is wired to the same script through `.codex/environments/environment.toml`.
+## 配置 DeepSeek
 
-## Tests
+在 **Settings > DeepSeek** 中填写自己的 API Key，再点击 **Save to Env File**。当前代码默认请求的模型是 `deepseek-flash`，实际调用会产生供应商侧费用。
 
-Run the full non-live test suite:
+Key 保存在本机环境文件，不使用 Apple 钥匙串：
+
+```text
+~/Library/Application Support/WordNote/deepseek.env
+```
+
+应用创建的密钥文件权限为 `0600`。它仍是明文文件，不是加密保险库，不应上传或分享。
+
+<details>
+<summary>开发环境中的密钥读取顺序</summary>
+
+1. `WORD_NOTE_ENV_FILE` 指定的文件。
+2. 上述由 Settings 管理的 `deepseek.env`。
+3. 当前工作目录中的 `.env.local`、`.env`。
+4. 进程环境变量 `DEEPSEEK_API_KEY`。
+
+首次启动时，如果默认环境文件尚未包含 Key，而进程环境中已有 Key，应用会将其写入默认环境文件。Finder 启动的应用不一定继承终端环境，日常使用建议通过 Settings 配置。
+
+不要将真实 Key 写入源码、README、截图或提交记录。
+
+</details>
+
+## 数据与隐私
+
+词库、课程、原始记录和复习历史保存在本机。项目没有账号系统、云同步或远程使用行为统计。
+
+本地优先不等于查词内容绝不离开设备：请求 AI 分析时，会把本次输入及相关的课程名称、来源类型和备注发送给 DeepSeek，不会把完整词库作为请求上下文。请不要提交不适合外传的材料。
+
+备份、恢复和导出已纳入本轮开发，但仍有原生界面验收待完成。备份不包含 API Key；导出的学习内容本身可能涉及隐私，也不应当作加密文件分享。实现边界见[安全与隐私文档](docs/08-security-privacy.md)。
+
+## 正在验证的新版功能
+
+补充开发主要改进已有学习流程，不扩展到账号、云端或 App 分发。以下能力已经有代码和测试，但仍需完成相应的集成或实机验收，不能视为普通启动入口全部可用的功能：
+
+- 数据备份恢复、迁移保护、未保存编辑提示及受保护的撤销。
+- 候选入库预览、重复词关联、词库阅读模式和批量整理。
+- 可配置全局捕获快捷键、共享的查词方向与默认课程、结果复制与朗读。
+- 按方向独立的复习卡片、固定会话、重学安排、会话恢复和多窗口交接。
+- 统一的首页与课程学习统计、三语界面和分组设置。
+
+新复习模型还将“再次查词”和“实际答错”分开记录，避免把核对用法也计为错误。它与普通入口的旧统计语义不同，不能混用两者的数据结论。
+
+开发者可以使用演示数据打开隔离验证版：
+
+```bash
+./script/build_and_run.sh --ui-v3-fixture learning light
+```
+
+该入口生成独立的 `dist/WordNoteQA.app`，使用隔离的临时数据目录和模拟 AI 结果，不读取日常词库或实际 API Key。它是开发验收入口，不是迁移日常数据的方式。
+
+## 开发与测试
+
+运行默认测试集：
 
 ```bash
 swift test
 ```
 
-The default suite skips paid network tests. Explicitly enable the live DeepSeek smoke test when a key is available:
+未显式启用时，付费网络测试、性能测量及原生全局快捷键测试会跳过。默认测试通过不等于这些项目已验证。
+
+验证新版 V3 编译分支，并将并发警告作为错误：
+
+```bash
+swift test --scratch-path .build-v3-qa \
+  -Xswiftc -DWORDNOTE_V3_VALIDATION \
+  -Xswiftc -strict-concurrency=complete \
+  -Xswiftc -warn-concurrency -Xswiftc -warnings-as-errors
+```
+
+只有准备好 Key 并接受实际费用时，才启用双向查词的真实请求测试：
 
 ```bash
 RUN_LIVE_DEEPSEEK_TESTS=1 swift test --filter LiveDeepSeekSmokeTests
 ```
 
-The live test covers both `latent representation` (English to Chinese) and `過擬合` (Chinese to English), and verifies that structured candidates obey the direction contract.
+## 项目文档
 
-## Tencent Cloud Access
+- [工程文档入口](docs/README.md)：需求、交互、数据模型、架构与质量要求。
+- [补充开发计划](docs/13-supplemental-development-plan.md)：任务范围、实施状态和阶段验收记录。
+- [复习系统](docs/07-review-system.md)：现有规则与新版卡片、会话、统计语义。
+- [安全与隐私](docs/08-security-privacy.md)：数据发送、密钥、备份与恢复边界。
+- [领域术语](CONTEXT.md)：词条、候选、查询、卡片与复习事件的区别。
 
-The project-local SSH entrypoint is:
-
-```bash
-./script/tencent_cloud_ssh.sh
-```
-
-It connects to `ubuntu@134.175.182.221` with the Git-ignored private key under `.local_secrets/ssh/`. See [docs/12-tencent-cloud-server-access.md](docs/12-tencent-cloud-server-access.md) for remote-command usage and the direct SSH fallback.
-
-## DeepSeek Key Handling
-
-The app resolves the DeepSeek key in this order:
-
-1. Optional override file from `WORD_NOTE_ENV_FILE`.
-2. Environment file managed from Settings: `~/Library/Application Support/WordNote/deepseek.env`.
-3. Local development files: `.env.local`, then `.env`.
-4. `DEEPSEEK_API_KEY` process environment variable.
-
-On first launch, a process-level `DEEPSEEK_API_KEY` is copied to the private environment file only when that file does not already contain a key. The file is created with owner-only permissions.
-
-The API key must not be committed to the repository. Local key files such as `.env`, `.env.local`, `.env.*`, and `key.md` are ignored by `.gitignore`.
-
-## Development Milestones
-
-Implemented:
-
-- M1: Project foundation.
-- M2: Quick Add and Inbox.
-- M3: DeepSeek analysis integration.
-- M4: Candidate Review to Vocabulary.
-- M5: Course management and filters.
-- M6: Review loop.
-- M7: QA and release polish.
-- P1: duplicate-term AI bypass, adaptive review, weak-term queue, bidirectional cards, shortcuts, session statistics, local completion, Chinese-to-English lookup, bilingual vocabulary search, and appearance preferences.
-
-## Known Limits
-
-- Candidate merge into existing terms is not implemented yet; duplicate terms are rejected.
-- Global system-wide hotkey, clipboard import, and export are not implemented.
-- Live AI behavior depends on DeepSeek service availability and model behavior.
-- No cloud sync, accounts, or multi-device support in MVP.
+原始需求文件仅保留为早期参考。后续开发以工程文档、对应任务的补充契约和实际验收结果为准。
